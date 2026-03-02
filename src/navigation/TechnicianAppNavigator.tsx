@@ -29,7 +29,9 @@ import SupervisorReportScreen from '../screens/technician/SupervisorReportScreen
 import MembershipsScreen from '../screens/common/MembershipsScreen';
 import MembershipCheckoutScreen from '../screens/common/MembershipCheckoutScreen';
 import HelpCenterScreen from '../screens/user/HelpCenterScreen';
-import SubmitTicketScreen from '../screens/user/SubmitTicketScreen';
+import TechnicianSubmitTicketScreen from '../screens/technician/TechnicianSubmitTicketScreen';
+import MyTicketsScreen from '../screens/user/MyTicketsScreen';
+import SupportTicketChatScreen from '../screens/user/SupportTicketChatScreen';
 import TechnicianNotificationsScreen from '../screens/technician/TechnicianNotificationsScreen';
 
 /** Technician uses own notifications screen (GET /technician/notifications); alias for Stack.Screen */
@@ -129,7 +131,9 @@ const TechnicianAppNavigator = () => {
         <Stack.Screen name="PayoutSummary" component={PayoutSummaryScreen} />
         <Stack.Screen name="AddBankAccount" component={TechnicianAddBankAccountScreen} />
         <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
-        <Stack.Screen name="SubmitTicket" component={SubmitTicketScreen} />
+        <Stack.Screen name="SubmitTicket" component={TechnicianSubmitTicketScreen} />
+        <Stack.Screen name="MyTickets" component={MyTicketsScreen} />
+        <Stack.Screen name="SupportTicketChat" component={SupportTicketChatScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
       </Stack.Navigator>
     </SafeAreaView>

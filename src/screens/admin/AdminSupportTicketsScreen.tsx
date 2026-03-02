@@ -31,7 +31,14 @@ const STATUS_OPTIONS: { value: StatusFilter; labelKey: string }[] = [
 function formatDate(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString(undefined, { dateStyle: 'short' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = String(d.getFullYear()).slice(-2);
+    const hour = d.getHours();
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${day}/${month}/${year} ${hour12}:${min} ${ampm}`;
   } catch {
     return iso;
   }
@@ -121,9 +128,7 @@ const AdminSupportTicketsScreen: React.FC = () => {
     <TouchableOpacity
       style={styles.card}
       activeOpacity={0.8}
-      onPress={() => {
-        // Future: navigate to ticket detail
-      }}
+      onPress={() => navigation.navigate('SupportTicketChat', { ticket: item })}
     >
       <View style={styles.cardHeader}>
         <Text style={styles.ticketNumber}>{item.ticket_number}</Text>

@@ -524,7 +524,40 @@ export interface TechnicianAvailabilityVacation {
   id?: number;
   start_date: string;
   end_date: string;
-  reason?: string;
+  leave_type?: string;
+  reason?: string | null;
+}
+
+/** Map app leave_type value to API label (saved format: "Sick leave", "Other", etc.) */
+export const LEAVE_TYPE_VALUE_TO_API_LABEL: Record<string, string> = {
+  sick_leave: 'Sick leave',
+  annual_leave: 'Annual Leave',
+  unpaid_leave: 'Unpaid leave',
+  paternity_leave: 'Paternity Leave',
+  other: 'Other',
+};
+
+/** Map API leave_type label back to app value for dropdown/display */
+export const API_LABEL_TO_LEAVE_TYPE_VALUE: Record<string, string> = {
+  'Sick leave': 'sick_leave',
+  'Annual Leave': 'annual_leave',
+  'Unpaid leave': 'unpaid_leave',
+  'Paternity Leave': 'paternity_leave',
+  'Other': 'other',
+  'Other leaves': 'other',
+};
+
+/** Format vacations for PUT body: leave_type as API label, reason as null when empty */
+export function formatVacationsForApi(
+  vacations: Array<{ id?: number; start_date: string; end_date: string; leave_type?: string; reason?: string }>
+): Array<{ id?: number; start_date: string; end_date: string; leave_type?: string; reason: string | null }> {
+  return vacations.map((v) => ({
+    ...(v.id != null && { id: v.id }),
+    start_date: v.start_date,
+    end_date: v.end_date,
+    ...(v.leave_type && { leave_type: LEAVE_TYPE_VALUE_TO_API_LABEL[v.leave_type] ?? v.leave_type }),
+    reason: v.reason?.trim() ? v.reason.trim() : null,
+  }));
 }
 
 /** Response of GET /api/technician/availability */
@@ -563,7 +596,7 @@ export interface TechnicianAvailabilityParams {
   service_area?: string;
   service_areas?: string[];
   breaks?: Array<{ date: string; start_time: string; end_time: string; reason?: string }>;
-  vacations?: Array<{ start_date: string; end_date: string; reason?: string }>;
+  vacations?: TechnicianAvailabilityVacation[];
 }
 
 /**
@@ -587,7 +620,7 @@ export async function updateTechnicianAvailability(
     formData.append('breaks', JSON.stringify(params.breaks));
   }
   if (params.vacations != null && params.vacations.length > 0) {
-    formData.append('vacations', JSON.stringify(params.vacations));
+    formData.append('vacations', JSON.stringify(formatVacationsForApi(params.vacations)));
   }
   const response = await apiClient.put<{ success?: boolean; message?: string }>(
     '/technician/availability',
@@ -711,5 +744,33 @@ export async function markTechnicianNotificationsReadAll(): Promise<{ success: b
   return {
     success: false,
     message: (response.data as any)?.message ?? 'Failed to mark all as read.',
+  };
+}
+
+/**
+ * POST /api/technician/support/tickets
+ * Submit a support ticket as technician. Body: JSON { subject, email, description }. Requires Bearer token.
+ */
+export async function submitTechnicianSupportTicket(params: {
+  subject: string;
+  email: string;
+  description: string;
+}): Promise<{ success: boolean; message?: string }> {
+  const body = {
+    subject: params.subject.trim(),
+    email: params.email.trim(),
+    description: params.description.trim(),
+  };
+  const response = await apiClient.post<{ success?: boolean; message?: string }>(
+    '/technician/support/tickets',
+    body,
+    { timeout: 15000, headers: { 'Content-Type': 'application/json', Accept: 'application/json' } }
+  );
+  if (response.data?.success) {
+    return { success: true, message: response.data.message };
+  }
+  return {
+    success: false,
+    message: (response.data as any)?.message ?? 'Failed to submit ticket.',
   };
 }

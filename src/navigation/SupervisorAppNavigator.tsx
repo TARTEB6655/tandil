@@ -12,6 +12,10 @@ import SupervisorReportScreen from '../screens/technician/SupervisorReportScreen
 import TechnicianProfileScreen from '../screens/technician/TechnicianProfileScreen';
 import AssignTasksScreen from '../screens/supervisor/AssignTasksScreen';
 import TeamStatsScreen from '../screens/supervisor/TeamStatsScreen';
+import HelpCenterScreen from '../screens/user/HelpCenterScreen';
+import SupervisorSubmitTicketScreen from '../screens/supervisor/SupervisorSubmitTicketScreen';
+import MyTicketsScreen from '../screens/user/MyTicketsScreen';
+import SupportTicketChatScreen from '../screens/user/SupportTicketChatScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -75,6 +79,10 @@ const SupervisorAppNavigator = () => {
         <Stack.Screen name="Main" component={TabNavigator} />
         <Stack.Screen name="AssignTasks" component={AssignTasksScreen} />
         <Stack.Screen name="TeamStats" component={TeamStatsScreen} />
+        <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+        <Stack.Screen name="SubmitTicket" component={SupervisorSubmitTicketScreen} />
+        <Stack.Screen name="MyTickets" component={MyTicketsScreen} />
+        <Stack.Screen name="SupportTicketChat" component={SupportTicketChatScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

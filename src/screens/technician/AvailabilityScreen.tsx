@@ -13,7 +13,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
-import { updateTechnicianAvailability, getTechnicianDashboard, getTechnicianAvailability } from '../../services/technicianService';
+import {
+  updateTechnicianAvailability,
+  getTechnicianDashboard,
+  getTechnicianAvailability,
+  API_LABEL_TO_LEAVE_TYPE_VALUE,
+} from '../../services/technicianService';
 
 const DAY_TO_API: Record<string, string> = {
   monday: 'mon',
@@ -50,7 +55,7 @@ const SLOT_IDS = [
 
 type AvailabilityParams = {
   breaks?: Array<{ date: string; start_time: string; end_time: string; reason?: string }>;
-  vacations?: Array<{ start_date: string; end_date: string; reason?: string }>;
+  vacations?: Array<{ id?: number; start_date: string; end_date: string; leave_type?: string; reason?: string }>;
   service_areas?: string[];
 };
 
@@ -79,7 +84,7 @@ const AvailabilityScreen: React.FC = () => {
     evening: false,
   });
   const [breaks, setBreaks] = useState<Array<{ date: string; start_time: string; end_time: string; reason?: string }>>([]);
-  const [vacations, setVacations] = useState<Array<{ start_date: string; end_date: string; reason?: string }>>([]);
+  const [vacations, setVacations] = useState<Array<{ id?: number; start_date: string; end_date: string; leave_type?: string; reason?: string }>>([]);
   const [serviceAreas, setServiceAreas] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingSchedule, setLoadingSchedule] = useState(true);
@@ -138,9 +143,11 @@ const AvailabilityScreen: React.FC = () => {
             }
             if (fromParams.vacations == null) {
               setVacations((data.vacations ?? []).map(v => ({
+                ...(v.id != null && { id: v.id }),
                 start_date: v.start_date,
                 end_date: v.end_date,
-                reason: v.reason,
+                leave_type: v.leave_type ? (API_LABEL_TO_LEAVE_TYPE_VALUE[v.leave_type] ?? v.leave_type) : undefined,
+                reason: v.reason ?? undefined,
               })));
             }
           }

@@ -15,9 +15,9 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
-import { submitTicket } from '../../services/supportService';
+import { submitTechnicianSupportTicket } from '../../services/technicianService';
 
-const SubmitTicketScreen: React.FC = () => {
+const TechnicianSubmitTicketScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [subject, setSubject] = useState('');
@@ -44,7 +44,11 @@ const SubmitTicketScreen: React.FC = () => {
 
     setSubmitting(true);
     try {
-      const result = await submitTicket({ subject: trimmedSubject, email: trimmedEmail, description: trimmedDescription });
+      const result = await submitTechnicianSupportTicket({
+        subject: trimmedSubject,
+        email: trimmedEmail,
+        description: trimmedDescription,
+      });
       setSubmitting(false);
       if (result.success) {
         Alert.alert(
@@ -195,4 +199,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SubmitTicketScreen;
+export default TechnicianSubmitTicketScreen;

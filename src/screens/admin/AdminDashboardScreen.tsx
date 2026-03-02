@@ -277,10 +277,25 @@ const AdminDashboardScreen: React.FC = () => {
               </>
             )}
           </View>
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => navigation.navigate('Main' as never, { screen: 'SettingsTab' } as never)}
-          >
+          <View style={styles.headerRightRow}>
+            <TouchableOpacity
+              style={styles.notificationIconButton}
+              onPress={() => navigation.navigate('AdminSupportTickets' as never)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="notifications-outline" size={24} color={COLORS.text} />
+              {supportTicketsCount > 0 ? (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText} numberOfLines={1}>
+                    {supportTicketsCount > 99 ? '99+' : supportTicketsCount}
+                  </Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileButton}
+              onPress={() => navigation.navigate('Main' as never, { screen: 'SettingsTab' } as never)}
+            >
             {profilePictureUrl ? (
               <Image source={{ uri: profilePictureUrl }} style={styles.avatarImage} contentFit="cover" />
             ) : (
@@ -289,6 +304,7 @@ const AdminDashboardScreen: React.FC = () => {
               </View>
             )}
           </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -784,6 +800,32 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     marginTop: 2,
+  },
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  notificationIconButton: {
+    padding: SPACING.sm,
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.background,
   },
   profileButton: {
     padding: SPACING.sm,

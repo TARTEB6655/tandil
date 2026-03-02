@@ -20,6 +20,7 @@ interface HeaderProps {
   showBack?: boolean;
   showCart?: boolean;
   showNotifications?: boolean;
+  notificationCount?: number;
   showLanguage?: boolean;
   onBackPress?: () => void;
   onCartPress?: () => void;
@@ -32,6 +33,7 @@ const Header: React.FC<HeaderProps> = ({
   showBack = true,
   showCart = false,
   showNotifications = false,
+  notificationCount = 0,
   showLanguage = true,
   onBackPress,
   onCartPress,
@@ -94,8 +96,15 @@ const Header: React.FC<HeaderProps> = ({
             </TouchableOpacity>
           )}
           {showNotifications && (
-            <TouchableOpacity style={styles.iconButton} onPress={handleNotificationPress}>
+            <TouchableOpacity style={[styles.iconButton, styles.notificationIconWrap]} onPress={handleNotificationPress}>
               <Ionicons name="notifications-outline" size={24} color={COLORS.text} />
+              {notificationCount > 0 ? (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText} numberOfLines={1}>
+                    {notificationCount > 99 ? '99+' : notificationCount}
+                  </Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
           )}
           {showCart && (
@@ -186,6 +195,26 @@ const styles = StyleSheet.create({
   iconButton: {
     padding: SPACING.sm,
     marginLeft: SPACING.sm,
+  },
+  notificationIconWrap: {
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.background,
   },
   modalOverlay: {
     position: 'absolute',

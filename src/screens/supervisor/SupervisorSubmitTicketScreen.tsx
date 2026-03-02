@@ -17,7 +17,7 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../
 import Header from '../../components/common/Header';
 import { submitTicket } from '../../services/supportService';
 
-const SubmitTicketScreen: React.FC = () => {
+const SupervisorSubmitTicketScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [subject, setSubject] = useState('');
@@ -44,7 +44,11 @@ const SubmitTicketScreen: React.FC = () => {
 
     setSubmitting(true);
     try {
-      const result = await submitTicket({ subject: trimmedSubject, email: trimmedEmail, description: trimmedDescription });
+      const result = await submitTicket({
+        subject: trimmedSubject,
+        email: trimmedEmail,
+        description: trimmedDescription,
+      });
       setSubmitting(false);
       if (result.success) {
         Alert.alert(
@@ -195,4 +199,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SubmitTicketScreen;
+export default SupervisorSubmitTicketScreen;

@@ -31,6 +31,7 @@ import AdminBannersScreen from '../screens/admin/AdminBannersScreen';
 import AdminProductSettingsScreen from '../screens/admin/AdminProductSettingsScreen';
 import AdminProfileEditScreen from '../screens/admin/AdminProfileEditScreen';
 import AdminSupportTicketsScreen from '../screens/admin/AdminSupportTicketsScreen';
+import AdminSupportTicketChatScreen from '../screens/admin/AdminSupportTicketChatScreen';
 import AdminOrdersScreen from '../screens/admin/AdminOrdersScreen';
 import AdminExclusiveOffersScreen from '../screens/admin/AdminExclusiveOffersScreen';
 import AdminAddExclusiveOfferScreen from '../screens/admin/AdminAddExclusiveOfferScreen';
@@ -127,6 +128,7 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminProductSettings" component={AdminProductSettingsScreen} />
         <Stack.Screen name="AdminProfileEdit" component={AdminProfileEditScreen} />
         <Stack.Screen name="AdminSupportTickets" component={AdminSupportTicketsScreen} />
+        <Stack.Screen name="SupportTicketChat" component={AdminSupportTicketChatScreen} />
         <Stack.Screen name="AdminOrders" component={AdminOrdersScreen} />
         <Stack.Screen name="AdminExclusiveOffers" component={AdminExclusiveOffersScreen} />
         <Stack.Screen name="AdminAddExclusiveOffer" component={AdminAddExclusiveOfferScreen} />

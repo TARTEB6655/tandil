@@ -16,7 +16,7 @@ import {
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { UserStackParamList } from '../../types';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { ServiceCard } from '../../components/cards/ServiceCard';
@@ -33,6 +33,7 @@ import { getExclusiveOffers, PublicExclusiveOffer } from '../../services/exclusi
 import { buildFullImageUrl } from '../../config/api';
 import * as Location from 'expo-location';
 import { fetchWeather, WeatherData } from '../../services/weatherService';
+import { getSupportTickets } from '../../services/supportService';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -55,6 +56,18 @@ const HomeScreen: React.FC = () => {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
+  const [supportTicketsCount, setSupportTicketsCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      getSupportTickets({ per_page: 1, page: 1 })
+        .then((res) => {
+          const total = res?.data?.pagination?.total ?? 0;
+          setSupportTicketsCount(typeof total === 'number' ? total : 0);
+        })
+        .catch(() => setSupportTicketsCount(0));
+    }, [])
+  );
 
   const recentOrders = Array.isArray(orders) ? orders.slice(0, 3) : [];
   // Extract first order that has before/after photos in its tracking (if any)
@@ -417,6 +430,8 @@ const HomeScreen: React.FC = () => {
         title={t('home.title')}
         showBack={false}
         showNotifications={true}
+        notificationCount={supportTicketsCount}
+        onNotificationPress={() => navigation.navigate('MyTickets')}
         showCart={true}
       />
       <ScrollView showsVerticalScrollIndicator={false}>

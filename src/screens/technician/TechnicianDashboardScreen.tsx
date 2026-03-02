@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,10 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { useTranslation } from 'react-i18next';
-import { getTechnicianDashboard, acceptTechnicianTask, rejectTechnicianTask, TechnicianDashboardData, TechnicianTodayTask, TechnicianRecentVisit } from '../../services/technicianService';
+import { getTechnicianDashboard, getTechnicianNotifications, acceptTechnicianTask, rejectTechnicianTask, TechnicianDashboardData, TechnicianTodayTask, TechnicianRecentVisit } from '../../services/technicianService';
 import { buildProfilePictureUrl } from '../../config/api';
 import dayjs from 'dayjs';
 
@@ -59,6 +59,7 @@ const TechnicianDashboardScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [profileImageError, setProfileImageError] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   const fetchDashboard = async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -77,6 +78,14 @@ const TechnicianDashboardScreen: React.FC = () => {
   useEffect(() => {
     fetchDashboard();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      getTechnicianNotifications({ per_page: 1, page: 1 })
+        .then((res) => setNotificationCount(res.total ?? 0))
+        .catch(() => setNotificationCount(0));
+    }, [])
+  );
 
   useEffect(() => {
     setProfileImageError(false);
@@ -270,12 +279,27 @@ const TechnicianDashboardScreen: React.FC = () => {
             <Text style={styles.technicianName}>{technician.name}</Text>
             <Text style={styles.employeeId}>{t('technician.id')}: {technician.employeeId}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => {
-              navigation.navigate('Main' as never, { screen: 'ProfileTab' } as never);
-            }}
-          >
+          <View style={styles.headerRightRow}>
+            <TouchableOpacity
+              style={styles.notificationIconButton}
+              onPress={() => navigation.navigate('Notifications')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="notifications-outline" size={24} color={COLORS.text} />
+              {notificationCount > 0 ? (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText} numberOfLines={1}>
+                    {notificationCount > 99 ? '99+' : notificationCount}
+                  </Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileButton}
+              onPress={() => {
+                navigation.navigate('Main' as never, { screen: 'ProfileTab' } as never);
+              }}
+            >
             <View style={styles.avatar}>
               {showProfileImage && profileImageUri ? (
                 <Image
@@ -291,6 +315,7 @@ const TechnicianDashboardScreen: React.FC = () => {
               )}
             </View>
           </TouchableOpacity>
+          </View>
         </View>
         
         <View style={styles.onlineStatus}>
@@ -497,6 +522,32 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: FONT_WEIGHTS.medium,
     marginTop: 2,
+  },
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  notificationIconButton: {
+    padding: SPACING.sm,
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.background,
   },
   profileButton: {
     padding: SPACING.sm,

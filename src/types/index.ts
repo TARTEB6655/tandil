@@ -270,6 +270,8 @@ export type UserStackParamList = {
   RateReview: { orderId: string };
   HelpCenter: undefined;
   SubmitTicket: undefined;
+  MyTickets: undefined;
+  SupportTicketChat: { ticket: { id: number; ticket_number: string; subject: string; status: string; created_at: string; updated_at: string } };
   Memberships: undefined;
 };
 
@@ -297,6 +299,8 @@ export type TechnicianStackParamList = {
   MembershipCheckout: { tier: MembershipTier };
   HelpCenter: undefined;
   SubmitTicket: undefined;
+  MyTickets: undefined;
+  SupportTicketChat: { ticket: { id: number; ticket_number: string; subject: string; status: string; created_at: string; updated_at: string } };
   Notifications: undefined;
 };
 

@@ -15,6 +15,7 @@ import { useAppStore } from '../../store';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import { getUserProfile, UserProfileData, getProfilePhone, getProfilePictureUrl } from '../../services/userService';
+import { getSupportTickets } from '../../services/supportService';
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -22,6 +23,7 @@ const ProfileScreen: React.FC = () => {
   const { user, logout } = useAppStore();
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [supportTicketsCount, setSupportTicketsCount] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -32,6 +34,17 @@ const ProfileScreen: React.FC = () => {
         .catch(() => { if (!cancelled) setProfile(null); })
         .finally(() => { if (!cancelled) setLoading(false); });
       return () => { cancelled = true; };
+    }, [])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      getSupportTickets({ per_page: 1, page: 1 })
+        .then((res) => {
+          const total = res?.data?.pagination?.total ?? 0;
+          setSupportTicketsCount(typeof total === 'number' ? total : 0);
+        })
+        .catch(() => setSupportTicketsCount(0));
     }, [])
   );
 
@@ -101,6 +114,9 @@ const ProfileScreen: React.FC = () => {
       <Header 
         title={t('tabs.profile')} 
         showBack={false}
+        showNotifications={true}
+        notificationCount={supportTicketsCount}
+        onNotificationPress={() => navigation.navigate('MyTickets')}
         showCart={true}
       />
       <ScrollView showsVerticalScrollIndicator={false}>

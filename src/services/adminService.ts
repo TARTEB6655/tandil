@@ -80,6 +80,21 @@ export interface AdminSupportTicket {
   updated_at: string;
 }
 
+/** Single reply in GET /admin/support-tickets/:id */
+export interface SupportTicketReply {
+  id: number;
+  message: string;
+  user_id?: number;
+  user_name?: string;
+  is_admin?: boolean;
+  created_at: string;
+}
+
+/** Ticket detail from GET /admin/support-tickets/:id (includes replies) */
+export interface AdminSupportTicketDetail extends AdminSupportTicket {
+  replies: SupportTicketReply[];
+}
+
 export const adminService = {
   getUsers: async (params?: { 
     page?: number; 
@@ -363,6 +378,46 @@ export const adminService = {
         pagination: { current_page: number; last_page: number; per_page: number; total: number };
       };
     }>('/admin/support-tickets', { params, timeout: 15000 });
+    return response.data;
+  },
+
+  /** Admin support ticket by ID: GET /admin/support-tickets/:id (includes replies) */
+  getSupportTicketById: async (ticketId: number): Promise<{
+    success: boolean;
+    message?: string;
+    data: AdminSupportTicketDetail;
+  }> => {
+    const response = await apiClient.get<{
+      success: boolean;
+      message?: string;
+      data: AdminSupportTicketDetail;
+    }>(`/admin/support-tickets/${ticketId}`, { timeout: 15000 });
+    return response.data;
+  },
+
+  /** Admin reply to support ticket: POST /admin/support-tickets/:id/reply */
+  replyToSupportTicket: async (
+    ticketId: number,
+    message: string
+  ): Promise<{ success: boolean; message?: string; data?: unknown }> => {
+    const response = await apiClient.post<{ success: boolean; message?: string; data?: unknown }>(
+      `/admin/support-tickets/${ticketId}/reply`,
+      { message },
+      { timeout: 15000 }
+    );
+    return response.data;
+  },
+
+  /** Admin update support ticket status: PUT /admin/support-tickets/:id/status */
+  updateSupportTicketStatus: async (
+    ticketId: number,
+    status: string
+  ): Promise<{ success: boolean; message?: string; data?: unknown }> => {
+    const response = await apiClient.put<{ success: boolean; message?: string; data?: unknown }>(
+      `/admin/support-tickets/${ticketId}/status`,
+      { status },
+      { timeout: 15000 }
+    );
     return response.data;
   },
 

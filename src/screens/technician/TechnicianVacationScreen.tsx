@@ -8,6 +8,7 @@ import {
   Alert,
   Platform,
   TextInput,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -15,7 +16,15 @@ import { useTranslation } from 'react-i18next';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 
-export type VacationItem = { start_date: string; end_date: string; reason?: string };
+export const LEAVE_TYPES = [
+  { value: 'sick_leave', labelKey: 'technician.vacation.leaveType.sickLeave' },
+  { value: 'annual_leave', labelKey: 'technician.vacation.leaveType.annualLeave' },
+  { value: 'unpaid_leave', labelKey: 'technician.vacation.leaveType.unpaidLeave' },
+  { value: 'paternity_leave', labelKey: 'technician.vacation.leaveType.paternityLeave' },
+  { value: 'other', labelKey: 'technician.vacation.leaveType.other' },
+] as const;
+
+export type VacationItem = { id?: number; start_date: string; end_date: string; leave_type?: string; reason?: string };
 
 function formatDateToYYYYMMDD(date: Date): string {
   const y = date.getFullYear();
@@ -35,8 +44,10 @@ const TechnicianVacationScreen: React.FC = () => {
   const [vacations, setVacations] = useState<VacationItem[]>(initialVacations);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [leaveType, setLeaveType] = useState<string>('');
   const [reason, setReason] = useState('');
   const [pickerOpen, setPickerOpen] = useState<'start' | 'end' | null>(null);
+  const [leaveTypeModalVisible, setLeaveTypeModalVisible] = useState(false);
 
   const addVacation = () => {
     if (!startDate.trim()) {
@@ -51,9 +62,10 @@ const TechnicianVacationScreen: React.FC = () => {
       Alert.alert(t('technician.error'), t('technician.vacation.endDateAfterStart'));
       return;
     }
-    setVacations(prev => [...prev, { start_date: startDate, end_date: endDate, reason: reason.trim() || undefined }]);
+    setVacations(prev => [...prev, { start_date: startDate, end_date: endDate, leave_type: leaveType || undefined, reason: reason.trim() || undefined }]);
     setStartDate('');
     setEndDate('');
+    setLeaveType('');
     setReason('');
   };
 
@@ -95,6 +107,37 @@ const TechnicianVacationScreen: React.FC = () => {
             <Text style={styles.dateRowValue}>{endDate || t('technician.selectDate')}</Text>
             <Ionicons name="calendar-outline" size={22} color={COLORS.primary} />
           </TouchableOpacity>
+          <TouchableOpacity style={styles.dateRow} onPress={() => setLeaveTypeModalVisible(true)}>
+            <Text style={styles.dateRowLabel}>{t('technician.vacation.typeOfLeave')}</Text>
+            <Text style={styles.dateRowValue}>
+              {leaveType ? (LEAVE_TYPES.find(l => l.value === leaveType) ? t(LEAVE_TYPES.find(l => l.value === leaveType)!.labelKey) : leaveType) : t('technician.vacation.selectLeaveType')}
+            </Text>
+            <Ionicons name="chevron-down" size={22} color={COLORS.primary} />
+          </TouchableOpacity>
+          <Modal visible={leaveTypeModalVisible} transparent animationType="fade">
+            <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLeaveTypeModalVisible(false)}>
+              <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+                <Text style={styles.modalTitle}>{t('technician.vacation.typeOfLeave')}</Text>
+                <ScrollView style={styles.modalOptionsScroll} contentContainerStyle={styles.modalOptionsContent} showsVerticalScrollIndicator={true}>
+                  {LEAVE_TYPES.map((item) => (
+                    <TouchableOpacity
+                      key={item.value}
+                      style={styles.modalOption}
+                      onPress={() => {
+                        setLeaveType(item.value);
+                        setLeaveTypeModalVisible(false);
+                      }}
+                    >
+                      <Text style={styles.modalOptionText}>{t(item.labelKey)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <TouchableOpacity style={styles.modalCancel} onPress={() => setLeaveTypeModalVisible(false)}>
+                  <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </Modal>
           <TextInput
             style={styles.input}
             placeholder={t('technician.vacation.reasonOptional')}
@@ -139,6 +182,9 @@ const TechnicianVacationScreen: React.FC = () => {
               <View key={index} style={styles.vacationCard}>
                 <View style={styles.vacationCardContent}>
                   <Text style={styles.vacationDates}>{v.start_date} – {v.end_date}</Text>
+                  {v.leave_type ? (
+                    <Text style={styles.vacationLeaveType}>{LEAVE_TYPES.find(l => l.value === v.leave_type) ? t(LEAVE_TYPES.find(l => l.value === v.leave_type)!.labelKey) : v.leave_type}</Text>
+                  ) : null}
                   {v.reason ? <Text style={styles.vacationReason}>{v.reason}</Text> : null}
                 </View>
                 <TouchableOpacity onPress={() => removeVacation(index)} style={styles.removeBtn}>
@@ -212,8 +258,18 @@ const styles = StyleSheet.create({
   },
   vacationCardContent: { flex: 1 },
   vacationDates: { fontSize: FONT_SIZES.md, fontWeight: FONT_WEIGHTS.semiBold, color: COLORS.text },
+  vacationLeaveType: { fontSize: FONT_SIZES.sm, color: COLORS.primary, marginTop: 2 },
   vacationReason: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, marginTop: 2 },
   removeBtn: { padding: SPACING.sm },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: SPACING.lg },
+  modalContent: { backgroundColor: COLORS.background, borderRadius: BORDER_RADIUS.lg, padding: SPACING.lg, maxHeight: 400 },
+  modalTitle: { fontSize: FONT_SIZES.lg, fontWeight: FONT_WEIGHTS.semiBold, color: COLORS.text, marginBottom: SPACING.md },
+  modalOptionsScroll: { maxHeight: 280 },
+  modalOptionsContent: { paddingBottom: SPACING.sm },
+  modalOption: { paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  modalOptionText: { fontSize: FONT_SIZES.md, color: COLORS.text },
+  modalCancel: { marginTop: SPACING.md, paddingVertical: SPACING.sm, alignItems: 'center' },
+  modalCancelText: { fontSize: FONT_SIZES.md, color: COLORS.primary },
 });
 
 export default TechnicianVacationScreen;

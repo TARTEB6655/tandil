@@ -62,6 +62,12 @@ const HelpCenterScreen: React.FC = () => {
       subtitle: t('helpCenter.categories.ticket.subtitle'),
       action: () => navigation.navigate('SubmitTicket'),
     },
+    {
+      icon: 'list-outline',
+      title: t('helpCenter.categories.myTickets.title', 'My Tickets'),
+      subtitle: t('helpCenter.categories.myTickets.subtitle', 'View your support tickets'),
+      action: () => navigation.navigate('MyTickets'),
+    },
   ];
 
   const handleFaqPress = (index: number) => {
