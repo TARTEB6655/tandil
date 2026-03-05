@@ -128,6 +128,18 @@ const AdminSettingsScreen: React.FC = () => {
       ],
     },
     {
+      titleKey: 'admin.settings.zonesAndTeamsSection',
+      items: [
+        {
+          icon: 'map',
+          titleKey: 'admin.settings.zonesAndTeams.title',
+          subtitleKey: 'admin.settings.zonesAndTeams.subtitle',
+          type: 'navigation',
+          onPress: () => navigation.navigate('AdminZones'),
+        },
+      ],
+    },
+    {
       titleKey: 'admin.settings.dataPrivacy',
       items: [
         {

@@ -70,6 +70,36 @@ export async function getSupervisorDashboardSummary(): Promise<SupervisorDashboa
   return null;
 }
 
+/** Team member from GET /api/supervisor/team */
+export interface SupervisorTeamMember {
+  id: number;
+  name: string;
+  employee_id: string;
+  profile_picture_url: string | null;
+  status: string;
+  current_activity: string;
+  tasks_completed: number;
+  tasks_total: number;
+  tasks_display: string;
+}
+
+export interface SupervisorTeamResponse {
+  success?: boolean;
+  data?: SupervisorTeamMember[];
+}
+
+/**
+ * GET /api/supervisor/team
+ * Returns the current supervisor's team members. Requires Bearer token.
+ */
+export async function getSupervisorTeam(): Promise<SupervisorTeamMember[]> {
+  const response = await apiClient.get<SupervisorTeamResponse>('/supervisor/team', { timeout: 15000 });
+  if (response.data?.success && Array.isArray(response.data?.data)) {
+    return response.data.data;
+  }
+  return [];
+}
+
 /** Single report item from GET /api/supervisor/reports */
 export interface SupervisorReportItem {
   id: number;

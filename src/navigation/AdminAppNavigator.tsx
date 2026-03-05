@@ -36,6 +36,12 @@ import AdminOrdersScreen from '../screens/admin/AdminOrdersScreen';
 import AdminExclusiveOffersScreen from '../screens/admin/AdminExclusiveOffersScreen';
 import AdminAddExclusiveOfferScreen from '../screens/admin/AdminAddExclusiveOfferScreen';
 import AdminEditExclusiveOfferScreen from '../screens/admin/AdminEditExclusiveOfferScreen';
+import AdminZonesScreen from '../screens/admin/AdminZonesScreen';
+import AdminZoneAssignScreen from '../screens/admin/AdminZoneAssignScreen';
+import AdminSupervisorsScreen from '../screens/admin/AdminSupervisorsScreen';
+import AdminSupervisorTeamScreen from '../screens/admin/AdminSupervisorTeamScreen';
+import AdminTechniciansScreen from '../screens/admin/AdminTechniciansScreen';
+import AdminAddZoneScreen from '../screens/admin/AdminAddZoneScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -133,6 +139,12 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminExclusiveOffers" component={AdminExclusiveOffersScreen} />
         <Stack.Screen name="AdminAddExclusiveOffer" component={AdminAddExclusiveOfferScreen} />
         <Stack.Screen name="AdminEditExclusiveOffer" component={AdminEditExclusiveOfferScreen} />
+        <Stack.Screen name="AdminZones" component={AdminZonesScreen} />
+        <Stack.Screen name="AdminZoneAssign" component={AdminZoneAssignScreen} />
+        <Stack.Screen name="AdminSupervisors" component={AdminSupervisorsScreen} />
+        <Stack.Screen name="AdminSupervisorTeam" component={AdminSupervisorTeamScreen} />
+        <Stack.Screen name="AdminTechnicians" component={AdminTechniciansScreen} />
+        <Stack.Screen name="AdminAddZone" component={AdminAddZoneScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

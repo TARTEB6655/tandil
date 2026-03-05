@@ -12,7 +12,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
-import { getSupervisorDashboardSummary, SupervisorDashboardSummaryData, getSupervisorReports, SupervisorReportItem } from '../../services/supervisorService';
+import { getSupervisorDashboardSummary, SupervisorDashboardSummaryData, getSupervisorReports, SupervisorReportItem, getSupervisorTeam, SupervisorTeamMember } from '../../services/supervisorService';
 
 const DASHBOARD_REPORTS_LIMIT = 3;
 
@@ -47,6 +47,7 @@ const SupervisorDashboardScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [profileImageError, setProfileImageError] = useState(false);
   const [reports, setReports] = useState<SupervisorReportItem[]>([]);
+  const [teamMembers, setTeamMembers] = useState<SupervisorTeamMember[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -56,17 +57,20 @@ const SupervisorDashboardScreen: React.FC = () => {
       Promise.all([
         getSupervisorDashboardSummary(),
         getSupervisorReports(1, 20),
+        getSupervisorTeam(),
       ])
-        .then(([summaryData, reportsResult]) => {
+        .then(([summaryData, reportsResult, teamList]) => {
           if (!cancelled) {
             setSummary(summaryData ?? null);
             setReports(reportsResult.list);
+            setTeamMembers(teamList ?? []);
           }
         })
         .catch(() => {
           if (!cancelled) {
             setSummary(null);
             setReports([]);
+            setTeamMembers([]);
           }
         })
         .finally(() => {
@@ -96,69 +100,43 @@ const SupervisorDashboardScreen: React.FC = () => {
         profilePictureUrl: null as string | null,
       };
 
-  const teamMembers = [
-    {
-      id: 'tech_001',
-      employeeId: 'EMP-1001',
-      name: 'Ahmed Hassan',
-      status: 'active',
-      currentTask: 'Mohammed Ali Farm - Watering',
-      tasksToday: 3,
-      completedToday: 2,
-    },
-    {
-      id: 'tech_002',
-      employeeId: 'EMP-1002',
-      name: 'Khalid Ibrahim',
-      status: 'active',
-      currentTask: 'Green Valley - Planting',
-      tasksToday: 2,
-      completedToday: 1,
-    },
-    {
-      id: 'tech_003',
-      employeeId: 'EMP-1003',
-      name: 'Omar Saeed',
-      status: 'break',
-      currentTask: 'On Break',
-      tasksToday: 4,
-      completedToday: 3,
-    },
-  ];
-
+  const teamPreview = teamMembers.slice(0, 3);
   const pendingReportsPreview = reports.slice(0, DASHBOARD_REPORTS_LIMIT);
   const pendingReportsTotal = reports.length;
 
-  const renderTeamMember = ({ item }: { item: any }) => (
-    <TouchableOpacity style={styles.memberCard}>
-      <View style={styles.memberHeader}>
-        <View style={styles.memberAvatar}>
-          <Text style={styles.memberAvatarText}>{item.name.charAt(0)}</Text>
-        </View>
-        <View style={styles.memberInfo}>
-          <Text style={styles.memberName}>{item.name}</Text>
-          <Text style={styles.memberEmployeeId}>{item.employeeId}</Text>
-        </View>
-        <View style={[
-          styles.statusBadge,
-          { backgroundColor: item.status === 'active' ? COLORS.success + '20' : COLORS.warning + '20' }
-        ]}>
-          <Text style={[
-            styles.statusText,
-            { color: item.status === 'active' ? COLORS.success : COLORS.warning }
+  const renderTeamMember = ({ item }: { item: SupervisorTeamMember }) => {
+    const isActive = (item.status || '').toLowerCase() === 'active';
+    return (
+      <TouchableOpacity style={styles.memberCard}>
+        <View style={styles.memberHeader}>
+          <View style={styles.memberAvatar}>
+            <Text style={styles.memberAvatarText}>{(item.name || '?').charAt(0).toUpperCase()}</Text>
+          </View>
+          <View style={styles.memberInfo}>
+            <Text style={styles.memberName}>{item.name}</Text>
+            <Text style={styles.memberEmployeeId}>{item.employee_id}</Text>
+          </View>
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: isActive ? COLORS.success + '20' : COLORS.warning + '20' }
           ]}>
-            {item.status === 'active' ? 'Active' : 'Break'}
+            <Text style={[
+              styles.statusText,
+              { color: isActive ? COLORS.success : COLORS.warning }
+            ]}>
+              {item.status || '—'}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.memberTask}>{item.current_activity || '—'}</Text>
+        <View style={styles.memberStats}>
+          <Text style={styles.memberStatText}>
+            Tasks: {item.tasks_display || `${item.tasks_completed}/${item.tasks_total}`}
           </Text>
         </View>
-      </View>
-      <Text style={styles.memberTask}>{item.currentTask}</Text>
-      <View style={styles.memberStats}>
-        <Text style={styles.memberStatText}>
-          Tasks: {item.completedToday}/{item.tasksToday}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const renderPendingReport = ({ item }: { item: SupervisorReportItem }) => (
     <TouchableOpacity
@@ -263,19 +241,19 @@ const SupervisorDashboardScreen: React.FC = () => {
           />
         </View>
 
-        {/* Team Members */}
+        {/* Team Members – first 3 from API, View All shows full list */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>My Team</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('SupervisorTeamList' as never)}>
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
           
           <FlatList
-            data={teamMembers}
+            data={teamPreview}
             renderItem={renderTeamMember}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => String(item.id)}
             scrollEnabled={false}
           />
         </View>

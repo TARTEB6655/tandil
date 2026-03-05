@@ -14,7 +14,11 @@ import SupervisorProfileScreen from '../screens/supervisor/SupervisorProfileScre
 import AssignTasksScreen from '../screens/supervisor/AssignTasksScreen';
 import TeamStatsScreen from '../screens/supervisor/TeamStatsScreen';
 import HelpCenterScreen from '../screens/user/HelpCenterScreen';
+import TechnicianServiceAreasSettingsScreen from '../screens/technician/TechnicianServiceAreasSettingsScreen';
+import TechnicianSpecializationsScreen from '../screens/technician/TechnicianSpecializationsScreen';
+import TechnicianNotificationsScreen from '../screens/technician/TechnicianNotificationsScreen';
 import SupervisorSubmitTicketScreen from '../screens/supervisor/SupervisorSubmitTicketScreen';
+import SupervisorTeamListScreen from '../screens/supervisor/SupervisorTeamListScreen';
 import MyTicketsScreen from '../screens/user/MyTicketsScreen';
 import SupportTicketChatScreen from '../screens/user/SupportTicketChatScreen';
 
@@ -81,10 +85,14 @@ const SupervisorAppNavigator = () => {
         <Stack.Screen name="AssignTasks" component={AssignTasksScreen} />
         <Stack.Screen name="TeamStats" component={TeamStatsScreen} />
         <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+        <Stack.Screen name="ServiceAreasSettings" component={TechnicianServiceAreasSettingsScreen} />
+        <Stack.Screen name="Specializations" component={TechnicianSpecializationsScreen} />
+        <Stack.Screen name="Notifications" component={TechnicianNotificationsScreen} />
         <Stack.Screen name="SubmitTicket" component={SupervisorSubmitTicketScreen} />
         <Stack.Screen name="MyTickets" component={MyTicketsScreen} />
         <Stack.Screen name="SupportTicketChat" component={SupportTicketChatScreen} />
         <Stack.Screen name="SupervisorReport" component={SupervisorReportScreen} />
+        <Stack.Screen name="SupervisorTeamList" component={SupervisorTeamListScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

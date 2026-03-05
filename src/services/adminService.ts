@@ -95,6 +95,56 @@ export interface AdminSupportTicketDetail extends AdminSupportTicket {
   replies: SupportTicketReply[];
 }
 
+/** Zone/supervisor assignment from GET /admin/technicians */
+export interface AdminTechnicianZone {
+  id: number;
+  name: string;
+}
+
+export interface AdminTechnician {
+  id: number;
+  name: string;
+  email: string;
+  employee_id: string;
+  service_areas: string[];
+  specializations: string[];
+  zone: AdminTechnicianZone | null;
+  supervisor: { id: number; name: string } | null;
+}
+
+export interface AdminTechniciansResponse {
+  success: boolean;
+  message?: string;
+  data: AdminTechnician[];
+  pagination: { current_page: number; last_page: number; per_page: number; total: number };
+  search: string | null;
+}
+
+/** Supervisor from GET /admin/supervisors */
+export interface AdminSupervisorZone {
+  id: number;
+  name: string;
+}
+
+export interface AdminSupervisor {
+  id: number;
+  name: string;
+  email: string;
+  employee_id: string;
+  service_areas: string[];
+  specializations: string[];
+  zone: AdminSupervisorZone | null;
+  assigned_zones: AdminSupervisorZone[];
+}
+
+export interface AdminSupervisorsResponse {
+  success: boolean;
+  message?: string;
+  data: AdminSupervisor[];
+  pagination: { current_page: number; last_page: number; per_page: number; total: number };
+  search: string | null;
+}
+
 export const adminService = {
   getUsers: async (params?: { 
     page?: number; 
@@ -418,6 +468,142 @@ export const adminService = {
       { status },
       { timeout: 15000 }
     );
+    return response.data;
+  },
+
+  /** All technicians with zone and supervisor: GET /admin/technicians?per_page=&search= */
+  getTechnicians: async (params?: {
+    per_page?: number;
+    page?: number;
+    search?: string;
+  }): Promise<AdminTechniciansResponse> => {
+    const response = await apiClient.get<AdminTechniciansResponse>('/admin/technicians', {
+      params: params ?? {},
+      timeout: 15000,
+    });
+    return response.data;
+  },
+
+  /** All supervisors with zone/assigned_zones: GET /admin/supervisors?per_page=&search= */
+  getSupervisors: async (params?: {
+    per_page?: number;
+    page?: number;
+    search?: string;
+  }): Promise<AdminSupervisorsResponse> => {
+    const response = await apiClient.get<AdminSupervisorsResponse>('/admin/supervisors', {
+      params: params ?? {},
+      timeout: 15000,
+    });
+    return response.data;
+  },
+
+  /** Supervisor team: GET /admin/supervisors/:supervisor_id/team */
+  getSupervisorTeam: async (supervisorId: number): Promise<{
+    success: boolean;
+    data: {
+      supervisor: {
+        id: number;
+        name: string;
+        email: string;
+        employee_id: string;
+        assigned_zones: AdminSupervisorZone[];
+      };
+      team: Array<{
+        id: number;
+        name: string;
+        email: string;
+        employee_id: string;
+        service_areas: string[];
+        specializations: string[];
+        assigned_zones: AdminSupervisorZone[];
+      }>;
+    };
+  }> => {
+    const response = await apiClient.get(`/admin/supervisors/${supervisorId}/team`, {
+      timeout: 15000,
+    });
+    return response.data;
+  },
+
+  /** Add member to supervisor team: POST /admin/supervisors/:supervisor_id/team (form-data: technician_id) */
+  addSupervisorTeamMember: async (
+    supervisorId: number,
+    technicianId: number
+  ): Promise<{ success: boolean; message?: string }> => {
+    const form = new FormData();
+    form.append('technician_id', String(technicianId));
+    const response = await apiClient.post(
+      `/admin/supervisors/${supervisorId}/team`,
+      form,
+      { timeout: 15000 }
+    );
+    return response.data;
+  },
+
+  /** Remove member from supervisor team: DELETE /admin/supervisors/:supervisor_id/team?technician_id= */
+  removeSupervisorTeamMember: async (
+    supervisorId: number,
+    technicianId: number
+  ): Promise<{ success: boolean; message?: string }> => {
+    const response = await apiClient.delete(
+      `/admin/supervisors/${supervisorId}/team`,
+      { params: { technician_id: technicianId }, timeout: 15000 }
+    );
+    return response.data;
+  },
+
+  /** Create area/zone: POST /admin/areas (form-data: location, supervisor_id) */
+  createArea: async (
+    location: string,
+    supervisorId: number
+  ): Promise<{ success: boolean; message?: string; data?: { id: number; name?: string; [k: string]: unknown } }> => {
+    const form = new FormData();
+    form.append('location', location);
+    form.append('supervisor_id', String(supervisorId));
+    const response = await apiClient.post('/admin/areas', form, { timeout: 15000 });
+    return response.data;
+  },
+
+  /** Get all areas: GET /admin/areas?all=1&search= */
+  getAreas: async (params?: { all?: number; search?: string }): Promise<{
+    success: boolean;
+    message?: string;
+    data: Array<{ id: number; location: string | null; supervisor_id: number | null }>;
+    total?: number;
+  }> => {
+    const response = await apiClient.get('/admin/areas', {
+      params: { all: 1, ...params },
+      timeout: 15000,
+    });
+    return response.data;
+  },
+
+  /** Get single area: GET /admin/areas/:area_id */
+  getArea: async (areaId: number): Promise<{
+    success: boolean;
+    message?: string;
+    data: { id: number; location: string | null; supervisor_id: number | null };
+  }> => {
+    const response = await apiClient.get(`/admin/areas/${areaId}`, { timeout: 15000 });
+    return response.data;
+  },
+
+  /** Update area/zone: POST /admin/areas/:area_id (form-data: location, supervisor_id) */
+  updateArea: async (
+    areaId: number,
+    location: string,
+    supervisorId: number | null
+  ): Promise<{ success: boolean; message?: string; data?: unknown }> => {
+    const form = new FormData();
+    form.append('location', location);
+    if (supervisorId != null) form.append('supervisor_id', String(supervisorId));
+    const response = await apiClient.post(`/admin/areas/${areaId}`, form, { timeout: 15000 });
+    return response.data;
+  },
+
+  /** Delete area: DELETE /admin/areas/:area_id */
+  deleteArea: async (areaId: number): Promise<{ success: boolean; message?: string }> => {
+    const response = await apiClient.delete(`/admin/areas/${areaId}`, { timeout: 15000 });
     return response.data;
   },
 
