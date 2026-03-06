@@ -139,7 +139,7 @@ const TechnicianDashboardScreen: React.FC = () => {
               backgroundColor:
                 item.status === 'in_progress' ? COLORS.primary + '20'
                 : item.status === 'accepted' ? COLORS.info + '20'
-                : item.status === 'pending' ? COLORS.warning + '20'
+                : item.status === 'pending' || item.status === 'pending_acceptance' ? COLORS.warning + '20'
                 : COLORS.textSecondary + '20',
             }
           ]}>
@@ -149,11 +149,11 @@ const TechnicianDashboardScreen: React.FC = () => {
                 color:
                   item.status === 'in_progress' ? COLORS.primary
                   : item.status === 'accepted' ? COLORS.info
-                  : item.status === 'pending' ? COLORS.warning
+                  : item.status === 'pending' || item.status === 'pending_acceptance' ? COLORS.warning
                   : COLORS.textSecondary,
               }
             ]}>
-              {item.status === 'in_progress' ? t('technician.status.inProgress') : item.status === 'accepted' ? t('technician.status.accepted') : item.status === 'pending' ? t('technician.status.pending') : t('technician.status.assigned')}
+              {item.status === 'in_progress' ? t('technician.status.inProgress') : item.status === 'accepted' ? t('technician.status.accepted') : item.status === 'pending' || item.status === 'pending_acceptance' ? (t('technician.status.pending_acceptance', { defaultValue: 'Pending acceptance' })) : t('technician.status.assigned')}
             </Text>
           </View>
         </View>
@@ -179,8 +179,8 @@ const TechnicianDashboardScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
 
-      {/* Accept/Reject Buttons only for Pending tasks */}
-      {item.status === 'pending' && (
+      {/* Accept/Cancel buttons when status is pending or pending_acceptance */}
+      {(item.status === 'pending' || item.status === 'pending_acceptance') && (
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.actionButton, styles.acceptButton]}

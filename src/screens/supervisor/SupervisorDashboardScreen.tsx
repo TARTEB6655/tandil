@@ -107,7 +107,11 @@ const SupervisorDashboardScreen: React.FC = () => {
   const renderTeamMember = ({ item }: { item: SupervisorTeamMember }) => {
     const isActive = (item.status || '').toLowerCase() === 'active';
     return (
-      <TouchableOpacity style={styles.memberCard}>
+      <TouchableOpacity
+        style={styles.memberCard}
+        onPress={() => navigation.navigate('SupervisorTeamMemberDetail' as never, { technicianId: item.id } as never)}
+        activeOpacity={0.7}
+      >
         <View style={styles.memberHeader}>
           <View style={styles.memberAvatar}>
             <Text style={styles.memberAvatarText}>{(item.name || '?').charAt(0).toUpperCase()}</Text>

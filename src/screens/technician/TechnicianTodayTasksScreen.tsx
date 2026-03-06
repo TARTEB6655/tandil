@@ -109,7 +109,7 @@ const TechnicianTodayTasksScreen: React.FC = () => {
                     ? COLORS.primary + '20'
                     : item.status === 'accepted'
                     ? COLORS.info + '20'
-                    : item.status === 'pending'
+                    : item.status === 'pending' || item.status === 'pending_acceptance'
                     ? COLORS.warning + '20'
                     : COLORS.textSecondary + '20',
               },
@@ -124,7 +124,7 @@ const TechnicianTodayTasksScreen: React.FC = () => {
                       ? COLORS.primary
                       : item.status === 'accepted'
                       ? COLORS.info
-                      : item.status === 'pending'
+                      : item.status === 'pending' || item.status === 'pending_acceptance'
                       ? COLORS.warning
                       : COLORS.textSecondary,
                 },
@@ -134,8 +134,8 @@ const TechnicianTodayTasksScreen: React.FC = () => {
                 ? t('technician.status.inProgress')
                 : item.status === 'accepted'
                 ? t('technician.status.accepted')
-                : item.status === 'pending'
-                ? t('technician.status.pending')
+                : item.status === 'pending' || item.status === 'pending_acceptance'
+                ? (t('technician.status.pending_acceptance', { defaultValue: 'Pending acceptance' }))
                 : t('technician.status.assigned')}
             </Text>
           </View>
@@ -166,7 +166,7 @@ const TechnicianTodayTasksScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
 
-      {item.status === 'pending' && (
+      {(item.status === 'pending' || item.status === 'pending_acceptance') && (
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.actionButton, styles.acceptButton]}

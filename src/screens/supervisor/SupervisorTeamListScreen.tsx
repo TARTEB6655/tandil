@@ -39,7 +39,11 @@ const SupervisorTeamListScreen: React.FC = () => {
   const renderTeamMember = ({ item }: { item: SupervisorTeamMember }) => {
     const isActive = (item.status || '').toLowerCase() === 'active';
     return (
-      <View style={styles.memberCard}>
+      <TouchableOpacity
+        style={styles.memberCard}
+        onPress={() => navigation.navigate('SupervisorTeamMemberDetail' as never, { technicianId: item.id } as never)}
+        activeOpacity={0.7}
+      >
         <View style={styles.memberHeader}>
           <View style={styles.memberAvatar}>
             <Text style={styles.memberAvatarText}>{item.name.charAt(0)}</Text>
@@ -66,7 +70,7 @@ const SupervisorTeamListScreen: React.FC = () => {
             Tasks: {item.tasks_display || `${item.tasks_completed}/${item.tasks_total}`}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 

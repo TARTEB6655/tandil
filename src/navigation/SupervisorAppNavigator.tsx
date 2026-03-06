@@ -19,6 +19,8 @@ import TechnicianSpecializationsScreen from '../screens/technician/TechnicianSpe
 import TechnicianNotificationsScreen from '../screens/technician/TechnicianNotificationsScreen';
 import SupervisorSubmitTicketScreen from '../screens/supervisor/SupervisorSubmitTicketScreen';
 import SupervisorTeamListScreen from '../screens/supervisor/SupervisorTeamListScreen';
+import SupervisorTeamMemberDetailScreen from '../screens/supervisor/SupervisorTeamMemberDetailScreen';
+import SupervisorAssignmentDetailScreen from '../screens/supervisor/SupervisorAssignmentDetailScreen';
 import MyTicketsScreen from '../screens/user/MyTicketsScreen';
 import SupportTicketChatScreen from '../screens/user/SupportTicketChatScreen';
 
@@ -93,6 +95,8 @@ const SupervisorAppNavigator = () => {
         <Stack.Screen name="SupportTicketChat" component={SupportTicketChatScreen} />
         <Stack.Screen name="SupervisorReport" component={SupervisorReportScreen} />
         <Stack.Screen name="SupervisorTeamList" component={SupervisorTeamListScreen} />
+        <Stack.Screen name="SupervisorTeamMemberDetail" component={SupervisorTeamMemberDetailScreen} />
+        <Stack.Screen name="SupervisorAssignmentDetail" component={SupervisorAssignmentDetailScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );
