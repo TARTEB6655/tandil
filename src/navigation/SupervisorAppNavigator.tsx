@@ -11,8 +11,10 @@ import SupervisorDashboardScreen from '../screens/supervisor/SupervisorDashboard
 import SupervisorReportScreen from '../screens/technician/SupervisorReportScreen';
 import PendingReportsListScreen from '../screens/supervisor/PendingReportsListScreen';
 import SupervisorProfileScreen from '../screens/supervisor/SupervisorProfileScreen';
+import SupervisorProfileEditScreen from '../screens/supervisor/SupervisorProfileEditScreen';
 import AssignTasksScreen from '../screens/supervisor/AssignTasksScreen';
 import TeamStatsScreen from '../screens/supervisor/TeamStatsScreen';
+import TeamMemberProgressScreen from '../screens/supervisor/TeamMemberProgressScreen';
 import HelpCenterScreen from '../screens/user/HelpCenterScreen';
 import TechnicianServiceAreasSettingsScreen from '../screens/technician/TechnicianServiceAreasSettingsScreen';
 import TechnicianSpecializationsScreen from '../screens/technician/TechnicianSpecializationsScreen';
@@ -86,6 +88,7 @@ const SupervisorAppNavigator = () => {
         <Stack.Screen name="Main" component={TabNavigator} />
         <Stack.Screen name="AssignTasks" component={AssignTasksScreen} />
         <Stack.Screen name="TeamStats" component={TeamStatsScreen} />
+        <Stack.Screen name="TeamMemberProgress" component={TeamMemberProgressScreen} />
         <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
         <Stack.Screen name="ServiceAreasSettings" component={TechnicianServiceAreasSettingsScreen} />
         <Stack.Screen name="Specializations" component={TechnicianSpecializationsScreen} />
@@ -97,6 +100,7 @@ const SupervisorAppNavigator = () => {
         <Stack.Screen name="SupervisorTeamList" component={SupervisorTeamListScreen} />
         <Stack.Screen name="SupervisorTeamMemberDetail" component={SupervisorTeamMemberDetailScreen} />
         <Stack.Screen name="SupervisorAssignmentDetail" component={SupervisorAssignmentDetailScreen} />
+        <Stack.Screen name="SupervisorProfileEdit" component={SupervisorProfileEditScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

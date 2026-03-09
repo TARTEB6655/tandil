@@ -294,7 +294,7 @@ export type TechnicianStackParamList = {
   SetVacation: { initialVacations?: Array<{ start_date: string; end_date: string; reason?: string }> };
   ServiceAreas: { initialServiceAreas?: string[] };
   ServiceAreasSettings: undefined;
-  SupervisorReport?: { visitId?: string } | undefined;
+  SupervisorReport: { reportId: number };
   Memberships: undefined;
   MembershipCheckout: { tier: MembershipTier };
   HelpCenter: undefined;

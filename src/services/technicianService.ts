@@ -854,19 +854,23 @@ export async function submitTechnicianSupportTicket(params: {
 }
 
 /**
- * POST /api/technician/reports
- * Submit field report (observations + optional before/after photos). Body: form-data.
+ * POST /api/technician/report/:visit_id
+ * Submit field report. Body: form-data with:
+ *   - technician_notes (Text, optional): field notes / observations
+ *   - before_photo (File, optional): before image
+ *   - after_photo (File, optional): after image
  * Requires Bearer token.
  */
 export async function submitTechnicianReport(params: {
   visit_id: number;
-  technician_notes: string;
+  technician_notes?: string;
   before_photo?: { uri: string };
   after_photo?: { uri: string };
 }): Promise<{ success: boolean; message?: string }> {
   const formData = new FormData();
-  formData.append('visit_id', String(params.visit_id));
-  formData.append('technician_notes', params.technician_notes.trim());
+  if (params.technician_notes != null && String(params.technician_notes).trim() !== '') {
+    formData.append('technician_notes', String(params.technician_notes).trim());
+  }
   if (params.before_photo?.uri) {
     const uri = params.before_photo.uri;
     const name = uri.split('/').pop()?.includes('.') ? uri.split('/').pop()! : 'before.jpg';
@@ -887,7 +891,7 @@ export async function submitTechnicianReport(params: {
   }
   try {
     const response = await apiClient.post<{ success?: boolean; message?: string } | unknown[]>(
-      '/technician/reports',
+      `/technician/report/${params.visit_id}`,
       formData as any,
       { timeout: 30000 }
     );

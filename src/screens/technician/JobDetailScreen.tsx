@@ -68,6 +68,11 @@ const JobDetailScreen: React.FC = () => {
   const customer = detail?.customer_information;
   const address = detail?.service_address;
   const actions = detail?.actions ?? { can_submit_field_report: true, can_complete_visit: true, can_call_customer: true };
+  const hasStartVisit = jobStatus === 'assigned';
+  const hasSubmitReport = actions.can_submit_field_report && (jobStatus === 'in_progress' || jobStatus === 'accepted');
+  const hasCompleteVisit = actions.can_complete_visit && (jobStatus === 'in_progress' || jobStatus === 'accepted');
+  const hasCallCustomer = actions.can_call_customer;
+  const hasAnyAction = jobStatus !== 'completed' && (hasStartVisit || hasSubmitReport || hasCompleteVisit || hasCallCustomer);
 
   const job = {
     id: detail?.job_id ?? visitId,
@@ -162,13 +167,16 @@ const JobDetailScreen: React.FC = () => {
   };
 
   const handleSubmitReport = () => {
-    if (!fieldNotes.trim()) {
-      Alert.alert(t('technician.error', 'Required'), t('technician.jobDetail.addFieldNotes', 'Please add field notes before submitting.'));
-      return;
-    }
     const visitIdNum = Number(visitId);
     if (!visitId || Number.isNaN(visitIdNum)) {
       Alert.alert(t('technician.error', 'Error'), t('technician.jobDetail.invalidJob', 'Invalid job/visit.'));
+      return;
+    }
+    const hasNotes = fieldNotes.trim().length > 0;
+    const hasBefore = beforePhotos.length > 0;
+    const hasAfter = afterPhotos.length > 0;
+    if (!hasNotes && !hasBefore && !hasAfter) {
+      Alert.alert(t('technician.error', 'Required'), t('technician.jobDetail.addFieldNotes', 'Please add notes or at least one photo before submitting.'));
       return;
     }
     Alert.alert(
@@ -183,7 +191,7 @@ const JobDetailScreen: React.FC = () => {
             try {
               const result = await submitTechnicianReport({
                 visit_id: visitIdNum,
-                technician_notes: fieldNotes.trim(),
+                technician_notes: fieldNotes.trim() || undefined,
                 before_photo: beforePhotos[0] ? { uri: beforePhotos[0] } : undefined,
                 after_photo: afterPhotos[0] ? { uri: afterPhotos[0] } : undefined,
               });
@@ -438,12 +446,12 @@ const JobDetailScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Job Actions – hidden when job is completed */}
-        {jobStatus !== 'completed' && (
+        {/* Job Actions – show section and "Actions" title only when at least one button is visible */}
+        {hasAnyAction && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Actions</Text>
             <View style={styles.actionsContainer}>
-              {jobStatus === 'assigned' && (
+              {hasStartVisit && (
                 <Button
                   title="Start Visit"
                   onPress={() => handleStatusUpdate('in_progress')}
@@ -451,8 +459,7 @@ const JobDetailScreen: React.FC = () => {
                   style={styles.actionButton}
                 />
               )}
-
-              {actions.can_submit_field_report && (jobStatus === 'in_progress' || jobStatus === 'accepted') && (
+              {hasSubmitReport && (
                 <Button
                   title="Submit Field Report to Supervisor"
                   onPress={handleSubmitReport}
@@ -461,7 +468,7 @@ const JobDetailScreen: React.FC = () => {
                   style={styles.actionButton}
                 />
               )}
-              {actions.can_complete_visit && (jobStatus === 'in_progress' || jobStatus === 'accepted') && (
+              {hasCompleteVisit && (
                 <Button
                   title="Complete Visit"
                   onPress={handleCompleteJob}
@@ -470,7 +477,7 @@ const JobDetailScreen: React.FC = () => {
                   style={styles.actionButton}
                 />
               )}
-              {actions.can_call_customer && (
+              {hasCallCustomer && (
                 <Button
                   title="Call Customer"
                   variant="outline"

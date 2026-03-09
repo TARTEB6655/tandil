@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,20 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
+import dayjs from 'dayjs';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { Button } from '../../components/common/Button';
+import {
+  getSupervisorReportDetail,
+  finalizeSupervisorVisitReport,
+  SupervisorReportDetail,
+} from '../../services/supervisorService';
 
 interface ReportOption {
   id: string;
@@ -25,8 +33,15 @@ const SupervisorReportScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { visitId } = route.params || { visitId: 'visit_001' };
-  
+  const reportId = (route.params as { reportId?: number })?.reportId;
+
+  const [report, setReport] = useState<SupervisorReportDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [supervisorNotes, setSupervisorNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
   const [reportOptions, setReportOptions] = useState<ReportOption[]>([
     { id: 'fertilizer', label: 'Needs Fertilizer', icon: 'nutrition-outline', selected: false },
     { id: 'vitamins', label: 'Needs Vitamins', icon: 'medical-outline', selected: false },
@@ -35,20 +50,36 @@ const SupervisorReportScreen: React.FC = () => {
     { id: 'pruning', label: 'Needs Pruning', icon: 'cut-outline', selected: false },
   ]);
 
-  const fieldReport = {
-    id: visitId,
-    technicianName: 'Ahmed Hassan',
-    employeeId: 'EMP-1001',
-    customerName: 'Mohammed Ali Farm',
-    service: 'Tree Watering & Irrigation Check',
-    visitDate: '2024-01-15',
-    visitTime: '8:00 AM',
-    fieldNotes: 'Completed watering of all palm trees. Noticed some trees have dry soil. Drip irrigation system checked - found minor leak in section B. Date palms looking healthy overall.',
-    photos: [
-      'https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=400',
-      'https://images.unsplash.com/photo-1615486363561-9be0d9e74075?w=400',
-    ],
-  };
+  useFocusEffect(
+    useCallback(() => {
+      if (reportId == null) {
+        setLoading(false);
+        setError('Report ID is missing.');
+        return;
+      }
+      let cancelled = false;
+      setLoading(true);
+      setError(null);
+      getSupervisorReportDetail(reportId)
+        .then((data) => {
+          if (!cancelled && data) {
+            setReport(data);
+            setError(null);
+            setSupervisorNotes(data.supervisor_notes ?? '');
+          } else if (!cancelled) {
+            setReport(null);
+            setError('Failed to load report.');
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setError('Failed to load report.');
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => { cancelled = true; };
+    }, [reportId])
+  );
 
   const toggleOption = (id: string) => {
     setReportOptions(reportOptions.map(option => 
@@ -56,61 +87,90 @@ const SupervisorReportScreen: React.FC = () => {
     ));
   };
 
-  const handleSubmitReport = () => {
+  const handleSubmitReport = async () => {
     const selectedOptions = reportOptions.filter(opt => opt.selected);
     if (selectedOptions.length === 0) {
       Alert.alert('Selection Required', 'Please select at least one recommendation');
       return;
     }
-
-    const recommendations = selectedOptions.map(opt => opt.label).join(', ');
-    Alert.alert(
-      'Submit Supervisor Report',
-      `Send report to ${fieldReport.customerName} with recommendations: ${recommendations}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Send Report', 
-          onPress: () => {
-            Alert.alert('Success', 'Supervisor report sent to client successfully!');
-            navigation.goBack();
-          }
-        },
-      ]
-    );
+    if (!report) return;
+    const visitId = report.visit_id;
+    const recommendations = selectedOptions.map(opt => opt.label);
+    const customerName = report.visit?.client_name ?? report.location ?? 'client';
+    const confirm = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        'Submit Supervisor Report',
+        `Send report to ${customerName} with recommendations: ${recommendations.join(', ')}?`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Send Report', onPress: () => resolve(true) },
+        ]
+      );
+    });
+    if (!confirm) return;
+    setSubmitting(true);
+    try {
+      const result = await finalizeSupervisorVisitReport({
+        visit_id: visitId,
+        supervisor_notes: supervisorNotes,
+        recommendations,
+      });
+      if (result.success) {
+        Alert.alert('Success', result.message ?? 'Supervisor report sent to client successfully!', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      } else {
+        Alert.alert('Error', result.message ?? 'Failed to submit report.');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to submit report. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleApproveReport = () => {
-    Alert.alert(
-      'Approve Report',
-      'Are you sure you want to approve this report?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Approve',
-          onPress: () => {
-            Alert.alert('Success', 'Report approved successfully.');
-            navigation.goBack();
-          },
-        },
-      ]
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t('technician.supervisorReport')}</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading report…</Text>
+        </View>
+      </View>
     );
-  };
+  }
 
-  const handleCancelReport = () => {
-    Alert.alert(
-      'Cancel Report',
-      'Are you sure you want to cancel this report?',
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: () => navigation.goBack(),
-        },
-      ]
+  if (error || !report) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t('technician.supervisorReport')}</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>{error ?? 'Report not found.'}</Text>
+        </View>
+      </View>
     );
-  };
+  }
+
+  const visitDate = report.submitted_at
+    ? dayjs(report.submitted_at).format('YYYY-MM-DD')
+    : (report.visit?.scheduled_at ? dayjs(report.visit.scheduled_at).format('YYYY-MM-DD') : '—');
+  const visitTime = report.submitted_at
+    ? dayjs(report.submitted_at).format('h:mm A')
+    : (report.visit?.scheduled_at ? dayjs(report.visit.scheduled_at).format('h:mm A') : '—');
+  const displayLocation = report.location || (report.visit?.client_name ?? '—');
 
   return (
     <View style={styles.container}>
@@ -133,11 +193,13 @@ const SupervisorReportScreen: React.FC = () => {
           <View style={styles.techCard}>
             <View style={styles.techInfo}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{fieldReport.technicianName.charAt(0)}</Text>
+                <Text style={styles.avatarText}>
+                  {(report.technician_name || ' ').charAt(0).toUpperCase()}
+                </Text>
               </View>
               <View>
-                <Text style={styles.techName}>{fieldReport.technicianName}</Text>
-                <Text style={styles.techId}>ID: {fieldReport.employeeId}</Text>
+                <Text style={styles.techName}>{report.technician_name}</Text>
+                <Text style={styles.techId}>ID: {report.employee_id}</Text>
               </View>
             </View>
           </View>
@@ -147,16 +209,16 @@ const SupervisorReportScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Visit Information</Text>
           <View style={styles.visitCard}>
-            <Text style={styles.customerName}>{fieldReport.customerName}</Text>
-            <Text style={styles.serviceName}>{fieldReport.service}</Text>
+            <Text style={styles.customerName}>{displayLocation}</Text>
+            <Text style={styles.serviceName}>{report.service}</Text>
             <View style={styles.visitDetails}>
               <View style={styles.detailItem}>
                 <Ionicons name="calendar-outline" size={16} color={COLORS.textSecondary} />
-                <Text style={styles.detailText}>{fieldReport.visitDate}</Text>
+                <Text style={styles.detailText}>{visitDate}</Text>
               </View>
               <View style={styles.detailItem}>
                 <Ionicons name="time-outline" size={16} color={COLORS.textSecondary} />
-                <Text style={styles.detailText}>{fieldReport.visitTime}</Text>
+                <Text style={styles.detailText}>{visitTime}</Text>
               </View>
             </View>
           </View>
@@ -166,7 +228,9 @@ const SupervisorReportScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Field Notes</Text>
           <View style={styles.notesCard}>
-            <Text style={styles.notesText}>{fieldReport.fieldNotes}</Text>
+            <Text style={styles.notesText}>
+              {report.technician_notes ?? 'No notes provided.'}
+            </Text>
           </View>
         </View>
 
@@ -174,9 +238,41 @@ const SupervisorReportScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Field Photos</Text>
           <View style={styles.photosContainer}>
-            {fieldReport.photos.map((photo, index) => (
-              <Image key={index} source={{ uri: photo }} style={styles.photo} />
-            ))}
+            {report.before_photos?.length > 0 && (
+              <>
+                <Text style={styles.photoLabel}>Before</Text>
+                {report.before_photos.map((p) => (
+                  <Image key={p.id} source={{ uri: p.photo_url }} style={styles.photo} />
+                ))}
+              </>
+            )}
+            {report.after_photos?.length > 0 && (
+              <>
+                <Text style={styles.photoLabel}>After</Text>
+                {report.after_photos.map((p) => (
+                  <Image key={p.id} source={{ uri: p.photo_url }} style={styles.photo} />
+                ))}
+              </>
+            )}
+            {(!report.before_photos?.length && !report.after_photos?.length) && (
+              <Text style={styles.noPhotosText}>No photos</Text>
+            )}
+          </View>
+        </View>
+
+        {/* Supervisor Notes */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Supervisor Notes</Text>
+          <View style={styles.notesCard}>
+            <TextInput
+              style={styles.supervisorNotesInput}
+              placeholder="Add your notes about this report…"
+              placeholderTextColor={COLORS.textSecondary}
+              value={supervisorNotes}
+              onChangeText={setSupervisorNotes}
+              multiline
+              numberOfLines={4}
+            />
           </View>
         </View>
 
@@ -223,28 +319,13 @@ const SupervisorReportScreen: React.FC = () => {
         {/* Submit Button */}
         <View style={styles.section}>
           <Button
-            title="Submit Report to Client"
+            title={submitting ? 'Sending…' : 'Submit Report to Client'}
             onPress={handleSubmitReport}
             style={styles.submitButton}
+            disabled={submitting}
           />
         </View>
 
-        {/* Approve / Cancel Report – at end of page */}
-        <View style={styles.section}>
-          <View style={styles.actionButtonsRow}>
-            <Button
-              title="Approve Report"
-              onPress={handleApproveReport}
-              style={styles.approveButton}
-            />
-            <Button
-              title="Cancel Report"
-              variant="outline"
-              onPress={handleCancelReport}
-              style={styles.cancelReportButton}
-            />
-          </View>
-        </View>
       </ScrollView>
     </View>
   );
@@ -273,6 +354,22 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 40,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  loadingText: {
+    marginTop: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+  },
+  errorText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.error,
+    textAlign: 'center',
   },
   section: {
     marginBottom: SPACING.lg,
@@ -361,10 +458,29 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     lineHeight: 22,
   },
+  supervisorNotesInput: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    lineHeight: 22,
+    minHeight: 100,
+    padding: 0,
+  },
   photosContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: SPACING.md,
+    alignItems: 'flex-start',
+  },
+  photoLabel: {
+    width: '100%',
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  noPhotosText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
   },
   photo: {
     width: 160,
@@ -411,16 +527,6 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     width: '100%',
-  },
-  actionButtonsRow: {
-    flexDirection: 'row',
-    gap: SPACING.md,
-  },
-  approveButton: {
-    flex: 1,
-  },
-  cancelReportButton: {
-    flex: 1,
   },
 });
 

@@ -13,6 +13,9 @@ import AllTeamsScreen from '../screens/areamanager/AllTeamsScreen';
 import RegionMapScreen from '../screens/areamanager/RegionMapScreen';
 import AnalyticsScreen from '../screens/areamanager/AnalyticsScreen';
 import RegionReportsScreen from '../screens/areamanager/ReportsScreen';
+import RegionAlertsScreen from '../screens/areamanager/RegionAlertsScreen';
+import TeamLeadersScreen from '../screens/areamanager/TeamLeadersScreen';
+import TeamLeaderDetailScreen from '../screens/areamanager/TeamLeaderDetailScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -77,6 +80,9 @@ const AreaManagerAppNavigator = () => {
         <Stack.Screen name="RegionMap" component={RegionMapScreen} />
         <Stack.Screen name="Analytics" component={AnalyticsScreen} />
         <Stack.Screen name="RegionReports" component={RegionReportsScreen} />
+        <Stack.Screen name="RegionAlerts" component={RegionAlertsScreen} />
+        <Stack.Screen name="TeamLeaders" component={TeamLeadersScreen} />
+        <Stack.Screen name="TeamLeaderDetail" component={TeamLeaderDetailScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

@@ -1,47 +1,128 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import {
+  getSupervisorTeamStats,
+  SupervisorTeamStatsData,
+  SupervisorTeamStatsMember,
+} from '../../services/supervisorService';
 
-const STATS = [
-  { id: 's-1', label: 'Visits Today', value: 18, icon: 'calendar-outline', color: COLORS.primary },
-  { id: 's-2', label: 'Avg Duration', value: '36m', icon: 'time-outline', color: COLORS.warning },
-  { id: 's-3', label: 'Customer Rating', value: '4.6', icon: 'star-outline', color: COLORS.success },
-  { id: 's-4', label: 'Open Issues', value: 3, icon: 'alert-circle-outline', color: COLORS.error },
+const STAT_CONFIG = [
+  { id: 's-1', label: 'Visits Today', key: 'visits_today' as const, icon: 'calendar-outline', color: COLORS.primary },
+  { id: 's-2', label: 'Avg Duration', key: 'avg_duration_minutes' as const, icon: 'time-outline', color: COLORS.warning },
+  { id: 's-3', label: 'Customer Rating', key: 'customer_rating' as const, icon: 'star-outline', color: COLORS.success },
+  { id: 's-4', label: 'Open Issues', key: 'open_issues' as const, icon: 'alert-circle-outline', color: COLORS.error },
 ];
 
-const MEMBERS = [
-  { id: 'emp-1001', name: 'Khalid Ibrahim', completed: 8, rating: 4.7 },
-  { id: 'emp-1002', name: 'Omar Saeed', completed: 6, rating: 4.5 },
-  { id: 'emp-1003', name: 'Sara Ali', completed: 4, rating: 4.8 },
-];
+function formatStatValue(key: keyof SupervisorTeamStatsData, data: SupervisorTeamStatsData): string | number {
+  switch (key) {
+    case 'avg_duration_minutes':
+      return `${data.avg_duration_minutes}m`;
+    case 'customer_rating':
+      return data.customer_rating === 0 ? '0' : data.customer_rating.toFixed(1);
+    default:
+      return (data as Record<string, number>)[key] ?? 0;
+  }
+}
 
 const TeamStatsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const [data, setData] = useState<SupervisorTeamStatsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const renderStat = ({ item }: { item: typeof STATS[number] }) => (
-    <View style={styles.statCard}>
-      <View style={[styles.statIcon, { backgroundColor: item.color + '20' }] }>
-        <Ionicons name={item.icon as any} size={20} color={item.color} />
-      </View>
-      <Text style={styles.statValue}>{item.value}</Text>
-      <Text style={styles.statLabel}>{item.label}</Text>
-    </View>
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setLoading(true);
+      setError(null);
+      getSupervisorTeamStats()
+        .then((res) => {
+          if (!cancelled) {
+            setData(res ?? null);
+            setError(res ? null : 'Failed to load team stats.');
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setError('Failed to load team stats.');
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => { cancelled = true; };
+    }, [])
   );
 
-  const renderMember = ({ item }: { item: typeof MEMBERS[number] }) => (
-    <View style={styles.memberRow}>
+  const renderMember = ({ item }: { item: SupervisorTeamStatsMember }) => (
+    <TouchableOpacity
+      style={styles.memberRow}
+      activeOpacity={0.7}
+      onPress={() =>
+        navigation.navigate('TeamMemberProgress', {
+          memberId: item.id,
+          name: item.name,
+          initial: item.initial || item.name.charAt(0),
+          completed: item.completed,
+          rating: item.rating,
+        })
+      }
+    >
       <View style={styles.memberAvatar}>
-        <Text style={styles.memberAvatarText}>{item.name.charAt(0)}</Text>
+        <Text style={styles.memberAvatarText}>{item.initial || item.name.charAt(0)}</Text>
       </View>
       <View style={styles.memberInfo}>
         <Text style={styles.memberName}>{item.name}</Text>
-        <Text style={styles.memberMeta}>Completed: {item.completed} • Rating: {item.rating}</Text>
+        <Text style={styles.memberMeta}>Completed: {item.completed} • Rating: {item.rating === 0 ? '0' : item.rating.toFixed(1)}</Text>
       </View>
-    </View>
+      <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+    </TouchableOpacity>
   );
+
+  if (loading && !data) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Team Stats</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Team Stats</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const statsData = data ?? {
+    visits_today: 0,
+    avg_duration_minutes: 0,
+    customer_rating: 0,
+    open_issues: 0,
+    members: [],
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -57,18 +138,24 @@ const TeamStatsScreen: React.FC = () => {
         ListHeaderComponent={
           <>
             <View style={styles.statsGrid}>
-              {STATS.map((s) => (
+              {STAT_CONFIG.map((s) => (
                 <View key={s.id} style={styles.gridItem}>
-                  {renderStat({ item: s })}
+                  <View style={styles.statCard}>
+                    <View style={[styles.statIcon, { backgroundColor: s.color + '20' }]}>
+                      <Ionicons name={s.icon as any} size={20} color={s.color} />
+                    </View>
+                    <Text style={styles.statValue}>{formatStatValue(s.key, statsData)}</Text>
+                    <Text style={styles.statLabel}>{s.label}</Text>
+                  </View>
                 </View>
               ))}
             </View>
             <Text style={styles.sectionTitle}>Members</Text>
           </>
         }
-        data={MEMBERS}
+        data={statsData.members}
         renderItem={renderMember}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         contentContainerStyle={{ padding: SPACING.md, gap: SPACING.sm }}
       />
     </SafeAreaView>
@@ -86,6 +173,14 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: SPACING.xs },
   headerTitle: { fontSize: FONT_SIZES.lg, fontWeight: FONT_WEIGHTS.bold, color: COLORS.text },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  loadingText: { marginTop: SPACING.md, fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
+  errorText: { fontSize: FONT_SIZES.md, color: COLORS.error, textAlign: 'center' },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginBottom: SPACING.md },
   gridItem: { width: '48%' },
   statCard: {

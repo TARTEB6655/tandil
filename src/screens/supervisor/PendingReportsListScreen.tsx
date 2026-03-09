@@ -60,7 +60,7 @@ const PendingReportsListScreen: React.FC = () => {
   const renderItem = ({ item }: { item: SupervisorReportItem }) => (
     <TouchableOpacity
       style={styles.reportCard}
-      onPress={() => navigation.navigate('SupervisorReport', { visitId: String(item.visit_id) })}
+      onPress={() => navigation.navigate('SupervisorReport', { reportId: item.id })}
     >
       <View style={styles.reportHeader}>
         <View>

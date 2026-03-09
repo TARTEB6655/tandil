@@ -40,6 +40,36 @@ export async function getSupervisorProfile(): Promise<SupervisorProfileData | nu
   return null;
 }
 
+/**
+ * PUT /api/supervisor/profile
+ * Update supervisor profile. Body: form-data (name, email, phone, profile_picture optional). Requires Bearer token.
+ */
+export async function updateSupervisorProfile(params: {
+  name: string;
+  email: string;
+  phone: string;
+  profile_picture?: { uri: string; type?: string; name?: string };
+}): Promise<SupervisorProfileData | null> {
+  const formData = new FormData();
+  formData.append('name', params.name.trim());
+  formData.append('email', params.email.trim());
+  formData.append('phone', (params.phone || '').trim());
+  if (params.profile_picture?.uri) {
+    formData.append('profile_picture', {
+      uri: params.profile_picture.uri,
+      type: params.profile_picture.type || 'image/jpeg',
+      name: params.profile_picture.name || 'profile.jpg',
+    } as any);
+  }
+  const response = await apiClient.put<SupervisorProfileResponse>('/supervisor/profile', formData, {
+    timeout: 30000,
+  });
+  if (response.data?.success && response.data?.data) {
+    return response.data.data;
+  }
+  return null;
+}
+
 /** GET /api/supervisor/dashboard/summary – dashboard header and stats */
 export interface SupervisorDashboardSummaryData {
   profile_picture: string | null;
@@ -313,6 +343,117 @@ export async function getSupervisorReports(
     list: response.data.data,
     total: meta?.total ?? response.data.data.length,
     lastPage: meta?.last_page ?? 1,
+  };
+}
+
+/** Report detail from GET /api/supervisor/reports/:report_id */
+export interface SupervisorReportDetail {
+  id: number;
+  visit_id: number;
+  supervisor_id?: number;
+  status: string;
+  technician_name: string;
+  employee_id: string;
+  location: string;
+  service: string;
+  submitted_at: string;
+  technician_notes: string | null;
+  supervisor_notes?: string | null;
+  before_photos: SupervisorReportPhoto[];
+  after_photos: SupervisorReportPhoto[];
+  visit?: {
+    id: number;
+    status: string;
+    scheduled_at: string | null;
+    client_name: string | null;
+    area_name: string | null;
+  };
+}
+
+export interface SupervisorReportDetailResponse {
+  success?: boolean;
+  data?: SupervisorReportDetail;
+}
+
+/**
+ * GET /api/supervisor/reports/:report_id
+ * Returns a single report detail. Requires Bearer token.
+ */
+export async function getSupervisorReportDetail(
+  reportId: number | string
+): Promise<SupervisorReportDetail | null> {
+  const response = await apiClient.get<SupervisorReportDetailResponse>(
+    `/supervisor/reports/${reportId}`,
+    { timeout: 15000 }
+  );
+  if (response.data?.success && response.data?.data) {
+    return response.data.data;
+  }
+  return null;
+}
+
+/** GET /api/supervisor/team-stats – team stats and members */
+export interface SupervisorTeamStatsMember {
+  id: number;
+  name: string;
+  initial: string;
+  completed: number;
+  rating: number;
+}
+
+export interface SupervisorTeamStatsData {
+  visits_today: number;
+  avg_duration_minutes: number;
+  customer_rating: number;
+  open_issues: number;
+  members: SupervisorTeamStatsMember[];
+}
+
+export interface SupervisorTeamStatsResponse {
+  success?: boolean;
+  data?: SupervisorTeamStatsData;
+}
+
+/**
+ * GET /api/supervisor/team-stats
+ * Returns team stats (visits today, avg duration, rating, open issues) and members list. Requires Bearer token.
+ */
+export async function getSupervisorTeamStats(): Promise<SupervisorTeamStatsData | null> {
+  const response = await apiClient.get<SupervisorTeamStatsResponse>('/supervisor/team-stats', {
+    timeout: 15000,
+  });
+  if (response.data?.success && response.data?.data) {
+    return response.data.data;
+  }
+  return null;
+}
+
+/**
+ * POST /api/supervisor/visits/:visit_id/finalize
+ * Finalize and share report to client. Body: { status, supervisor_notes, recommendations }.
+ * status should be "sent_to_client". Requires Bearer token.
+ */
+export async function finalizeSupervisorVisitReport(params: {
+  visit_id: number;
+  supervisor_notes: string;
+  recommendations: string[];
+}): Promise<{ success: boolean; message?: string }> {
+  const body = {
+    status: 'sent_to_client',
+    supervisor_notes: params.supervisor_notes.trim(),
+    recommendations: params.recommendations,
+  };
+  const response = await apiClient.post<{ success?: boolean; message?: string }>(
+    `/supervisor/visits/${params.visit_id}/finalize`,
+    body,
+    { timeout: 15000, headers: { 'Content-Type': 'application/json', Accept: 'application/json' } }
+  );
+  if (response.data?.success) {
+    return { success: true, message: (response.data as any)?.message };
+  }
+  return {
+    success: false,
+    message: (response.data as any)?.message ?? 'Failed to finalize report.',
   };
 }
 

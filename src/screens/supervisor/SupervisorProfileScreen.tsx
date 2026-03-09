@@ -110,8 +110,7 @@ const SupervisorProfileScreen: React.FC = () => {
   };
 
   const menuItems = [
-    { icon: 'location-outline' as const, title: t('technician.serviceAreas', 'Service Areas'), onPress: () => navigation.navigate('ServiceAreasSettings') },
-    { icon: 'construct-outline' as const, title: t('technician.skillsSpecializations', 'Skills & Specializations'), onPress: () => navigation.navigate('Specializations') },
+    { icon: 'person-outline' as const, title: t('technician.profileEdit.personalInfo', 'Profile information'), onPress: () => navigation.navigate('SupervisorProfileEdit') },
     { icon: 'notifications-outline' as const, title: t('technician.notifications', 'Notifications'), onPress: () => navigation.navigate('Notifications') },
     { icon: 'help-circle-outline' as const, title: t('technician.helpSupport', 'Help & Support'), onPress: () => navigation.navigate('HelpCenter') },
     { icon: 'log-out-outline' as const, title: t('technician.logout', 'Log out'), onPress: handleLogout, color: COLORS.error },

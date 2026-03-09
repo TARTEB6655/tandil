@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,125 +6,221 @@ import {
   ScrollView,
   TouchableOpacity,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import {
+  getAreaManagerDashboardSummary,
+  getAreaManagerDashboardAlerts,
+  getAreaManagerTeamLeaders,
+  AreaManagerDashboardSummary,
+  AreaManagerDashboardAlert,
+  AreaManagerTeamLeader,
+} from '../../services/areaManagerService';
+
+dayjs.extend(relativeTime);
+
+function formatMonthlyRevenue(value: number): string {
+  if (value >= 1000) {
+    const k = value / 1000;
+    return `AED ${k % 1 === 0 ? k : k.toFixed(1)}K`;
+  }
+  return `AED ${value.toLocaleString()}`;
+}
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning!';
+  if (hour < 17) return 'Good afternoon!';
+  return 'Good evening!';
+}
+
+const STAT_CONFIG = [
+  { key: 'total_farms' as const, label: 'Total Farms', icon: 'home-outline', color: COLORS.primary },
+  { key: 'active_subscriptions' as const, label: 'Active Subscriptions', icon: 'calendar-outline', color: COLORS.success },
+  { key: 'monthly_revenue' as const, label: 'Monthly Revenue', icon: 'trending-up-outline', color: COLORS.warning },
+];
 
 const AreaManagerDashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const [summary, setSummary] = useState<AreaManagerDashboardSummary | null>(null);
+  const [alerts, setAlerts] = useState<AreaManagerDashboardAlert[]>([]);
+  const [teamLeaders, setTeamLeaders] = useState<AreaManagerTeamLeader[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const areaManager = {
-    id: 'area_001',
-    employeeId: 'AM-3001',
-    name: 'Fatima Al Zaabi',
-    email: 'fatima.zaabi@tandil.com',
-    phone: '+971 50 111 2222',
-    role: 'Area Manager',
-    region: 'Abu Dhabi Central',
-    totalSupervisors: 5,
-    totalWorkers: 35,
-    activeVisits: 48,
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setLoading(true);
+      setError(null);
+      Promise.all([
+        getAreaManagerDashboardSummary(),
+        getAreaManagerDashboardAlerts(),
+        getAreaManagerTeamLeaders(),
+      ])
+        .then(([summaryData, alertsData, teamLeadersData]) => {
+          if (!cancelled) {
+            setSummary(summaryData ?? null);
+            setAlerts(Array.isArray(alertsData) ? alertsData : []);
+            setTeamLeaders(Array.isArray(teamLeadersData) ? teamLeadersData : []);
+            setError(summaryData ? null : 'Failed to load dashboard.');
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setError('Failed to load dashboard.');
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => { cancelled = true; };
+    }, [])
+  );
+
+  const regionStats = summary
+    ? STAT_CONFIG.map((s) => ({
+        label: s.label,
+        value:
+          s.key === 'monthly_revenue'
+            ? formatMonthlyRevenue(summary.monthly_revenue)
+            : String(summary[s.key]),
+        icon: s.icon,
+        color: s.color,
+      }))
+    : STAT_CONFIG.map((s) => ({ ...s, value: '—', label: s.label }));
+
+  const teamLeadersOnDashboard = teamLeaders.slice(0, 3);
+
+  const alertsOnDashboard = alerts.slice(0, 2);
+  const formatAlertTime = (ts: string) => {
+    try {
+      return dayjs(ts).fromNow();
+    } catch {
+      return ts;
+    }
   };
 
-  const regionStats = [
-    { label: 'Total Farms', value: '124', icon: 'home-outline', color: COLORS.primary },
-    { label: 'Active Subscriptions', value: '89', icon: 'calendar-outline', color: COLORS.success },
-    { label: 'Monthly Revenue', value: 'AED 45K', icon: 'trending-up-outline', color: COLORS.warning },
-  ];
+  const getAlertBorderColor = (type: string) => {
+    if (type === 'warning') return COLORS.warning;
+    if (type === 'success') return COLORS.success;
+    return COLORS.info;
+  };
 
-  const supervisors = [
-    {
-      id: 'sup_001',
-      employeeId: 'SUP-2001',
-      name: 'Hassan Ahmed',
-      teamSize: 8,
-      activeVisits: 12,
-      completedToday: 5,
-      performance: 92,
-    },
-    {
-      id: 'sup_002',
-      employeeId: 'SUP-2002',
-      name: 'Mohammed Khalil',
-      teamSize: 7,
-      activeVisits: 10,
-      completedToday: 6,
-      performance: 88,
-    },
-    {
-      id: 'sup_003',
-      employeeId: 'SUP-2003',
-      name: 'Ali Rashid',
-      teamSize: 6,
-      activeVisits: 8,
-      completedToday: 4,
-      performance: 85,
-    },
-  ];
+  const getAlertIcon = (type: string) =>
+    type === 'warning' ? 'warning-outline' : type === 'success' ? 'checkmark-circle-outline' : 'information-circle-outline';
+  const getAlertIconColor = (type: string) =>
+    type === 'warning' ? COLORS.warning : type === 'success' ? COLORS.success : COLORS.info;
 
-  const regionAlerts = [
-    {
-      id: 'alert_001',
-      type: 'warning',
-      message: 'Low team capacity in Al Ain area - 3 workers on leave',
-      timestamp: '2 hours ago',
-    },
-    {
-      id: 'alert_002',
-      type: 'success',
-      message: 'Monthly targets achieved in Liwa region',
-      timestamp: '5 hours ago',
-    },
-  ];
-
-  const renderSupervisor = ({ item }: { item: any }) => (
-    <TouchableOpacity style={styles.supervisorCard}>
+  const renderSupervisor = ({ item }: { item: AreaManagerTeamLeader }) => (
+    <TouchableOpacity
+      style={styles.supervisorCard}
+      onPress={() => navigation.navigate('TeamLeaderDetail', { teamLeaderId: item.id })}
+      activeOpacity={0.7}
+    >
       <View style={styles.supervisorHeader}>
         <View style={styles.supervisorAvatar}>
-          <Text style={styles.supervisorAvatarText}>{item.name.charAt(0)}</Text>
+          {item.profile_picture_url ? (
+            <Image
+              source={{ uri: item.profile_picture_url }}
+              style={styles.supervisorAvatarImage}
+              contentFit="cover"
+            />
+          ) : (
+            <Text style={styles.supervisorAvatarText}>{item.initial || item.name.charAt(0)}</Text>
+          )}
         </View>
         <View style={styles.supervisorInfo}>
           <Text style={styles.supervisorName}>{item.name}</Text>
-          <Text style={styles.supervisorId}>{item.employeeId}</Text>
+          <Text style={styles.supervisorId}>{item.employee_id}</Text>
         </View>
         <View style={styles.performanceBadge}>
-          <Text style={styles.performanceText}>{item.performance}%</Text>
+          <Text style={styles.performanceText}>{item.performance_percent}%</Text>
         </View>
       </View>
       <View style={styles.supervisorStats}>
         <View style={styles.statItem}>
           <Text style={styles.statLabel}>Team</Text>
-          <Text style={styles.statValue}>{item.teamSize}</Text>
+          <Text style={styles.statValue}>{item.team}</Text>
         </View>
         <View style={styles.statItem}>
           <Text style={styles.statLabel}>Active</Text>
-          <Text style={styles.statValue}>{item.activeVisits}</Text>
+          <Text style={styles.statValue}>{item.active}</Text>
         </View>
         <View style={styles.statItem}>
           <Text style={styles.statLabel}>Done</Text>
-          <Text style={styles.statValue}>{item.completedToday}</Text>
+          <Text style={styles.statValue}>{item.done}</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 
-  const renderAlert = ({ item }: { item: any }) => (
+  const renderAlert = ({ item, index }: { item: AreaManagerDashboardAlert; index: number }) => (
     <View style={[
       styles.alertCard,
-      { borderLeftColor: item.type === 'warning' ? COLORS.warning : COLORS.success }
+      { borderLeftColor: getAlertBorderColor(item.type) }
     ]}>
-      <Ionicons 
-        name={item.type === 'warning' ? 'warning-outline' : 'checkmark-circle-outline'} 
-        size={20} 
-        color={item.type === 'warning' ? COLORS.warning : COLORS.success}
+      <Ionicons
+        name={getAlertIcon(item.type) as any}
+        size={20}
+        color={getAlertIconColor(item.type)}
       />
       <View style={styles.alertContent}>
         <Text style={styles.alertMessage}>{item.message}</Text>
-        <Text style={styles.alertTime}>{item.timestamp}</Text>
+        <Text style={styles.alertTime}>{formatAlertTime(item.timestamp)}</Text>
       </View>
     </View>
   );
+
+  if (loading && !summary) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.greeting}>{getGreeting()}</Text>
+              <Text style={styles.managerName}>—</Text>
+              <Text style={styles.managerId}>ID: —</Text>
+            </View>
+          </View>
+        </View>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading…</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error && !summary) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.greeting}>{getGreeting()}</Text>
+              <Text style={styles.managerName}>Area Manager</Text>
+            </View>
+          </View>
+        </View>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const displayName = summary?.name ?? '—';
+  const displayId = summary?.id ?? '—';
+  const displayRole = summary?.role ?? 'Area Manager';
+  const displayRegion = summary?.region?.trim() || null;
+  const roleRegionText = displayRegion ? `${displayRole} • ${displayRegion}` : displayRole;
+  const avatarInitial = (displayName !== '—' ? displayName : 'A').charAt(0).toUpperCase();
+  const profilePictureUrl = summary?.profile_picture_url ?? summary?.profile_picture ?? null;
 
   return (
     <View style={styles.container}>
@@ -132,18 +228,26 @@ const AreaManagerDashboardScreen: React.FC = () => {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View>
-            <Text style={styles.greeting}>Good afternoon!</Text>
-            <Text style={styles.managerName}>{areaManager.name}</Text>
-            <Text style={styles.managerRole}>{areaManager.role} • {areaManager.region}</Text>
-            <Text style={styles.managerId}>ID: {areaManager.employeeId}</Text>
+            <Text style={styles.greeting}>{getGreeting()}</Text>
+            <Text style={styles.managerName}>{displayName}</Text>
+            <Text style={styles.managerRole}>{roleRegionText}</Text>
+            <Text style={styles.managerId}>ID: {displayId}</Text>
           </View>
           <TouchableOpacity
             style={styles.profileButton}
             onPress={() => navigation.navigate('Main' as never, { screen: 'ProfileTab' } as never)}
           >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{areaManager.name.charAt(0)}</Text>
-            </View>
+            {profilePictureUrl ? (
+              <Image
+                source={{ uri: profilePictureUrl }}
+                style={styles.avatarImage}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{avatarInitial}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -167,31 +271,43 @@ const AreaManagerDashboardScreen: React.FC = () => {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Region Alerts</Text>
             <View style={styles.alertCount}>
-              <Text style={styles.alertCountText}>{regionAlerts.length}</Text>
+              <Text style={styles.alertCountText}>{alerts.length}</Text>
             </View>
           </View>
-          
           <FlatList
-            data={regionAlerts}
+            data={alertsOnDashboard}
             renderItem={renderAlert}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(_, index) => `alert-${index}`}
             scrollEnabled={false}
           />
+          <TouchableOpacity
+            style={styles.viewAllAlertsBtn}
+            onPress={() => navigation.navigate('RegionAlerts')}
+          >
+            <Text style={styles.viewAllAlertsBtnText}>View All</Text>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+          </TouchableOpacity>
         </View>
 
-        {/* Supervisors Overview */}
+        {/* Team Leaders */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Team Leaders</Text>
-            <Text style={styles.sectionCount}>{supervisors.length} Active</Text>
+            <Text style={styles.sectionCount}>{teamLeaders.length} Active</Text>
           </View>
-          
           <FlatList
-            data={supervisors}
+            data={teamLeadersOnDashboard}
             renderItem={renderSupervisor}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => String(item.id)}
             scrollEnabled={false}
           />
+          <TouchableOpacity
+            style={styles.viewAllAlertsBtn}
+            onPress={() => navigation.navigate('TeamLeaders')}
+          >
+            <Text style={styles.viewAllAlertsBtnText}>View All</Text>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+          </TouchableOpacity>
         </View>
 
         {/* Quick Actions */}
@@ -291,10 +407,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  avatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
   avatarText: {
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.background,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  loadingText: {
+    marginTop: SPACING.md,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+  },
+  errorText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -382,6 +519,19 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
   },
+  viewAllAlertsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.sm,
+    marginTop: SPACING.sm,
+    gap: SPACING.xs,
+  },
+  viewAllAlertsBtnText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
   supervisorCard: {
     backgroundColor: COLORS.surface,
     borderRadius: BORDER_RADIUS.lg,
@@ -401,6 +551,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.md,
+  },
+  supervisorAvatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   supervisorAvatarText: {
     fontSize: FONT_SIZES.md,
