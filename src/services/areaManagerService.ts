@@ -3,6 +3,113 @@
  */
 import apiClient from './api';
 
+/** Profile data from GET /api/area-manager/profile (or dashboard summary fallback) */
+export interface AreaManagerProfileData {
+  name?: string;
+  email?: string;
+  phone?: string;
+  employee_id?: string;
+  member_since?: string | null;
+  profile_picture?: string | null;
+  profile_picture_url?: string | null;
+}
+
+export interface AreaManagerProfileResponse {
+  success?: boolean;
+  data?: AreaManagerProfileData;
+}
+
+/**
+ * GET /api/area-manager/profile
+ * Returns area manager profile (name, email, phone, profile_picture_url). Requires Bearer token.
+ */
+export async function getAreaManagerProfile(): Promise<AreaManagerProfileData | null> {
+  try {
+    const response = await apiClient.get<AreaManagerProfileResponse>('/area-manager/profile', {
+      timeout: 15000,
+    });
+    if (response.data?.success && response.data?.data) {
+      return response.data.data;
+    }
+  } catch (_) {
+    // Backend may not have GET profile; caller can use dashboard summary
+  }
+  return null;
+}
+
+/**
+ * PUT /api/area-manager/profile
+ * Update profile. Body: form-data (name, email, phone, profile_picture optional). Requires Bearer token.
+ */
+export async function updateAreaManagerProfile(params: {
+  name: string;
+  email: string;
+  phone: string;
+  profile_picture?: { uri: string; type?: string; name?: string };
+}): Promise<AreaManagerProfileData | null> {
+  const formData = new FormData();
+  formData.append('name', params.name.trim());
+  formData.append('email', params.email.trim());
+  formData.append('phone', (params.phone || '').trim());
+  if (params.profile_picture?.uri) {
+    formData.append('profile_picture', {
+      uri: params.profile_picture.uri,
+      type: params.profile_picture.type || 'image/jpeg',
+      name: params.profile_picture.name || 'profile.jpg',
+    } as any);
+  }
+  const response = await apiClient.put<AreaManagerProfileResponse>('/area-manager/profile', formData, {
+    timeout: 30000,
+  });
+  if (response.data?.success && response.data?.data) {
+    return response.data.data;
+  }
+  return null;
+}
+
+/** Params for POST /api/area-manager/support/tickets */
+export interface AreaManagerSubmitTicketParams {
+  subject: string;
+  email: string;
+  description: string;
+}
+
+/** Response from POST /api/area-manager/support/tickets */
+export interface AreaManagerSubmitTicketResponse {
+  success?: boolean;
+  message?: string;
+  data?: { id?: number; [key: string]: unknown };
+}
+
+/**
+ * POST /api/area-manager/support/tickets
+ * Body: JSON { subject, email, description }. Requires Bearer token.
+ */
+export async function submitAreaManagerSupportTicket(
+  params: AreaManagerSubmitTicketParams
+): Promise<{ success: boolean; message?: string }> {
+  const body = {
+    subject: params.subject.trim(),
+    email: params.email.trim(),
+    description: params.description.trim(),
+  };
+  const response = await apiClient.post<AreaManagerSubmitTicketResponse>(
+    '/area-manager/support/tickets',
+    body,
+    {
+      timeout: 15000,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    }
+  );
+  if (response.data?.success) {
+    return { success: true, message: response.data.message };
+  }
+  return {
+    success: false,
+    message: (response.data as any)?.message ?? 'Failed to submit ticket.',
+  };
+}
+
 /** GET /api/area-manager/dashboard/summary – dashboard summary data */
 export interface AreaManagerDashboardSummary {
   profile_picture: string | null;
@@ -131,6 +238,125 @@ export async function getAreaManagerTeamLeaderDetail(
   return null;
 }
 
+/** Team leader summary in GET /api/area-manager/teams/:team_id/members */
+export interface AreaManagerTeamLeaderSummary {
+  id: number;
+  name: string;
+  employee_id: string;
+  location: string;
+}
+
+/** Single member from GET /api/area-manager/teams/:team_id/members */
+export interface AreaManagerTeamMember {
+  id: number;
+  name: string;
+  employee_id: string;
+  initial: string;
+  profile_picture_url?: string | null;
+  area_names: string[];
+  area_ids: number[];
+  linked_to: {
+    supervisor_id: number;
+    supervisor_name: string;
+    supervisor_employee_id: string;
+  };
+  active: number;
+  done: number;
+  team_leader_id: number;
+}
+
+export interface AreaManagerTeamMembersData {
+  team_leader: AreaManagerTeamLeaderSummary;
+  members: AreaManagerTeamMember[];
+}
+
+export interface AreaManagerTeamMembersResponse {
+  success?: boolean;
+  data?: AreaManagerTeamMembersData;
+  meta?: { total?: number };
+}
+
+/**
+ * GET /api/area-manager/teams/:team_id/members
+ * Returns team leader summary and list of members for that supervisor. Requires Bearer token.
+ */
+export async function getAreaManagerTeamMembers(
+  teamId: number
+): Promise<AreaManagerTeamMembersData | null> {
+  const response = await apiClient.get<AreaManagerTeamMembersResponse>(
+    `/area-manager/teams/${teamId}/members`,
+    { timeout: 15000 }
+  );
+  if (response.data?.success && response.data?.data) {
+    return response.data.data;
+  }
+  return null;
+}
+
+/** Team member summary in GET /api/area-manager/teams/members/:member_id/jobs */
+export interface AreaManagerTeamMemberSummary {
+  id: number;
+  name: string;
+  employee_id: string;
+  initial: string;
+  profile_picture_url?: string | null;
+}
+
+/** Job item from GET /api/area-manager/teams/members/:member_id/jobs */
+export interface AreaManagerMemberJob {
+  id: number;
+  title?: string;
+  job_number?: string;
+  location?: string;
+  status?: string;
+  service?: string;
+  created_at?: string;
+  updated_at?: string;
+  scheduled_at?: string;
+  completed_at?: string;
+  [key: string]: unknown;
+}
+
+export interface AreaManagerMemberJobsData {
+  team_member: AreaManagerTeamMemberSummary;
+  jobs: AreaManagerMemberJob[];
+}
+
+export interface AreaManagerMemberJobsResponse {
+  success?: boolean;
+  data?: AreaManagerMemberJobsData;
+  meta?: {
+    current_page?: number;
+    last_page?: number;
+    per_page?: number;
+    total?: number;
+  };
+}
+
+export type AreaManagerMemberJobsStatus = 'processing' | 'all' | 'completed';
+
+/**
+ * GET /api/area-manager/teams/members/:member_id/jobs
+ * Returns team member summary and paginated jobs. Query: status (processing|all|completed), per_page.
+ */
+export async function getAreaManagerMemberJobs(
+  memberId: number | string,
+  options?: { status?: AreaManagerMemberJobsStatus; per_page?: number; page?: number }
+): Promise<AreaManagerMemberJobsData | null> {
+  const params: Record<string, string | number> = {};
+  if (options?.status) params.status = options.status;
+  if (options?.per_page != null) params.per_page = options.per_page;
+  if (options?.page != null) params.page = options.page;
+  const response = await apiClient.get<AreaManagerMemberJobsResponse>(
+    `/area-manager/teams/members/${memberId}/jobs`,
+    { params, timeout: 15000 }
+  );
+  if (response.data?.success && response.data?.data) {
+    return response.data.data;
+  }
+  return null;
+}
+
 /** Area from GET /api/area-manager/region-map */
 export interface AreaManagerRegionMapArea {
   id: number;
@@ -167,6 +393,56 @@ export async function getAreaManagerRegionMap(): Promise<AreaManagerRegionMapDat
   const response = await apiClient.get<AreaManagerRegionMapResponse>(
     '/area-manager/region-map',
     { timeout: 15000 }
+  );
+  if (response.data?.success && response.data?.data) {
+    return response.data.data;
+  }
+  return null;
+}
+
+/** Analytics period: today | week | month */
+export type AreaManagerAnalyticsPeriod = 'today' | 'week' | 'month';
+
+/** Single point in weekly_trend from GET /api/area-manager/analytics */
+export interface AreaManagerAnalyticsTrendPoint {
+  date: string;
+  count: number;
+}
+
+/** Top team from GET /api/area-manager/analytics */
+export interface AreaManagerAnalyticsTopTeam {
+  id: number;
+  employee_id: string;
+  name: string;
+  visits: number;
+  rating: number;
+}
+
+export interface AreaManagerAnalyticsData {
+  period: AreaManagerAnalyticsPeriod;
+  visits: number;
+  completion_percent: number;
+  avg_time_minutes: number;
+  active_teams: number;
+  weekly_trend: AreaManagerAnalyticsTrendPoint[];
+  top_teams: AreaManagerAnalyticsTopTeam[];
+}
+
+export interface AreaManagerAnalyticsResponse {
+  success?: boolean;
+  data?: AreaManagerAnalyticsData;
+}
+
+/**
+ * GET /api/area-manager/analytics?period=today|week|month
+ * Returns analytics metrics, weekly trend, and top teams. Requires Bearer token.
+ */
+export async function getAreaManagerAnalytics(
+  period: AreaManagerAnalyticsPeriod
+): Promise<AreaManagerAnalyticsData | null> {
+  const response = await apiClient.get<AreaManagerAnalyticsResponse>(
+    '/area-manager/analytics',
+    { params: { period }, timeout: 15000 }
   );
   if (response.data?.success && response.data?.data) {
     return response.data.data;

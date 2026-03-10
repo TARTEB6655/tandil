@@ -1,35 +1,74 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
-
-const TEAMS = [
-  { id: 'SUP-2002', name: 'Mohammed Khalil', region: 'Abu Dhabi Central', teamSize: 7, active: 6, done: 6 },
-  { id: 'SUP-2003', name: 'Ali Rashid', region: 'Abu Dhabi Central', teamSize: 6, active: 8, done: 4 },
-  { id: 'SUP-2005', name: 'Huda Noor', region: 'Abu Dhabi East', teamSize: 5, active: 3, done: 5 },
-];
+import { getAreaManagerTeamLeaders, AreaManagerTeamLeader } from '../../services/areaManagerService';
 
 const AllTeamsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const [teamLeaders, setTeamLeaders] = useState<AreaManagerTeamLeader[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const renderTeam = ({ item }: { item: typeof TEAMS[number] }) => (
-    <TouchableOpacity style={styles.teamCard}>
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setLoading(true);
+      setError(null);
+      getAreaManagerTeamLeaders()
+        .then((list) => {
+          if (!cancelled) {
+            setTeamLeaders(Array.isArray(list) ? list : []);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setError('Failed to load teams.');
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => { cancelled = true; };
+    }, [])
+  );
+
+  const renderTeam = ({ item }: { item: AreaManagerTeamLeader }) => (
+    <TouchableOpacity
+      style={styles.teamCard}
+      activeOpacity={0.7}
+      onPress={() =>
+        navigation.navigate('SupervisorTeamMembers', {
+          teamLeaderId: item.id,
+          supervisorId: item.employee_id,
+          supervisorName: item.name,
+          location: item.location ?? '',
+        })
+      }
+    >
       <View style={styles.teamHeader}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+          {item.profile_picture_url ? (
+            <Image
+              source={{ uri: item.profile_picture_url }}
+              style={styles.avatarImage}
+              contentFit="cover"
+            />
+          ) : (
+            <Text style={styles.avatarText}>{item.initial || item.name.charAt(0)}</Text>
+          )}
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.teamLead}>{item.name}</Text>
-          <Text style={styles.teamMeta}>{item.id} • {item.region}</Text>
+          <Text style={styles.teamMeta}>{item.employee_id} • {item.location || '—'}</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
       </View>
       <View style={styles.metricsRow}>
         <View style={styles.metricChip}>
           <Ionicons name="people-outline" size={16} color={COLORS.primary} />
-          <Text style={styles.metricText}>Team {item.teamSize}</Text>
+          <Text style={styles.metricText}>Team {item.team}</Text>
         </View>
         <View style={styles.metricChip}>
           <Ionicons name="flash-outline" size={16} color={COLORS.warning} />
@@ -43,6 +82,41 @@ const AllTeamsScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
+  if (loading && teamLeaders.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>All Teams</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && teamLeaders.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>All Teams</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -53,9 +127,9 @@ const AllTeamsScreen: React.FC = () => {
         <View style={{ width: 24 }} />
       </View>
       <FlatList
-        data={TEAMS}
+        data={teamLeaders}
         renderItem={renderTeam}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.sm }}
       />
     </SafeAreaView>
@@ -67,10 +141,19 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.md, paddingVertical: SPACING.md },
   backBtn: { padding: SPACING.xs },
   headerTitle: { fontSize: FONT_SIZES.lg, fontWeight: FONT_WEIGHTS.bold, color: COLORS.text },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  loadingText: { marginTop: SPACING.md, fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
+  errorText: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary, textAlign: 'center' },
   teamCard: { backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md },
   teamHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.primary + '10', alignItems: 'center', justifyContent: 'center', marginRight: SPACING.sm },
-  avatarText: { color: COLORS.primary, fontWeight: FONT_WEIGHTS.bold },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md, overflow: 'hidden' },
+  avatarImage: { width: 40, height: 40, borderRadius: 20 },
+  avatarText: { color: COLORS.background, fontWeight: FONT_WEIGHTS.bold, fontSize: FONT_SIZES.md },
   teamLead: { color: COLORS.text, fontWeight: FONT_WEIGHTS.medium },
   teamMeta: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm },
   metricsRow: { flexDirection: 'row', gap: 8 },

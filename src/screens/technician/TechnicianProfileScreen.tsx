@@ -15,7 +15,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
-import { getTechnicianProfile, getTechnicianSpecializations, getTechnicianServiceAreas, TechnicianProfileData } from '../../services/technicianService';
+import { getTechnicianProfile, TechnicianProfileData } from '../../services/technicianService';
 
 const TechnicianProfileScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -34,8 +34,6 @@ const TechnicianProfileScreen: React.FC = () => {
   };
 
   const [profile, setProfile] = useState<TechnicianProfileData | null>(null);
-  const [specializationsList, setSpecializationsList] = useState<string[]>([]);
-  const [serviceAreasDisplay, setServiceAreasDisplay] = useState<string>('—');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -43,27 +41,14 @@ const TechnicianProfileScreen: React.FC = () => {
     if (!isRefresh) setLoading(true);
     else setRefreshing(true);
     try {
-      const [data, specs, serviceAreasData] = await Promise.all([
-        getTechnicianProfile(),
-        getTechnicianSpecializations(),
-        getTechnicianServiceAreas(),
-      ]);
+      const data = await getTechnicianProfile();
       setProfile(data ?? null);
-      setSpecializationsList(Array.isArray(specs) ? specs : []);
-      const areas = serviceAreasData.service_areas?.length
-        ? serviceAreasData.service_areas
-        : serviceAreasData.service_area
-          ? [serviceAreasData.service_area]
-          : [];
-      setServiceAreasDisplay(areas.length > 0 ? areas.join(', ') : '—');
       const pictureUrl = data?.profile_picture_url ?? data?.profile_picture;
       if (typeof pictureUrl === 'string' && pictureUrl.trim()) {
         Image.prefetch([pictureUrl.trim()], { cachePolicy: 'disk' }).catch(() => {});
       }
     } catch (_) {
       setProfile(null);
-      setSpecializationsList([]);
-      setServiceAreasDisplay('—');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -146,8 +131,6 @@ const TechnicianProfileScreen: React.FC = () => {
 
   const menuItems = [
     { icon: 'person-outline', title: t('technician.profileInfo'), onPress: () => navigation.navigate('TechnicianProfileEdit') },
-    { icon: 'location-outline', title: t('technician.serviceAreas'), onPress: () => navigation.navigate('ServiceAreasSettings') },
-    { icon: 'construct-outline', title: t('technician.skillsSpecializations'), onPress: () => navigation.navigate('Specializations') },
     { icon: 'notifications-outline', title: t('technician.notifications'), onPress: () => navigation.navigate('Notifications') },
     { icon: 'help-circle-outline', title: t('technician.helpSupport'), onPress: () => navigation.navigate('HelpCenter') },
     { icon: 'log-out-outline', title: t('technician.logout'), onPress: handleLogout, color: COLORS.error },
@@ -266,31 +249,6 @@ const TechnicianProfileScreen: React.FC = () => {
             <Ionicons name="calendar-outline" size={24} color={COLORS.info} />
             <Text style={styles.statValue}>{technician.memberSince}</Text>
             <Text style={styles.statLabel}>{t('technician.memberSince')}</Text>
-          </View>
-        </View>
-
-        {/* Specializations - from GET /api/technician/specializations */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('technician.specializations')}</Text>
-          <View style={styles.specializationsContainer}>
-            {specializationsList.length > 0 ? (
-              specializationsList.map((spec, index) => (
-                <View key={index} style={styles.specializationTag}>
-                  <Text style={styles.specializationText}>{spec}</Text>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.placeholderText}>{t('technician.noSpecializations')}</Text>
-            )}
-          </View>
-        </View>
-
-        {/* Service Area - from GET /api/technician/service-areas */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('technician.serviceArea')}</Text>
-          <View style={styles.serviceAreaCard}>
-            <Ionicons name="location-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.serviceAreaText}>{serviceAreasDisplay}</Text>
           </View>
         </View>
 
@@ -475,38 +433,6 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
     marginBottom: SPACING.md,
-  },
-  specializationsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.sm,
-  },
-  specializationTag: {
-    backgroundColor: COLORS.primary + '20',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-  },
-  specializationText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.medium,
-  },
-  placeholderText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  serviceAreaCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  serviceAreaText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-    marginLeft: SPACING.sm,
   },
   menuContainer: {
     backgroundColor: COLORS.surface,
