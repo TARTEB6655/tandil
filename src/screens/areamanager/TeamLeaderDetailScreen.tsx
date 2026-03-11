@@ -12,6 +12,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import {
   getAreaManagerTeamLeaderDetail,
@@ -19,6 +20,7 @@ import {
 } from '../../services/areaManagerService';
 
 const TeamLeaderDetailScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const teamLeaderId = (route.params as { teamLeaderId?: number })?.teamLeaderId;
@@ -30,7 +32,7 @@ const TeamLeaderDetailScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       if (teamLeaderId == null) {
-        setError('No team leader selected.');
+        setError(t('admin.areaManagerTeamLeader.noTeamLeaderSelected'));
         setLoading(false);
         return;
       }
@@ -41,24 +43,24 @@ const TeamLeaderDetailScreen: React.FC = () => {
         .then((data) => {
           if (!cancelled) {
             setLeader(data ?? null);
-            setError(data ? null : 'Failed to load team leader.');
+            setError(data ? null : t('admin.areaManagerTeamLeader.failedToLoad'));
           }
         })
         .catch(() => {
-          if (!cancelled) setError('Failed to load team leader.');
+          if (!cancelled) setError(t('admin.areaManagerTeamLeader.failedToLoad'));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
         });
       return () => { cancelled = true; };
-    }, [teamLeaderId])
+    }, [teamLeaderId, t])
   );
 
   const openEmail = () => {
     const email = leader?.email?.trim();
     if (!email) return;
     Linking.openURL(`mailto:${email}`).catch(() =>
-      Alert.alert('Error', 'Could not open email.')
+      Alert.alert(t('common.error'), t('admin.areaManagerTeamLeader.errorOpenEmail'))
     );
   };
 
@@ -66,7 +68,7 @@ const TeamLeaderDetailScreen: React.FC = () => {
     const phone = leader?.phone?.trim();
     if (!phone) return;
     Linking.openURL(`tel:${phone.replace(/\s/g, '')}`).catch(() =>
-      Alert.alert('Error', 'Could not open phone.')
+      Alert.alert(t('common.error'), t('admin.areaManagerTeamLeader.errorOpenPhone'))
     );
   };
 
@@ -77,11 +79,11 @@ const TeamLeaderDetailScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Team Leader</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerTeamLeader.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
-          <Text style={styles.errorText}>No team leader selected.</Text>
+          <Text style={styles.errorText}>{t('admin.areaManagerTeamLeader.noTeamLeaderSelected')}</Text>
         </View>
       </View>
     );
@@ -94,12 +96,12 @@ const TeamLeaderDetailScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Team Leader</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerTeamLeader.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('admin.areaManagerTeamLeader.loading')}</Text>
         </View>
       </View>
     );
@@ -112,7 +114,7 @@ const TeamLeaderDetailScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Team Leader</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerTeamLeader.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
@@ -132,7 +134,7 @@ const TeamLeaderDetailScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Team Leader</Text>
+        <Text style={styles.headerTitle}>{t('admin.areaManagerTeamLeader.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -166,7 +168,7 @@ const TeamLeaderDetailScreen: React.FC = () => {
 
         {/* Performance */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Performance</Text>
+          <Text style={styles.cardTitle}>{t('admin.areaManagerTeamLeader.performance')}</Text>
           <View style={styles.performanceRow}>
             <Text style={styles.performanceValue}>{leader!.performance_percent}%</Text>
             <View style={styles.progressTrack}>
@@ -185,23 +187,23 @@ const TeamLeaderDetailScreen: React.FC = () => {
           <View style={styles.statCard}>
             <Ionicons name="people-outline" size={28} color={COLORS.primary} />
             <Text style={styles.statCardValue}>{leader!.team}</Text>
-            <Text style={styles.statCardLabel}>Team</Text>
+            <Text style={styles.statCardLabel}>{t('admin.areaManagerTeamLeader.team')}</Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="flash-outline" size={28} color={COLORS.warning} />
             <Text style={styles.statCardValue}>{leader!.active}</Text>
-            <Text style={styles.statCardLabel}>Active</Text>
+            <Text style={styles.statCardLabel}>{t('admin.areaManagerTeamLeader.active')}</Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="checkmark-circle-outline" size={28} color={COLORS.success} />
             <Text style={styles.statCardValue}>{leader!.done}</Text>
-            <Text style={styles.statCardLabel}>Done</Text>
+            <Text style={styles.statCardLabel}>{t('admin.areaManagerTeamLeader.done')}</Text>
           </View>
         </View>
 
         {/* Contact */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Contact</Text>
+          <Text style={styles.cardTitle}>{t('admin.areaManagerTeamLeader.contact')}</Text>
           {leader!.email ? (
             <TouchableOpacity style={styles.contactRow} onPress={openEmail} activeOpacity={0.7}>
               <Ionicons name="mail-outline" size={22} color={COLORS.textSecondary} />
@@ -217,7 +219,7 @@ const TeamLeaderDetailScreen: React.FC = () => {
             </TouchableOpacity>
           ) : null}
           {!leader!.email && !leader!.phone && (
-            <Text style={styles.contactEmpty}>No contact info</Text>
+            <Text style={styles.contactEmpty}>{t('admin.areaManagerTeamLeader.noContactInfo')}</Text>
           )}
         </View>
       </ScrollView>

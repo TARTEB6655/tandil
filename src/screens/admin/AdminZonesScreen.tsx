@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { adminService } from '../../services/adminService';
 
@@ -62,6 +63,7 @@ type AreaItem = { id: number; location: string | null; supervisor_id: number | n
 const SEARCH_DEBOUNCE_MS = 400;
 
 const AdminZonesScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const [areas, setAreas] = useState<AreaItem[]>([]);
@@ -82,13 +84,13 @@ const AdminZonesScreen: React.FC = () => {
       const res = await adminService.getAreas({ search: search.trim() || undefined });
       setAreas(res.data ?? []);
     } catch (e: any) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Failed to load areas');
+      setError(e?.response?.data?.message ?? e?.message ?? t('admin.zones.failedToLoadAreas'));
       setAreas([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   const loadSupervisors = useCallback(async () => {
     try {
@@ -140,11 +142,11 @@ const AdminZonesScreen: React.FC = () => {
       };
       navigation.navigate('AdminZoneAssign', { zone });
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message ?? e?.message ?? 'Failed to load zone');
+      Alert.alert(t('admin.zones.error'), e?.response?.data?.message ?? e?.message ?? t('admin.zones.failedToLoadZone'));
     } finally {
       setLoadingAreaId(null);
     }
-  }, [navigation]);
+  }, [navigation, t]);
 
   const areaToZone = (area: AreaItem): ZoneDummy => ({
     id: String(area.id),
@@ -158,20 +160,20 @@ const AdminZonesScreen: React.FC = () => {
   const handleDeleteZone = (area: AreaItem) => {
     const name = area.location || `Zone #${area.id}`;
     Alert.alert(
-      'Delete zone',
-      `Remove "${name}"? This cannot be undone.`,
+      t('admin.zones.deleteZoneTitle'),
+      t('admin.zones.deleteZoneMessage', { name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('admin.zones.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('admin.zones.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await adminService.deleteArea(area.id);
               setAreas((prev) => prev.filter((a) => a.id !== area.id));
             } catch (e: any) {
-              const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to delete zone.';
-              Alert.alert('Error', msg);
+              const msg = e?.response?.data?.message ?? e?.message ?? t('admin.zones.failedToDeleteZone');
+              Alert.alert(t('admin.zones.error'), msg);
             }
           },
         },
@@ -187,7 +189,7 @@ const AdminZonesScreen: React.FC = () => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Zones & Teams</Text>
+        <Text style={styles.headerTitle}>{t('admin.zones.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -204,8 +206,8 @@ const AdminZonesScreen: React.FC = () => {
         >
           <Ionicons name="people-outline" size={28} color={COLORS.primary} />
           <View style={styles.supervisorsCardText}>
-            <Text style={styles.supervisorsCardTitle}>All Technicians</Text>
-            <Text style={styles.supervisorsCardSubtitle}>See which zone and supervisor each technician is assigned to</Text>
+            <Text style={styles.supervisorsCardTitle}>{t('admin.zones.allTechnicians')}</Text>
+            <Text style={styles.supervisorsCardSubtitle}>{t('admin.zones.allTechniciansSubtitle')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
         </TouchableOpacity>
@@ -216,21 +218,21 @@ const AdminZonesScreen: React.FC = () => {
         >
           <Ionicons name="people" size={28} color={COLORS.primary} />
           <View style={styles.supervisorsCardText}>
-            <Text style={styles.supervisorsCardTitle}>Supervisors & Teams</Text>
-            <Text style={styles.supervisorsCardSubtitle}>View supervisors and assign technicians to each team</Text>
+            <Text style={styles.supervisorsCardTitle}>{t('admin.zones.supervisorsAndTeams')}</Text>
+            <Text style={styles.supervisorsCardSubtitle}>{t('admin.zones.supervisorsAndTeamsSubtitle')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
         </TouchableOpacity>
 
-        <Text style={styles.sectionTitle}>Zones (Assign Supervisor to Location)</Text>
-        <Text style={styles.sectionSubtitle}>Tap a zone to assign a supervisor or change its location. Add new zones for cities in UAE.</Text>
+        <Text style={styles.sectionTitle}>{t('admin.zones.sectionTitle')}</Text>
+        <Text style={styles.sectionSubtitle}>{t('admin.zones.sectionSubtitle')}</Text>
 
         <TouchableOpacity
           style={styles.addZoneCard}
           onPress={() => navigation.navigate('AdminAddZone')}
         >
           <Ionicons name="add-circle-outline" size={28} color={COLORS.primary} />
-          <Text style={styles.addZoneText}>Add zone (city / address in UAE)</Text>
+          <Text style={styles.addZoneText}>{t('admin.zones.addZone')}</Text>
           <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
         </TouchableOpacity>
 
@@ -238,7 +240,7 @@ const AdminZonesScreen: React.FC = () => {
           <Ionicons name="search-outline" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by location..."
+            placeholder={t('admin.zones.searchPlaceholder')}
             placeholderTextColor={COLORS.textSecondary}
             value={searchInput}
             onChangeText={setSearchInput}
@@ -255,7 +257,7 @@ const AdminZonesScreen: React.FC = () => {
             <Ionicons name="alert-circle-outline" size={24} color={COLORS.error} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity style={styles.retryButton} onPress={() => fetchAreas(searchQuery)}>
-              <Text style={styles.retryButtonText}>Retry</Text>
+              <Text style={styles.retryButtonText}>{t('admin.zones.retry')}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -263,13 +265,13 @@ const AdminZonesScreen: React.FC = () => {
         {loading && areas.length === 0 ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading zones...</Text>
+            <Text style={styles.loadingText}>{t('admin.zones.loadingZones')}</Text>
           </View>
         ) : areas.length === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="location-outline" size={48} color={COLORS.textSecondary} />
             <Text style={styles.emptyText}>
-              {searchQuery ? 'No zones match your search.' : 'No zones yet. Add a zone to get started.'}
+              {searchQuery ? t('admin.zones.noZonesSearch') : t('admin.zones.noZonesYet')}
             </Text>
           </View>
         ) : (
@@ -291,7 +293,7 @@ const AdminZonesScreen: React.FC = () => {
                     <Text style={styles.zoneName}>{zone.name}</Text>
                     <Text style={styles.zoneAddress}>{zone.address || '—'}</Text>
                     <Text style={[styles.zoneSupervisor, !supervisorName && styles.zoneSupervisorUnassigned]}>
-                      {supervisorName ? `Supervisor: ${supervisorName}` : 'No supervisor assigned'}
+                      {supervisorName ? t('admin.zones.supervisorLabel', { name: supervisorName }) : t('admin.zones.noSupervisorAssigned')}
                     </Text>
                   </View>
                   {isOpening ? (

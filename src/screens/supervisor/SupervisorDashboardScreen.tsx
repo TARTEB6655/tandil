@@ -7,16 +7,20 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
+import { TFunction } from 'i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import { setAppLanguage } from '../../i18n';
 import { getSupervisorDashboardSummary, SupervisorDashboardSummaryData, getSupervisorReports, SupervisorReportItem, getSupervisorTeam, SupervisorTeamMember } from '../../services/supervisorService';
 
 const DASHBOARD_REPORTS_LIMIT = 3;
 
-function formatSubmittedAt(iso: string): string {
+function formatSubmittedAt(iso: string, t: TFunction): string {
   try {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return iso;
@@ -25,25 +29,27 @@ function formatSubmittedAt(iso: string): string {
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
-    if (diffMins < 60) return diffMins <= 1 ? 'Just now' : `${diffMins} minutes ago`;
-    if (diffHours < 24) return diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
-    if (diffDays < 7) return diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
+    if (diffMins < 60) return diffMins <= 1 ? t('supervisorDashboard.justNow') : t('supervisorDashboard.minutesAgo', { count: diffMins });
+    if (diffHours < 24) return diffHours === 1 ? t('supervisorDashboard.oneHourAgo') : t('supervisorDashboard.hoursAgo', { count: diffHours });
+    if (diffDays < 7) return diffDays === 1 ? t('supervisorDashboard.oneDayAgo') : t('supervisorDashboard.daysAgo', { count: diffDays });
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   } catch {
     return iso;
   }
 }
 
-const getGreeting = () => {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning!';
-  if (h < 17) return 'Good afternoon!';
-  return 'Good evening!';
-};
-
 const SupervisorDashboardScreen: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const navigation = useNavigation<any>();
   const [summary, setSummary] = useState<SupervisorDashboardSummaryData | null>(null);
+  const [languageModalVisible, setLanguageModalVisible] = useState(false);
+
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return t('supervisorDashboard.greetingMorning');
+    if (h < 17) return t('supervisorDashboard.greetingAfternoon');
+    return t('supervisorDashboard.greetingEvening');
+  })();
   const [loading, setLoading] = useState(true);
   const [profileImageError, setProfileImageError] = useState(false);
   const [reports, setReports] = useState<SupervisorReportItem[]>([]);
@@ -84,7 +90,7 @@ const SupervisorDashboardScreen: React.FC = () => {
     ? {
         name: summary.name,
         employeeId: summary.id,
-        role: 'Team Leader',
+        role: t('supervisorDashboard.role'),
         teamSize: summary.team_members,
         activeVisits: summary.active_visits,
         completedToday: summary.completed_visits,
@@ -93,7 +99,7 @@ const SupervisorDashboardScreen: React.FC = () => {
     : {
         name: '—',
         employeeId: '—',
-        role: 'Team Leader',
+        role: t('supervisorDashboard.role'),
         teamSize: 0,
         activeVisits: 0,
         completedToday: 0,
@@ -135,7 +141,7 @@ const SupervisorDashboardScreen: React.FC = () => {
         <Text style={styles.memberTask}>{item.current_activity || '—'}</Text>
         <View style={styles.memberStats}>
           <Text style={styles.memberStatText}>
-            Tasks: {item.tasks_display || `${item.tasks_completed}/${item.tasks_total}`}
+            {t('supervisorDashboard.tasksLabel')}{item.tasks_display || `${item.tasks_completed}/${item.tasks_total}`}
           </Text>
         </View>
       </TouchableOpacity>
@@ -150,7 +156,7 @@ const SupervisorDashboardScreen: React.FC = () => {
       <View style={styles.reportHeader}>
         <View>
           <Text style={styles.reportTechName}>{item.technician_name}</Text>
-          <Text style={styles.reportEmployeeId}>ID: {item.employee_id}</Text>
+          <Text style={styles.reportEmployeeId}>{t('supervisorDashboard.idPrefix')}{item.employee_id}</Text>
         </View>
         {item.has_photos ? (
           <Ionicons name="images" size={20} color={COLORS.primary} />
@@ -158,9 +164,9 @@ const SupervisorDashboardScreen: React.FC = () => {
       </View>
       <Text style={styles.reportCustomer}>{item.location}</Text>
       <Text style={styles.reportService}>{item.service}</Text>
-      <Text style={styles.reportTime}>{formatSubmittedAt(item.submitted_at)}</Text>
+      <Text style={styles.reportTime}>{formatSubmittedAt(item.submitted_at, t)}</Text>
       <View style={styles.reportAction}>
-        <Text style={styles.reviewButtonText}>Review Report →</Text>
+        <Text style={styles.reviewButtonText}>{t('supervisorDashboard.reviewReport')}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -171,21 +177,29 @@ const SupervisorDashboardScreen: React.FC = () => {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View>
-            <Text style={styles.greeting}>{getGreeting()}</Text>
+            <Text style={styles.greeting}>{greeting}</Text>
             {loading && !summary ? (
               <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: SPACING.sm }} />
             ) : (
               <>
                 <Text style={styles.supervisorName}>{supervisor.name}</Text>
-                <Text style={styles.supervisorRole}>{supervisor.role} • ID: {supervisor.employeeId}</Text>
+                <Text style={styles.supervisorRole}>{supervisor.role} • {t('supervisorDashboard.idPrefix')}{supervisor.employeeId}</Text>
               </>
             )}
           </View>
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => navigation.navigate('Main' as never, { screen: 'ProfileTab' } as never)}
-          >
-            <View style={styles.avatar}>
+          <View style={styles.headerRightRow}>
+            <TouchableOpacity
+              style={styles.languageButton}
+              onPress={() => setLanguageModalVisible(true)}
+              accessibilityLabel={t('common.language')}
+            >
+              <Ionicons name="globe-outline" size={22} color={COLORS.text} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileButton}
+              onPress={() => navigation.navigate('Main' as never, { screen: 'ProfileTab' } as never)}
+            >
+              <View style={styles.avatar}>
               {supervisor.profilePictureUrl && !profileImageError ? (
                 <Image
                   source={{ uri: supervisor.profilePictureUrl }}
@@ -201,6 +215,38 @@ const SupervisorDashboardScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       </View>
+      </View>
+
+      <Modal visible={languageModalVisible} transparent animationType="fade" onRequestClose={() => setLanguageModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t('common.language')}</Text>
+            <View style={styles.languageOptions}>
+              {[
+                { code: 'en', label: 'English' },
+                { code: 'ar', label: 'العربية' },
+                { code: 'ur', label: 'اردو' },
+              ].map((lang) => (
+                <TouchableOpacity
+                  key={lang.code}
+                  style={[styles.languageOptionButton, i18n.language === lang.code && styles.languageOptionButtonActive]}
+                  onPress={async () => {
+                    await setAppLanguage(lang.code as 'en' | 'ar' | 'ur');
+                    setLanguageModalVisible(false);
+                  }}
+                >
+                  <Text style={[styles.languageOptionText, i18n.language === lang.code && styles.languageOptionTextActive]}>
+                    {lang.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity style={styles.modalClose} onPress={() => setLanguageModalVisible(false)}>
+              <Text style={styles.modalCloseText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Stats Cards – team_members, active_visits, completed_visits */}
@@ -208,32 +254,32 @@ const SupervisorDashboardScreen: React.FC = () => {
           <View style={styles.statCard}>
             <Ionicons name="people-outline" size={24} color={COLORS.primary} />
             <Text style={styles.statValue}>{loading && !summary ? '—' : supervisor.teamSize}</Text>
-            <Text style={styles.statLabel}>Team Members</Text>
+            <Text style={styles.statLabel}>{t('supervisorDashboard.teamMembers')}</Text>
           </View>
           
           <View style={styles.statCard}>
             <Ionicons name="clipboard-outline" size={24} color={COLORS.warning} />
             <Text style={styles.statValue}>{loading && !summary ? '—' : supervisor.activeVisits}</Text>
-            <Text style={styles.statLabel}>Active Visits</Text>
+            <Text style={styles.statLabel}>{t('supervisorDashboard.activeVisits')}</Text>
           </View>
           
           <View style={styles.statCard}>
             <Ionicons name="checkmark-circle-outline" size={24} color={COLORS.success} />
             <Text style={styles.statValue}>{loading && !summary ? '—' : supervisor.completedToday}</Text>
-            <Text style={styles.statLabel}>Completed</Text>
+            <Text style={styles.statLabel}>{t('supervisorDashboard.completed')}</Text>
           </View>
         </View>
 
         {/* Pending Field Reports – first 3, View All shows rest on Reports tab */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Pending Field Reports</Text>
+            <Text style={styles.sectionTitle}>{t('supervisorDashboard.pendingFieldReports')}</Text>
             <TouchableOpacity
               style={styles.sectionCountRow}
               onPress={() => navigation.navigate('Main' as never, { screen: 'ReportsTab' } as never)}
             >
               <Text style={styles.sectionCount}>{pendingReportsTotal}</Text>
-              <Text style={styles.viewAllText}>View All</Text>
+              <Text style={styles.viewAllText}>{t('supervisorDashboard.viewAll')}</Text>
             </TouchableOpacity>
           </View>
           
@@ -248,9 +294,9 @@ const SupervisorDashboardScreen: React.FC = () => {
         {/* Team Members – first 3 from API, View All shows full list */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>My Team</Text>
+            <Text style={styles.sectionTitle}>{t('supervisorDashboard.myTeam')}</Text>
             <TouchableOpacity onPress={() => navigation.navigate('SupervisorTeamList' as never)}>
-              <Text style={styles.viewAllText}>View All</Text>
+              <Text style={styles.viewAllText}>{t('supervisorDashboard.viewAll')}</Text>
             </TouchableOpacity>
           </View>
           
@@ -264,7 +310,7 @@ const SupervisorDashboardScreen: React.FC = () => {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <Text style={styles.sectionTitle}>{t('supervisorDashboard.quickActions')}</Text>
           <View style={styles.quickActions}>
             <TouchableOpacity
               style={styles.quickAction}
@@ -273,7 +319,7 @@ const SupervisorDashboardScreen: React.FC = () => {
               <View style={styles.quickActionIcon}>
                 <Ionicons name="document-text-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>Review Reports</Text>
+              <Text style={styles.quickActionText}>{t('supervisorDashboard.reviewReports')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -283,7 +329,7 @@ const SupervisorDashboardScreen: React.FC = () => {
               <View style={styles.quickActionIcon}>
                 <Ionicons name="calendar-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>Assign Tasks</Text>
+              <Text style={styles.quickActionText}>{t('supervisorDashboard.assignTasks')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -293,7 +339,7 @@ const SupervisorDashboardScreen: React.FC = () => {
               <View style={styles.quickActionIcon}>
                 <Ionicons name="stats-chart-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>Team Stats</Text>
+              <Text style={styles.quickActionText}>{t('supervisorDashboard.teamStats')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -303,7 +349,7 @@ const SupervisorDashboardScreen: React.FC = () => {
               <View style={styles.quickActionIcon}>
                 <Ionicons name="person-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>Profile</Text>
+              <Text style={styles.quickActionText}>{t('supervisorDashboard.profile')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -342,6 +388,14 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: FONT_WEIGHTS.medium,
     marginTop: 2,
+  },
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  languageButton: {
+    padding: SPACING.sm,
   },
   profileButton: {
     padding: SPACING.sm,
@@ -554,6 +608,57 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.text,
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCard: {
+    width: '85%',
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+  },
+  modalTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
+  languageOptions: {
+    gap: SPACING.sm,
+  },
+  languageOptionButton: {
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    marginBottom: SPACING.sm,
+  },
+  languageOptionButtonActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '10',
+  },
+  languageOptionText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+  },
+  languageOptionTextActive: {
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  modalClose: {
+    alignSelf: 'flex-end',
+    marginTop: SPACING.md,
+  },
+  modalCloseText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.medium,
   },
 });
 

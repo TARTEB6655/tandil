@@ -61,10 +61,10 @@ const MyTicketsScreen: React.FC = () => {
         if (page === 1) setTickets(list);
         else setTickets((prev) => [...prev, ...list]);
       } else {
-        setError(t('helpCenter.myTickets.errorLoad', 'Failed to load tickets.'));
+        setError(t('helpCenter.myTickets.errorLoad'));
       }
     } catch {
-      setError(t('helpCenter.myTickets.errorLoad', 'Failed to load tickets.'));
+      setError(t('helpCenter.myTickets.errorLoad'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -103,7 +103,7 @@ const MyTicketsScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <Header
-        title={t('helpCenter.myTickets.title', 'My Tickets')}
+        title={t('helpCenter.myTickets.title')}
         showBack
         onBackPress={() => navigation.goBack()}
       />
@@ -126,13 +126,13 @@ const MyTicketsScreen: React.FC = () => {
           }
           ListHeaderComponent={
             <Text style={styles.countText}>
-              {total} {t('helpCenter.myTickets.tickets', 'tickets')}
+              {total} {t('helpCenter.myTickets.tickets')}
             </Text>
           }
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="document-text-outline" size={48} color={COLORS.textSecondary} />
-              <Text style={styles.emptyText}>{t('helpCenter.myTickets.empty', 'No support tickets yet.')}</Text>
+              <Text style={styles.emptyText}>{t('helpCenter.myTickets.empty')}</Text>
               <TouchableOpacity style={styles.submitCta} onPress={() => navigation.navigate('SubmitTicket')}>
                 <Text style={styles.submitCtaText}>{t('helpCenter.submitTicket.title')}</Text>
               </TouchableOpacity>

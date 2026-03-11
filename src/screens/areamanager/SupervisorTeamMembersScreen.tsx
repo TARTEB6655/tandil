@@ -11,6 +11,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import {
   getAreaManagerTeamMembers,
@@ -26,11 +27,12 @@ type RouteParams = {
 };
 
 const SupervisorTeamMembersScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const params = (route.params ?? {}) as RouteParams;
   const teamLeaderId = params?.teamLeaderId;
-  const fallbackName = params?.supervisorName ?? 'Supervisor';
+  const fallbackName = params?.supervisorName ?? t('admin.areaManagerTeamMembers.supervisor');
   const fallbackLocation = params?.location ?? '';
 
   const [data, setData] = useState<AreaManagerTeamMembersData | null>(null);
@@ -41,7 +43,7 @@ const SupervisorTeamMembersScreen: React.FC = () => {
     useCallback(() => {
       if (teamLeaderId == null) {
         setLoading(false);
-        setError('Missing team.');
+        setError(t('admin.areaManagerTeamMembers.missingTeam'));
         setData(null);
         return;
       }
@@ -52,11 +54,11 @@ const SupervisorTeamMembersScreen: React.FC = () => {
         .then((res) => {
           if (!cancelled) {
             setData(res ?? null);
-            if (!res) setError('Failed to load team members.');
+            if (!res) setError(t('admin.areaManagerTeamMembers.failedToLoad'));
           }
         })
         .catch(() => {
-          if (!cancelled) setError('Failed to load team members.');
+          if (!cancelled) setError(t('admin.areaManagerTeamMembers.failedToLoad'));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -64,7 +66,7 @@ const SupervisorTeamMembersScreen: React.FC = () => {
       return () => {
         cancelled = true;
       };
-    }, [teamLeaderId])
+    }, [teamLeaderId, t])
   );
 
   const teamLeader = data?.team_leader;
@@ -107,9 +109,9 @@ const SupervisorTeamMembersScreen: React.FC = () => {
         ) : null}
         <View style={styles.tasksBadge}>
           <Ionicons name="flash-outline" size={14} color={COLORS.warning} />
-          <Text style={styles.tasksText}>Active {item.active}</Text>
+          <Text style={styles.tasksText}>{t('admin.areaManagerTeamMembers.activeCount', { count: item.active })}</Text>
           <Ionicons name="checkmark-done-outline" size={14} color={COLORS.success} />
-          <Text style={styles.tasksText}>Done {item.done}</Text>
+          <Text style={styles.tasksText}>{t('admin.areaManagerTeamMembers.doneCount', { count: item.done })}</Text>
         </View>
       </View>
       <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
@@ -123,11 +125,11 @@ const SupervisorTeamMembersScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Team Members</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerTeamMembers.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
-          <Text style={styles.errorText}>Missing team.</Text>
+          <Text style={styles.errorText}>{t('admin.areaManagerTeamMembers.missingTeam')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -140,12 +142,12 @@ const SupervisorTeamMembersScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Team Members</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerTeamMembers.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('admin.areaManagerTeamMembers.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -158,7 +160,7 @@ const SupervisorTeamMembersScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Team Members</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerTeamMembers.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
@@ -174,14 +176,14 @@ const SupervisorTeamMembersScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Team Members</Text>
+        <Text style={styles.headerTitle}>{t('admin.areaManagerTeamMembers.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
       <View style={styles.hero}>
         <Text style={styles.heroTitle}>{supervisorName}</Text>
         {location ? <Text style={styles.heroSubtitle}>{location}</Text> : null}
         <View style={styles.countBadge}>
-          <Text style={styles.countText}>{members.length} members</Text>
+          <Text style={styles.countText}>{t('admin.areaManagerTeamMembers.membersCount', { count: members.length })}</Text>
         </View>
       </View>
       <FlatList
@@ -192,7 +194,7 @@ const SupervisorTeamMembersScreen: React.FC = () => {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="people-outline" size={48} color={COLORS.textSecondary} />
-            <Text style={styles.emptyText}>No team members</Text>
+            <Text style={styles.emptyText}>{t('admin.areaManagerTeamMembers.noTeamMembers')}</Text>
           </View>
         }
       />

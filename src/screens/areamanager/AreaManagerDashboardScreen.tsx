@@ -7,11 +7,14 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import { setAppLanguage } from '../../i18n';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import {
@@ -33,26 +36,28 @@ function formatMonthlyRevenue(value: number): string {
   return `AED ${value.toLocaleString()}`;
 }
 
-function getGreeting(): string {
+function getGreetingKey(): 'greetingMorning' | 'greetingAfternoon' | 'greetingEvening' {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning!';
-  if (hour < 17) return 'Good afternoon!';
-  return 'Good evening!';
+  if (hour < 12) return 'greetingMorning';
+  if (hour < 17) return 'greetingAfternoon';
+  return 'greetingEvening';
 }
 
-const STAT_CONFIG = [
-  { key: 'total_farms' as const, label: 'Total Farms', icon: 'home-outline', color: COLORS.primary },
-  { key: 'active_subscriptions' as const, label: 'Active Subscriptions', icon: 'calendar-outline', color: COLORS.success },
-  { key: 'monthly_revenue' as const, label: 'Monthly Revenue', icon: 'trending-up-outline', color: COLORS.warning },
-];
+const STAT_KEYS = [
+  { key: 'total_farms' as const, labelKey: 'totalFarms', icon: 'home-outline', color: COLORS.primary },
+  { key: 'active_subscriptions' as const, labelKey: 'activeSubscriptions', icon: 'calendar-outline', color: COLORS.success },
+  { key: 'monthly_revenue' as const, labelKey: 'monthlyRevenue', icon: 'trending-up-outline', color: COLORS.warning },
+] as const;
 
 const AreaManagerDashboardScreen: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const navigation = useNavigation<any>();
   const [summary, setSummary] = useState<AreaManagerDashboardSummary | null>(null);
   const [alerts, setAlerts] = useState<AreaManagerDashboardAlert[]>([]);
   const [teamLeaders, setTeamLeaders] = useState<AreaManagerTeamLeader[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [languageModalVisible, setLanguageModalVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -69,22 +74,22 @@ const AreaManagerDashboardScreen: React.FC = () => {
             setSummary(summaryData ?? null);
             setAlerts(Array.isArray(alertsData) ? alertsData : []);
             setTeamLeaders(Array.isArray(teamLeadersData) ? teamLeadersData : []);
-            setError(summaryData ? null : 'Failed to load dashboard.');
+            setError(summaryData ? null : t('admin.areaManagerDashboard.failedToLoad'));
           }
         })
         .catch(() => {
-          if (!cancelled) setError('Failed to load dashboard.');
+          if (!cancelled) setError(t('admin.areaManagerDashboard.failedToLoad'));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
         });
       return () => { cancelled = true; };
-    }, [])
+    }, [t])
   );
 
   const regionStats = summary
-    ? STAT_CONFIG.map((s) => ({
-        label: s.label,
+    ? STAT_KEYS.map((s) => ({
+        label: t(`admin.areaManagerDashboard.${s.labelKey}`),
         value:
           s.key === 'monthly_revenue'
             ? formatMonthlyRevenue(summary.monthly_revenue)
@@ -92,7 +97,7 @@ const AreaManagerDashboardScreen: React.FC = () => {
         icon: s.icon,
         color: s.color,
       }))
-    : STAT_CONFIG.map((s) => ({ ...s, value: '—', label: s.label }));
+    : STAT_KEYS.map((s) => ({ ...s, value: '—', label: t(`admin.areaManagerDashboard.${s.labelKey}`) }));
 
   const teamLeadersOnDashboard = teamLeaders.slice(0, 3);
 
@@ -144,15 +149,15 @@ const AreaManagerDashboardScreen: React.FC = () => {
       </View>
       <View style={styles.supervisorStats}>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Team</Text>
+          <Text style={styles.statLabel}>{t('admin.areaManagerDashboard.team')}</Text>
           <Text style={styles.statValue}>{item.team}</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Active</Text>
+          <Text style={styles.statLabel}>{t('admin.areaManagerDashboard.active')}</Text>
           <Text style={styles.statValue}>{item.active}</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Done</Text>
+          <Text style={styles.statLabel}>{t('admin.areaManagerDashboard.done')}</Text>
           <Text style={styles.statValue}>{item.done}</Text>
         </View>
       </View>
@@ -182,15 +187,15 @@ const AreaManagerDashboardScreen: React.FC = () => {
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <View>
-              <Text style={styles.greeting}>{getGreeting()}</Text>
+              <Text style={styles.greeting}>{t(`admin.areaManagerDashboard.${getGreetingKey()}`)}</Text>
               <Text style={styles.managerName}>—</Text>
-              <Text style={styles.managerId}>ID: —</Text>
+              <Text style={styles.managerId}>{t('admin.areaManagerDashboard.idLabel', { id: '—' })}</Text>
             </View>
           </View>
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('admin.areaManagerDashboard.loading')}</Text>
         </View>
       </View>
     );
@@ -202,8 +207,8 @@ const AreaManagerDashboardScreen: React.FC = () => {
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <View>
-              <Text style={styles.greeting}>{getGreeting()}</Text>
-              <Text style={styles.managerName}>Area Manager</Text>
+              <Text style={styles.greeting}>{t(`admin.areaManagerDashboard.${getGreetingKey()}`)}</Text>
+              <Text style={styles.managerName}>{t('admin.areaManagerDashboard.areaManager')}</Text>
             </View>
           </View>
         </View>
@@ -216,7 +221,7 @@ const AreaManagerDashboardScreen: React.FC = () => {
 
   const displayName = summary?.name ?? '—';
   const displayId = summary?.id ?? '—';
-  const displayRole = summary?.role ?? 'Area Manager';
+  const displayRole = summary?.role ?? t('admin.areaManagerDashboard.areaManager');
   const displayRegion = summary?.region?.trim() || null;
   const roleRegionText = displayRegion ? `${displayRole} • ${displayRegion}` : displayRole;
   const avatarInitial = (displayName !== '—' ? displayName : 'A').charAt(0).toUpperCase();
@@ -228,29 +233,69 @@ const AreaManagerDashboardScreen: React.FC = () => {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View>
-            <Text style={styles.greeting}>{getGreeting()}</Text>
+            <Text style={styles.greeting}>{t(`admin.areaManagerDashboard.${getGreetingKey()}`)}</Text>
             <Text style={styles.managerName}>{displayName}</Text>
             <Text style={styles.managerRole}>{roleRegionText}</Text>
-            <Text style={styles.managerId}>ID: {displayId}</Text>
+            <Text style={styles.managerId}>{t('admin.areaManagerDashboard.idLabel', { id: displayId })}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => navigation.navigate('Main' as never, { screen: 'ProfileTab' } as never)}
-          >
-            {profilePictureUrl ? (
-              <Image
-                source={{ uri: profilePictureUrl }}
-                style={styles.avatarImage}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{avatarInitial}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerRightRow}>
+            <TouchableOpacity
+              style={styles.languageButton}
+              onPress={() => setLanguageModalVisible(true)}
+              accessibilityLabel={t('common.language')}
+            >
+              <Ionicons name="globe-outline" size={22} color={COLORS.text} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileButton}
+              onPress={() => navigation.navigate('Main' as never, { screen: 'ProfileTab' } as never)}
+            >
+              {profilePictureUrl ? (
+                <Image
+                  source={{ uri: profilePictureUrl }}
+                  style={styles.avatarImage}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{avatarInitial}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
+
+      <Modal visible={languageModalVisible} transparent animationType="fade" onRequestClose={() => setLanguageModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t('common.language')}</Text>
+            <View style={styles.languageOptions}>
+              {[
+                { code: 'en', label: 'English' },
+                { code: 'ar', label: 'العربية' },
+                { code: 'ur', label: 'اردو' },
+              ].map((lang) => (
+                <TouchableOpacity
+                  key={lang.code}
+                  style={[styles.languageOptionButton, i18n.language === lang.code && styles.languageOptionButtonActive]}
+                  onPress={async () => {
+                    await setAppLanguage(lang.code as 'en' | 'ar' | 'ur');
+                    setLanguageModalVisible(false);
+                  }}
+                >
+                  <Text style={[styles.languageOptionText, i18n.language === lang.code && styles.languageOptionTextActive]}>
+                    {lang.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity style={styles.modalClose} onPress={() => setLanguageModalVisible(false)}>
+              <Text style={styles.modalCloseText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Region Stats */}
@@ -269,7 +314,7 @@ const AreaManagerDashboardScreen: React.FC = () => {
         {/* Region Alerts */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Region Alerts</Text>
+            <Text style={styles.sectionTitle}>{t('admin.areaManagerDashboard.regionAlerts')}</Text>
             <View style={styles.alertCount}>
               <Text style={styles.alertCountText}>{alerts.length}</Text>
             </View>
@@ -284,7 +329,7 @@ const AreaManagerDashboardScreen: React.FC = () => {
             style={styles.viewAllAlertsBtn}
             onPress={() => navigation.navigate('RegionAlerts')}
           >
-            <Text style={styles.viewAllAlertsBtnText}>View All</Text>
+            <Text style={styles.viewAllAlertsBtnText}>{t('admin.areaManagerDashboard.viewAll')}</Text>
             <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
@@ -292,8 +337,8 @@ const AreaManagerDashboardScreen: React.FC = () => {
         {/* Team Leaders */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Team Leaders</Text>
-            <Text style={styles.sectionCount}>{teamLeaders.length} Active</Text>
+            <Text style={styles.sectionTitle}>{t('admin.areaManagerDashboard.teamLeaders')}</Text>
+            <Text style={styles.sectionCount}>{t('admin.areaManagerDashboard.activeCount', { count: teamLeaders.length })}</Text>
           </View>
           <FlatList
             data={teamLeadersOnDashboard}
@@ -305,14 +350,14 @@ const AreaManagerDashboardScreen: React.FC = () => {
             style={styles.viewAllAlertsBtn}
             onPress={() => navigation.navigate('TeamLeaders')}
           >
-            <Text style={styles.viewAllAlertsBtnText}>View All</Text>
+            <Text style={styles.viewAllAlertsBtnText}>{t('admin.areaManagerDashboard.viewAll')}</Text>
             <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <Text style={styles.sectionTitle}>{t('admin.areaManagerDashboard.quickActions')}</Text>
           <View style={styles.quickActions}>
             <TouchableOpacity
               style={styles.quickAction}
@@ -321,7 +366,7 @@ const AreaManagerDashboardScreen: React.FC = () => {
               <View style={styles.quickActionIcon}>
                 <Ionicons name="map-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>Region Map</Text>
+              <Text style={styles.quickActionText}>{t('admin.areaManagerDashboard.regionMap')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -331,7 +376,7 @@ const AreaManagerDashboardScreen: React.FC = () => {
               <View style={styles.quickActionIcon}>
                 <Ionicons name="stats-chart-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>Analytics</Text>
+              <Text style={styles.quickActionText}>{t('admin.areaManagerDashboard.analytics')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -341,7 +386,7 @@ const AreaManagerDashboardScreen: React.FC = () => {
               <View style={styles.quickActionIcon}>
                 <Ionicons name="people-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>All Teams</Text>
+              <Text style={styles.quickActionText}>{t('admin.areaManagerDashboard.allTeams')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -351,7 +396,7 @@ const AreaManagerDashboardScreen: React.FC = () => {
               <View style={styles.quickActionIcon}>
                 <Ionicons name="document-text-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>Reports</Text>
+              <Text style={styles.quickActionText}>{t('admin.areaManagerDashboard.reports')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -396,6 +441,14 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 2,
   },
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  languageButton: {
+    padding: SPACING.sm,
+  },
   profileButton: {
     padding: SPACING.sm,
   },
@@ -416,6 +469,57 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.background,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCard: {
+    width: '85%',
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+  },
+  modalTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
+  languageOptions: {
+    gap: SPACING.sm,
+  },
+  languageOptionButton: {
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    marginBottom: SPACING.sm,
+  },
+  languageOptionButtonActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '10',
+  },
+  languageOptionText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+  },
+  languageOptionTextActive: {
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  modalClose: {
+    alignSelf: 'flex-end',
+    marginTop: SPACING.md,
+  },
+  modalCloseText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.medium,
   },
   centered: {
     flex: 1,

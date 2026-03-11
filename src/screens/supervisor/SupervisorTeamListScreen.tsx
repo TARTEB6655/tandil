@@ -10,10 +10,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { getSupervisorTeam, SupervisorTeamMember } from '../../services/supervisorService';
 
 const SupervisorTeamListScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [teamMembers, setTeamMembers] = useState<SupervisorTeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,7 +69,7 @@ const SupervisorTeamListScreen: React.FC = () => {
         <Text style={styles.memberTask}>{item.current_activity || '—'}</Text>
         <View style={styles.memberStats}>
           <Text style={styles.memberStatText}>
-            Tasks: {item.tasks_display || `${item.tasks_completed}/${item.tasks_total}`}
+            {t('supervisorDashboard.tasksLabel')}{item.tasks_display || `${item.tasks_completed}/${item.tasks_total}`}
           </Text>
         </View>
       </TouchableOpacity>
@@ -80,19 +82,19 @@ const SupervisorTeamListScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Team</Text>
+        <Text style={styles.headerTitle}>{t('supervisorDashboard.myTeam')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       {loading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading team…</Text>
+          <Text style={styles.loadingText}>{t('supervisorDashboard.loadingTeam')}</Text>
         </View>
       ) : teamMembers.length === 0 ? (
         <View style={styles.emptyBox}>
           <Ionicons name="people-outline" size={48} color={COLORS.textSecondary} />
-          <Text style={styles.emptyText}>No team members yet.</Text>
+          <Text style={styles.emptyText}>{t('supervisorDashboard.emptyTeam')}</Text>
         </View>
       ) : (
         <FlatList

@@ -357,6 +357,89 @@ export async function getAreaManagerMemberJobs(
   return null;
 }
 
+/** Report type for POST /api/area-manager/reports/generate */
+export type AreaManagerReportType = 'weekly_summary' | 'team_performance' | 'customer_satisfaction';
+
+export interface AreaManagerGenerateReportParams {
+  type: AreaManagerReportType;
+  date_from: string; // YYYY-MM-DD
+  date_to: string;   // YYYY-MM-DD
+}
+
+export interface AreaManagerGenerateReportResponse {
+  success?: boolean;
+  message?: string;
+  data?: { url?: string; file_path?: string; [key: string]: unknown };
+}
+
+/**
+ * POST /api/area-manager/reports/generate?sync=1
+ * Body: JSON { type, date_from, date_to }. Requires Bearer token.
+ */
+export async function generateAreaManagerReport(
+  params: AreaManagerGenerateReportParams
+): Promise<{ success: boolean; message?: string; url?: string }> {
+  const response = await apiClient.post<AreaManagerGenerateReportResponse>(
+    '/area-manager/reports/generate',
+    {
+      type: params.type,
+      date_from: params.date_from,
+      date_to: params.date_to,
+    },
+    {
+      params: { sync: 1 },
+      timeout: 60000,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    }
+  );
+  if (response.data?.success) {
+    return {
+      success: true,
+      message: response.data.message,
+      url: response.data?.data?.url,
+    };
+  }
+  return {
+    success: false,
+    message: (response.data as any)?.message ?? 'Failed to generate report.',
+  };
+}
+
+/** Single report from GET /api/area-manager/generated-reports */
+export interface AreaManagerGeneratedReport {
+  id: number;
+  title: string;
+  report_type: string;
+  type: string;
+  period: string;
+  file_size: string;
+  generated_at: string;
+  created_at: string;
+  download_url: string;
+  view_url: string;
+}
+
+export interface AreaManagerGeneratedReportsResponse {
+  success?: boolean;
+  data?: AreaManagerGeneratedReport[];
+  meta?: { total?: number };
+}
+
+/**
+ * GET /api/area-manager/generated-reports
+ * Returns list of generated reports with download_url and view_url. Requires Bearer token.
+ */
+export async function getAreaManagerGeneratedReports(): Promise<AreaManagerGeneratedReport[]> {
+  const response = await apiClient.get<AreaManagerGeneratedReportsResponse>(
+    '/area-manager/generated-reports',
+    { timeout: 15000 }
+  );
+  if (response.data?.success && Array.isArray(response.data?.data)) {
+    return response.data.data;
+  }
+  return [];
+}
+
 /** Area from GET /api/area-manager/region-map */
 export interface AreaManagerRegionMapArea {
   id: number;

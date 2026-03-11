@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { COLORS } from '../constants';
 
 // Screens
@@ -18,6 +19,7 @@ const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const TabNavigator = () => {
+  const { t } = useTranslation();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -34,7 +36,7 @@ const TabNavigator = () => {
         name="DashboardTab"
         component={HRManagerDashboardScreen}
         options={{
-          tabBarLabel: 'Dashboard',
+          tabBarLabel: t('admin.hrManagerDashboard.tabDashboard'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
@@ -44,7 +46,7 @@ const TabNavigator = () => {
         name="EmployeesTab"
         component={EmployeeListScreen}
         options={{
-          tabBarLabel: 'Employees',
+          tabBarLabel: t('admin.hrManagerDashboard.tabEmployees'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="people-outline" size={size} color={color} />
           ),
@@ -54,7 +56,7 @@ const TabNavigator = () => {
         name="LeavesTab"
         component={ManageLeavesScreen}
         options={{
-          tabBarLabel: 'Leaves',
+          tabBarLabel: t('admin.hrManagerDashboard.tabLeaves'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-outline" size={size} color={color} />
           ),
@@ -64,7 +66,7 @@ const TabNavigator = () => {
         name="ProfileTab"
         component={TechnicianProfileScreen}
         options={{
-          tabBarLabel: 'Profile',
+          tabBarLabel: t('admin.hrManagerDashboard.tabProfile'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
           ),

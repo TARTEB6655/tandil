@@ -12,10 +12,12 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { getSupervisorTeamMember, SupervisorTeamMemberDetail } from '../../services/supervisorService';
 
 const SupervisorTeamMemberDetailScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const technicianId = route.params?.technicianId ?? route.params?.technician_id;
@@ -26,7 +28,7 @@ const SupervisorTeamMemberDetailScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       if (technicianId == null) {
-        setError('No team member selected.');
+        setError(t('supervisorDashboard.noMemberSelected'));
         setLoading(false);
         return;
       }
@@ -39,7 +41,7 @@ const SupervisorTeamMemberDetailScreen: React.FC = () => {
         })
         .catch(() => {
           if (!cancelled) {
-            setError('Could not load team member.');
+            setError(t('supervisorDashboard.couldNotLoadMember'));
             setMember(null);
           }
         })
@@ -47,21 +49,21 @@ const SupervisorTeamMemberDetailScreen: React.FC = () => {
           if (!cancelled) setLoading(false);
         });
       return () => { cancelled = true; };
-    }, [technicianId])
+    }, [technicianId, t])
   );
 
   const openEmail = () => {
     const email = member?.email?.trim();
     if (!email) return;
     const url = `mailto:${email}`;
-    Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open email.'));
+    Linking.openURL(url).catch(() => Alert.alert(t('common.error'), t('supervisorDashboard.couldNotOpenEmail')));
   };
 
   const openPhone = () => {
     const phone = member?.phone?.trim();
     if (!phone) return;
     const url = `tel:${phone.replace(/\s/g, '')}`;
-    Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open phone.'));
+    Linking.openURL(url).catch(() => Alert.alert(t('common.error'), t('supervisorDashboard.couldNotOpenPhone')));
   };
 
   if (loading) {
@@ -71,12 +73,12 @@ const SupervisorTeamMemberDetailScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Team Member</Text>
+          <Text style={styles.headerTitle}>{t('supervisorDashboard.teamMemberTitle')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centerBox}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('supervisorDashboard.loadingDetail')}</Text>
         </View>
       </View>
     );
@@ -89,12 +91,12 @@ const SupervisorTeamMemberDetailScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Team Member</Text>
+          <Text style={styles.headerTitle}>{t('supervisorDashboard.teamMemberTitle')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centerBox}>
           <Ionicons name="person-outline" size={48} color={COLORS.textSecondary} />
-          <Text style={styles.errorText}>{error || 'Member not found.'}</Text>
+          <Text style={styles.errorText}>{error || t('supervisorDashboard.memberNotFound')}</Text>
         </View>
       </View>
     );
@@ -111,7 +113,7 @@ const SupervisorTeamMemberDetailScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Team Member</Text>
+        <Text style={styles.headerTitle}>{t('supervisorDashboard.teamMemberTitle')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -154,7 +156,7 @@ const SupervisorTeamMemberDetailScreen: React.FC = () => {
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
             <Ionicons name="flash-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>Current activity</Text>
+            <Text style={styles.cardTitle}>{t('supervisorDashboard.currentActivity')}</Text>
           </View>
           <Text style={styles.activityText}>{member.current_activity || '—'}</Text>
         </View>
@@ -163,12 +165,12 @@ const SupervisorTeamMemberDetailScreen: React.FC = () => {
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
             <Ionicons name="checkbox-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>Tasks</Text>
+            <Text style={styles.cardTitle}>{t('supervisorDashboard.tasks')}</Text>
           </View>
           <View style={styles.tasksRow}>
             <Text style={styles.tasksDisplay}>{member.tasks_display || '0/0'}</Text>
             <Text style={styles.tasksLabel}>
-              {member.tasks_completed} of {member.tasks_total} completed
+              {t('supervisorDashboard.tasksCompletedOfTotal', { completed: member.tasks_completed, total: member.tasks_total })}
             </Text>
           </View>
           <View style={styles.progressTrack}>
@@ -185,7 +187,7 @@ const SupervisorTeamMemberDetailScreen: React.FC = () => {
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
             <Ionicons name="call-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>Contact</Text>
+            <Text style={styles.cardTitle}>{t('supervisorDashboard.contact')}</Text>
           </View>
           {member.email ? (
             <TouchableOpacity style={styles.contactRow} onPress={openEmail} activeOpacity={0.7}>
@@ -202,7 +204,7 @@ const SupervisorTeamMemberDetailScreen: React.FC = () => {
             </TouchableOpacity>
           ) : null}
           {!member.email && !member.phone && (
-            <Text style={styles.contactEmpty}>No contact info</Text>
+            <Text style={styles.contactEmpty}>{t('supervisorDashboard.noContactInfo')}</Text>
           )}
         </View>
       </ScrollView>

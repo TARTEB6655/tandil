@@ -10,10 +10,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
+import { TFunction } from 'i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { getSupervisorReports, SupervisorReportItem } from '../../services/supervisorService';
 
-function formatSubmittedAt(iso: string): string {
+function formatSubmittedAt(iso: string, t: TFunction): string {
   try {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return iso;
@@ -22,9 +24,9 @@ function formatSubmittedAt(iso: string): string {
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
-    if (diffMins < 60) return diffMins <= 1 ? 'Just now' : `${diffMins} minutes ago`;
-    if (diffHours < 24) return diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
-    if (diffDays < 7) return diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
+    if (diffMins < 60) return diffMins <= 1 ? t('supervisorDashboard.justNow') : t('supervisorDashboard.minutesAgo', { count: diffMins });
+    if (diffHours < 24) return diffHours === 1 ? t('supervisorDashboard.oneHourAgo') : t('supervisorDashboard.hoursAgo', { count: diffHours });
+    if (diffDays < 7) return diffDays === 1 ? t('supervisorDashboard.oneDayAgo') : t('supervisorDashboard.daysAgo', { count: diffDays });
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   } catch {
     return iso;
@@ -32,6 +34,7 @@ function formatSubmittedAt(iso: string): string {
 }
 
 const PendingReportsListScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [list, setList] = useState<SupervisorReportItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +68,7 @@ const PendingReportsListScreen: React.FC = () => {
       <View style={styles.reportHeader}>
         <View>
           <Text style={styles.reportTechName}>{item.technician_name}</Text>
-          <Text style={styles.reportEmployeeId}>ID: {item.employee_id}</Text>
+          <Text style={styles.reportEmployeeId}>{t('supervisorDashboard.idPrefix')}{item.employee_id}</Text>
         </View>
         {item.has_photos ? (
           <Ionicons name="images" size={20} color={COLORS.primary} />
@@ -73,9 +76,9 @@ const PendingReportsListScreen: React.FC = () => {
       </View>
       <Text style={styles.reportCustomer}>{item.location}</Text>
       <Text style={styles.reportService}>{item.service}</Text>
-      <Text style={styles.reportTime}>{formatSubmittedAt(item.submitted_at)}</Text>
+      <Text style={styles.reportTime}>{formatSubmittedAt(item.submitted_at, t)}</Text>
       <View style={styles.reportAction}>
-        <Text style={styles.reviewButtonText}>Review Report →</Text>
+        <Text style={styles.reviewButtonText}>{t('supervisorDashboard.reviewReport')}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -84,13 +87,13 @@ const PendingReportsListScreen: React.FC = () => {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerPlaceholder} />
-        <Text style={styles.headerTitle}>Pending Field Reports</Text>
+        <Text style={styles.headerTitle}>{t('supervisorDashboard.pendingFieldReports')}</Text>
         <View style={styles.headerPlaceholder} />
       </View>
       {loading && list.length === 0 ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading reports...</Text>
+          <Text style={styles.loadingText}>{t('supervisorDashboard.loadingReports')}</Text>
         </View>
       ) : (
         <FlatList
@@ -103,7 +106,7 @@ const PendingReportsListScreen: React.FC = () => {
           }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyText}>No pending reports</Text>
+              <Text style={styles.emptyText}>{t('supervisorDashboard.emptyPendingReports')}</Text>
             </View>
           }
         />

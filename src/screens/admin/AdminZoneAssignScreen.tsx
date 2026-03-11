@@ -13,6 +13,7 @@ import {
 import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { getAddressFromCoordinates } from '../../utils/addressFromLocation';
 import { adminService } from '../../services/adminService';
@@ -40,6 +41,7 @@ async function searchPlace(query: string): Promise<{ lat: number; lng: number } 
 }
 
 const AdminZoneAssignScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const zone = route.params?.zone as ZoneDummy | undefined;
@@ -177,7 +179,7 @@ const AdminZoneAssignScreen: React.FC = () => {
         longitudeDelta: DEFAULT_DELTA,
       }, 400);
     } else {
-      Alert.alert('Search', 'Location not found. Try a different search (e.g. Dubai, Abu Dhabi, Sharjah).');
+      Alert.alert(t('admin.assignZone.searchTitle'), t('admin.assignZone.searchNotFound'));
     }
   };
 
@@ -191,7 +193,7 @@ const AdminZoneAssignScreen: React.FC = () => {
   const handleSave = async () => {
     const locationText = (zoneAddress || zone.name || zone.address || '').trim();
     if (!locationText) {
-      Alert.alert('Missing location', 'Please enter or select a location for the zone.');
+      Alert.alert(t('admin.assignZone.missingLocation'), t('admin.assignZone.missingLocationMessage'));
       return;
     }
     const parsed = selectedSupervisorId ? parseInt(selectedSupervisorId, 10) : NaN;
@@ -200,11 +202,11 @@ const AdminZoneAssignScreen: React.FC = () => {
     try {
       await adminService.updateArea(Number(zone.id), locationText, supervisorIdNum);
       navigation.navigate('AdminZones', { areasRefresh: true });
-      Alert.alert('Updated', `Zone "${locationText}" has been updated.`);
+      Alert.alert(t('admin.assignZone.updated'), t('admin.assignZone.updatedMessage', { location: locationText }));
     } catch (e: any) {
       Alert.alert(
-        'Update failed',
-        e?.response?.data?.message ?? e?.message ?? 'Could not update zone. Try again.'
+        t('admin.assignZone.updateFailed'),
+        e?.response?.data?.message ?? e?.message ?? t('admin.assignZone.updateFailedMessage')
       );
     } finally {
       setSaving(false);
@@ -217,13 +219,13 @@ const AdminZoneAssignScreen: React.FC = () => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Assign Supervisor</Text>
+        <Text style={styles.headerTitle}>{t('admin.assignZone.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       <Text style={styles.zoneLabel}>{zone.name || zone.address || `Zone #${zone.id}`}</Text>
       <Text style={styles.zoneAddress}>{zoneAddress || zone.address || zone.name || '—'}{geocoding ? '…' : ''}</Text>
-      <Text style={styles.zoneHint}>Drag the pin or search to change zone location (e.g. city in UAE)</Text>
+      <Text style={styles.zoneHint}>{t('admin.assignZone.zoneHint')}</Text>
 
       <View style={styles.mapContainer}>
         <MapView
@@ -247,7 +249,7 @@ const AdminZoneAssignScreen: React.FC = () => {
           <Ionicons name="search" size={20} color={COLORS.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search location (e.g. Abu Dhabi, Dubai)"
+            placeholder={t('admin.assignZone.searchPlaceholder')}
             placeholderTextColor={COLORS.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -276,7 +278,7 @@ const AdminZoneAssignScreen: React.FC = () => {
         </View>
       </View>
 
-      <Text style={styles.pickerLabel}>Select supervisor for this zone</Text>
+      <Text style={styles.pickerLabel}>{t('admin.assignZone.selectSupervisor')}</Text>
       <ScrollView style={styles.supervisorList} contentContainerStyle={styles.supervisorListContent}>
         {supervisorsLoading ? (
           <View style={styles.supervisorLoading}>
@@ -284,7 +286,7 @@ const AdminZoneAssignScreen: React.FC = () => {
             <Text style={styles.supervisorLoadingText}>Loading supervisors…</Text>
           </View>
         ) : supervisors.length === 0 ? (
-          <Text style={styles.supervisorEmpty}>No supervisors found.</Text>
+          <Text style={styles.supervisorEmpty}>{t('admin.assignZone.noSupervisors')}</Text>
         ) : (
           supervisors.map((sup) => {
             const supIdStr = String(sup.id);
@@ -316,7 +318,7 @@ const AdminZoneAssignScreen: React.FC = () => {
         {saving ? (
           <ActivityIndicator size="small" color={COLORS.background} />
         ) : (
-          <Text style={styles.saveButtonText}>Update Zone</Text>
+          <Text style={styles.saveButtonText}>{t('admin.assignZone.updateButton')}</Text>
         )}
       </TouchableOpacity>
     </View>

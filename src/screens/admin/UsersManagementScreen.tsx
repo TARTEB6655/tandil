@@ -19,10 +19,14 @@ import { adminService, AdminUser } from '../../services/adminService';
 
 const ROLE_KEYS: Record<string, string> = {
   technician: 'admin.users.roleFieldWorker',
+  worker: 'admin.users.roleFieldWorker',
   supervisor: 'admin.users.roleSupervisor',
+  team_leader: 'admin.users.roleSupervisor',
   area_manager: 'admin.users.roleAreaManager',
+  manager: 'admin.users.roleAreaManager',
   hr: 'admin.users.roleHrManager',
   client: 'admin.users.roleClient',
+  customer: 'admin.users.roleClient',
   admin: 'admin.users.roleAdmin',
 };
 
@@ -39,6 +43,16 @@ const generateEmployeeId = (role: string, userId: number): string => {
   const prefix = prefixMap[role] || 'USR';
   return `${prefix}-${userId.toString().padStart(4, '0')}`;
 };
+
+/** Normalize role from API (user.role or user.roles[0].name) for consistent filtering */
+function getNormalizedRole(user: AdminUser): string {
+  const raw = (user.role || user.roles?.[0]?.name || '').toString().trim();
+  const lower = raw.toLowerCase();
+  if (lower === 'area manager') return 'area_manager';
+  if (lower === 'hr manager' || lower === 'hr_manager') return 'hr';
+  const normalized = lower.replace(/\s+/g, '_');
+  return normalized || '';
+}
 
 const UsersManagementScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -60,57 +74,75 @@ const UsersManagementScreen: React.FC = () => {
     clients?: number;
   } | null>(null);
 
-  // Fetch user statistics
+  // Fetch user statistics (global counts from API; clients from API or 0)
   const fetchUserStatistics = useCallback(async () => {
     try {
       const response = await adminService.getUsersStatistics();
       if (response.success && response.data) {
-        // Calculate clients count from users if not provided by API
-        const clientsCount = users.filter(u => u.role === 'client').length;
+        const data = response.data as { all_users: number; workers: number; supervisors: number; managers: number; clients?: number };
         setUserStats({
-          ...response.data,
-          clients: clientsCount,
+          ...data,
+          clients: data.clients ?? 0,
         });
       }
     } catch (err: any) {
       console.error('Error fetching user statistics:', err);
-      // Don't show error for statistics, just log it
     }
-  }, [users]);
+  }, []);
 
-  // Fetch users from API
-  const fetchUsers = useCallback(async (showLoading = true) => {
+  // Map UI filter to API role param (backend may use different names)
+  const getRoleParamForApi = useCallback((filter: string): string | undefined => {
+    if (filter === 'all') return undefined;
+    if (filter === 'worker') return 'technician';
+    if (filter === 'supervisor') return 'supervisor';
+    if (filter === 'client') return 'client';
+    if (filter === 'manager') return undefined; // fetch all and filter client-side (area_manager + hr)
+    return undefined;
+  }, []);
+
+  // Fetch users from API (optionally by role so the correct tab shows data)
+  const fetchUsers = useCallback(async (roleFilter: string, showLoading = true) => {
     try {
       setError(null);
       if (showLoading) {
         setLoading(true);
       }
-      const response = await adminService.getUsers();
-      console.log('Users API Response:', response);
-      
-      // Handle different response structures
+      const roleParam = getRoleParamForApi(roleFilter);
+      let response = await adminService.getUsers({
+        role: roleParam,
+        per_page: 200,
+        page: 1,
+      });
+
       let usersArray: AdminUser[] = [];
-      
       if (response && response.data) {
-        // Check if data is a direct array (simple response)
         if (Array.isArray(response.data)) {
           usersArray = response.data;
-        } 
-        // Check if data is a paginated object with nested data array
-        else if (response.data && typeof response.data === 'object' && 'data' in response.data && Array.isArray(response.data.data)) {
-          usersArray = response.data.data;
+        } else if (response.data && typeof response.data === 'object' && 'data' in response.data && Array.isArray((response.data as { data: AdminUser[] }).data)) {
+          usersArray = (response.data as { data: AdminUser[] }).data;
         }
       }
-      
-      if (usersArray.length > 0 || (response && response.data && Array.isArray(response.data) && response.data.length === 0)) {
-        setUsers(usersArray);
-      } else {
-        setUsers([]);
-        setError(t('admin.users.noUsersOrInvalid'));
+
+      // If we requested a specific role but got none, backend may use different role names — fetch all and filter client-side
+      if (roleParam && usersArray.length === 0) {
+        const allResponse = await adminService.getUsers({ per_page: 200, page: 1 });
+        if (allResponse && allResponse.data) {
+          const all = Array.isArray(allResponse.data)
+            ? allResponse.data
+            : (allResponse.data as { data?: AdminUser[] })?.data ?? [];
+          usersArray = all.filter(u => {
+            const r = getNormalizedRole(u);
+            if (roleFilter === 'worker') return r === 'technician' || r === 'worker';
+            if (roleFilter === 'supervisor') return r === 'supervisor' || r === 'team_leader';
+            if (roleFilter === 'client') return r === 'client' || r === 'customer';
+            return false;
+          });
+        }
       }
+
+      setUsers(usersArray);
     } catch (err: any) {
       console.error('Error fetching users:', err);
-      console.error('Error response:', err.response?.data);
       const errorMessage = err.response?.data?.message || err.message || t('admin.users.loadFailed');
       setError(errorMessage);
       setUsers([]);
@@ -119,47 +151,45 @@ const UsersManagementScreen: React.FC = () => {
       setRefreshing(false);
       setIsInitialLoad(false);
     }
-  }, [t]);
+  }, [t, getRoleParamForApi]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    fetchUsers(selectedFilter);
+  }, [selectedFilter]);
 
   useEffect(() => {
-    if (users.length > 0) {
-      fetchUserStatistics();
-    }
-  }, [users, fetchUserStatistics]);
+    fetchUserStatistics();
+  }, [fetchUserStatistics]);
 
   // Refresh users when screen comes into focus (e.g., after adding a user)
   useFocusEffect(
     useCallback(() => {
-      // Only refresh if we've already done the initial load
       if (!isInitialLoad && !loading) {
-        fetchUsers(false);
+        fetchUsers(selectedFilter, false);
         fetchUserStatistics();
       }
-    }, [isInitialLoad, loading, fetchUsers, fetchUserStatistics])
+    }, [isInitialLoad, loading, selectedFilter, fetchUsers, fetchUserStatistics])
   );
 
-  // Filter users based on selected filter and search query
+  // Filter by search and by role (role filter for manager tab: area_manager + hr; API may have already filtered others)
   const filteredUsers = users.filter(user => {
-    const matchesSearch = 
+    const role = getNormalizedRole(user);
+    const matchesSearch =
       user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      generateEmployeeId(user.role, user.id).toLowerCase().includes(searchQuery.toLowerCase());
-    
+      (user.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      generateEmployeeId(role, user.id).toLowerCase().includes(searchQuery.toLowerCase());
+
     if (selectedFilter === 'all') return matchesSearch;
-    if (selectedFilter === 'worker') return matchesSearch && user.role === 'technician';
-    if (selectedFilter === 'supervisor') return matchesSearch && user.role === 'supervisor';
-    if (selectedFilter === 'manager') return matchesSearch && (user.role === 'area_manager' || user.role === 'hr');
-    if (selectedFilter === 'client') return matchesSearch && user.role === 'client';
+    if (selectedFilter === 'worker') return matchesSearch && (role === 'technician' || role === 'worker');
+    if (selectedFilter === 'supervisor') return matchesSearch && (role === 'supervisor' || role === 'team_leader');
+    if (selectedFilter === 'manager') return matchesSearch && (role === 'area_manager' || role === 'hr' || role === 'manager');
+    if (selectedFilter === 'client') return matchesSearch && (role === 'client' || role === 'customer');
     return matchesSearch;
   });
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchUsers();
+    fetchUsers(selectedFilter);
   };
 
   const handleMenuPress = (user: AdminUser) => {
@@ -193,7 +223,7 @@ const UsersManagementScreen: React.FC = () => {
             try {
               await adminService.deleteUser(selectedUser.id);
               Alert.alert(t('admin.users.success'), t('admin.users.deleteSuccess'));
-              fetchUsers(false);
+              fetchUsers(selectedFilter, false);
             } catch (err: any) {
               console.error('Error deleting user:', err);
               const errorMessage =
@@ -207,8 +237,9 @@ const UsersManagementScreen: React.FC = () => {
   };
 
   const renderUser = ({ item }: { item: AdminUser }) => {
-    const employeeId = generateEmployeeId(item.role, item.id);
-    const roleDisplayName = t(ROLE_KEYS[item.role] || item.role);
+    const employeeId = generateEmployeeId(getNormalizedRole(item), item.id);
+    const normalizedRole = getNormalizedRole(item);
+    const roleDisplayName = t(ROLE_KEYS[normalizedRole] || normalizedRole || item.role);
     const avatarInitial = item.name.charAt(0).toUpperCase();
 
     return (
@@ -331,7 +362,7 @@ const UsersManagementScreen: React.FC = () => {
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={COLORS.error} />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => fetchUsers()}>
+          <TouchableOpacity style={styles.retryButton} onPress={() => fetchUsers(selectedFilter)}>
             <Text style={styles.retryButtonText}>{t('admin.users.retry')}</Text>
           </TouchableOpacity>
         </View>

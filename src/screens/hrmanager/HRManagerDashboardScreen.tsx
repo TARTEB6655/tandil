@@ -10,9 +10,18 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 
+function getGreetingKey(): 'greetingMorning' | 'greetingAfternoon' | 'greetingEvening' {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'greetingMorning';
+  if (hour < 17) return 'greetingAfternoon';
+  return 'greetingEvening';
+}
+
 const HRManagerDashboardScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
 
   const hrManager = {
@@ -114,13 +123,13 @@ const HRManagerDashboardScreen: React.FC = () => {
             styles.statusText,
             { color: item.status === 'active' ? COLORS.success : COLORS.warning }
           ]}>
-            {item.status === 'active' ? 'Active' : 'On Leave'}
+            {item.status === 'active' ? t('admin.hrManagerDashboard.active') : t('admin.hrManagerDashboard.onLeave')}
           </Text>
         </View>
       </View>
       <View style={styles.employeeDetails}>
-        <Text style={styles.employeeDetailText}>Joined: {item.joiningDate}</Text>
-        <Text style={styles.employeeDetailText}>Leave: {item.leaveBalance} days</Text>
+        <Text style={styles.employeeDetailText}>{t('admin.hrManagerDashboard.joined', { date: item.joiningDate })}</Text>
+        <Text style={styles.employeeDetailText}>{t('admin.hrManagerDashboard.leaveDays', { count: item.leaveBalance })}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -133,7 +142,7 @@ const HRManagerDashboardScreen: React.FC = () => {
           <Text style={styles.leaveEmployeeId}>{item.employeeId}</Text>
         </View>
         <View style={styles.pendingBadge}>
-          <Text style={styles.pendingText}>Pending</Text>
+          <Text style={styles.pendingText}>{t('admin.hrManagerDashboard.pending')}</Text>
         </View>
       </View>
       <Text style={styles.leaveType}>{item.leaveType} • {item.duration}</Text>
@@ -143,14 +152,14 @@ const HRManagerDashboardScreen: React.FC = () => {
           style={styles.approveButton}
           onPress={() => {
             Alert.alert(
-              'Approve Leave',
-              `Approve ${item.leaveType} for ${item.employeeName} (${item.employeeId})?`,
+              t('admin.hrManagerDashboard.approveLeaveTitle'),
+              t('admin.hrManagerDashboard.approveLeaveConfirm', { type: item.leaveType, name: item.employeeName, id: item.employeeId }),
               [
-                { text: 'Cancel', style: 'cancel' },
-                { 
-                  text: 'Approve', 
+                { text: t('common.cancel'), style: 'cancel' },
+                {
+                  text: t('admin.hrManagerDashboard.approve'),
                   onPress: () => {
-                    Alert.alert('Success', `Leave approved for ${item.employeeName}`);
+                    Alert.alert(t('admin.hrManagerDashboard.successTitle'), t('admin.hrManagerDashboard.leaveApproved', { name: item.employeeName }));
                   }
                 },
               ]
@@ -158,21 +167,21 @@ const HRManagerDashboardScreen: React.FC = () => {
           }}
         >
           <Ionicons name="checkmark" size={16} color={COLORS.background} />
-          <Text style={styles.approveText}>Approve</Text>
+          <Text style={styles.approveText}>{t('admin.hrManagerDashboard.approve')}</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={styles.rejectButton}
           onPress={() => {
             Alert.alert(
-              'Reject Leave',
-              `Reject ${item.leaveType} for ${item.employeeName} (${item.employeeId})?`,
+              t('admin.hrManagerDashboard.rejectLeaveTitle'),
+              t('admin.hrManagerDashboard.rejectLeaveConfirm', { type: item.leaveType, name: item.employeeName, id: item.employeeId }),
               [
-                { text: 'Cancel', style: 'cancel' },
-                { 
-                  text: 'Reject', 
+                { text: t('common.cancel'), style: 'cancel' },
+                {
+                  text: t('admin.hrManagerDashboard.reject'),
                   style: 'destructive',
                   onPress: () => {
-                    Alert.alert('Leave Rejected', `Leave request rejected for ${item.employeeName}`);
+                    Alert.alert(t('admin.hrManagerDashboard.leaveRejectedTitle'), t('admin.hrManagerDashboard.leaveRejectedMessage', { name: item.employeeName }));
                   }
                 },
               ]
@@ -180,7 +189,7 @@ const HRManagerDashboardScreen: React.FC = () => {
           }}
         >
           <Ionicons name="close" size={16} color={COLORS.background} />
-          <Text style={styles.rejectText}>Reject</Text>
+          <Text style={styles.rejectText}>{t('admin.hrManagerDashboard.reject')}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -188,19 +197,21 @@ const HRManagerDashboardScreen: React.FC = () => {
 
   const renderSchedule = ({ item }: { item: any }) => (
     <View style={styles.scheduleCard}>
-      <Text style={styles.scheduleDate}>{item.date}</Text>
+      <Text style={styles.scheduleDate}>
+        {item.date === 'Today' ? t('admin.hrManagerDashboard.today') : item.date === 'Tomorrow' ? t('admin.hrManagerDashboard.tomorrow') : item.date}
+      </Text>
       <View style={styles.scheduleStats}>
         <View style={styles.scheduleStatItem}>
           <Text style={styles.scheduleStatValue}>{item.totalVisits}</Text>
-          <Text style={styles.scheduleStatLabel}>Total Visits</Text>
+          <Text style={styles.scheduleStatLabel}>{t('admin.hrManagerDashboard.totalVisits')}</Text>
         </View>
         <View style={styles.scheduleStatItem}>
           <Text style={[styles.scheduleStatValue, { color: COLORS.success }]}>{item.assigned}</Text>
-          <Text style={styles.scheduleStatLabel}>Assigned</Text>
+          <Text style={styles.scheduleStatLabel}>{t('admin.hrManagerDashboard.assigned')}</Text>
         </View>
         <View style={styles.scheduleStatItem}>
           <Text style={[styles.scheduleStatValue, { color: COLORS.error }]}>{item.unassigned}</Text>
-          <Text style={styles.scheduleStatLabel}>Unassigned</Text>
+          <Text style={styles.scheduleStatLabel}>{t('admin.hrManagerDashboard.unassigned')}</Text>
         </View>
       </View>
     </View>
@@ -234,26 +245,26 @@ const HRManagerDashboardScreen: React.FC = () => {
           <View style={styles.statCard}>
             <Ionicons name="people-outline" size={24} color={COLORS.primary} />
             <Text style={styles.statValue}>{hrManager.totalEmployees}</Text>
-            <Text style={styles.statLabel}>Total Staff</Text>
+            <Text style={styles.statLabel}>{t('admin.hrManagerDashboard.totalStaff')}</Text>
           </View>
           
           <View style={styles.statCard}>
             <Ionicons name="person-add-outline" size={24} color={COLORS.success} />
             <Text style={styles.statValue}>{hrManager.newHires}</Text>
-            <Text style={styles.statLabel}>New Hires</Text>
+            <Text style={styles.statLabel}>{t('admin.hrManagerDashboard.newHires')}</Text>
           </View>
           
           <View style={styles.statCard}>
             <Ionicons name="calendar-outline" size={24} color={COLORS.warning} />
             <Text style={styles.statValue}>{hrManager.pendingLeaves}</Text>
-            <Text style={styles.statLabel}>Leave Requests</Text>
+            <Text style={styles.statLabel}>{t('admin.hrManagerDashboard.leaveRequests')}</Text>
           </View>
         </View>
 
         {/* Leave Requests */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Pending Leave Requests</Text>
+            <Text style={styles.sectionTitle}>{t('admin.hrManagerDashboard.pendingLeaveRequests')}</Text>
             <Text style={styles.sectionCount}>{leaveRequests.length}</Text>
           </View>
           
@@ -279,9 +290,9 @@ const HRManagerDashboardScreen: React.FC = () => {
         {/* Employees */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Employee Directory</Text>
+            <Text style={styles.sectionTitle}>{t('admin.hrManagerDashboard.employeeDirectory')}</Text>
             <TouchableOpacity onPress={() => navigation.navigate('EmployeeList' as never)}>
-              <Text style={styles.viewAllText}>View All</Text>
+              <Text style={styles.viewAllText}>{t('admin.hrManagerDashboard.viewAll')}</Text>
             </TouchableOpacity>
           </View>
           
@@ -295,7 +306,7 @@ const HRManagerDashboardScreen: React.FC = () => {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <Text style={styles.sectionTitle}>{t('admin.hrManagerDashboard.quickActions')}</Text>
           <View style={styles.quickActions}>
             <TouchableOpacity 
               style={styles.quickAction}
@@ -304,7 +315,7 @@ const HRManagerDashboardScreen: React.FC = () => {
               <View style={styles.quickActionIcon}>
                 <Ionicons name="person-add-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>Add Employee</Text>
+              <Text style={styles.quickActionText}>{t('admin.hrManagerDashboard.addEmployee')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -314,39 +325,39 @@ const HRManagerDashboardScreen: React.FC = () => {
               <View style={styles.quickActionIcon}>
                 <Ionicons name="calendar-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>Manage Leaves</Text>
+              <Text style={styles.quickActionText}>{t('admin.hrManagerDashboard.manageLeaves')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={styles.quickAction}
               onPress={() => {
                 Alert.alert(
-                  'Assign Visits',
-                  'Assign farm visits to available field workers and supervisors.',
-                  [{ text: 'OK' }]
+                  t('admin.hrManagerDashboard.assignVisitsTitle'),
+                  t('admin.hrManagerDashboard.assignVisitsMessage'),
+                  [{ text: t('common.ok') }]
                 );
               }}
             >
               <View style={styles.quickActionIcon}>
                 <Ionicons name="clipboard-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>Assign Visits</Text>
+              <Text style={styles.quickActionText}>{t('admin.hrManagerDashboard.assignVisits')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={styles.quickAction}
               onPress={() => {
                 Alert.alert(
-                  'Reports',
-                  'View employee performance reports, attendance records, and HR analytics.',
-                  [{ text: 'OK' }]
+                  t('admin.hrManagerDashboard.reportsTitle'),
+                  t('admin.hrManagerDashboard.reportsMessage'),
+                  [{ text: t('common.ok') }]
                 );
               }}
             >
               <View style={styles.quickActionIcon}>
                 <Ionicons name="stats-chart-outline" size={24} color={COLORS.primary} />
               </View>
-              <Text style={styles.quickActionText}>Reports</Text>
+              <Text style={styles.quickActionText}>{t('admin.hrManagerDashboard.reports')}</Text>
             </TouchableOpacity>
           </View>
         </View>

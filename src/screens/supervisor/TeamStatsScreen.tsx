@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator }
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import {
   getSupervisorTeamStats,
@@ -11,10 +12,10 @@ import {
 } from '../../services/supervisorService';
 
 const STAT_CONFIG = [
-  { id: 's-1', label: 'Visits Today', key: 'visits_today' as const, icon: 'calendar-outline', color: COLORS.primary },
-  { id: 's-2', label: 'Avg Duration', key: 'avg_duration_minutes' as const, icon: 'time-outline', color: COLORS.warning },
-  { id: 's-3', label: 'Customer Rating', key: 'customer_rating' as const, icon: 'star-outline', color: COLORS.success },
-  { id: 's-4', label: 'Open Issues', key: 'open_issues' as const, icon: 'alert-circle-outline', color: COLORS.error },
+  { id: 's-1', labelKey: 'visitsToday', key: 'visits_today' as const, icon: 'calendar-outline', color: COLORS.primary },
+  { id: 's-2', labelKey: 'avgDuration', key: 'avg_duration_minutes' as const, icon: 'time-outline', color: COLORS.warning },
+  { id: 's-3', labelKey: 'customerRating', key: 'customer_rating' as const, icon: 'star-outline', color: COLORS.success },
+  { id: 's-4', labelKey: 'openIssues', key: 'open_issues' as const, icon: 'alert-circle-outline', color: COLORS.error },
 ];
 
 function formatStatValue(key: keyof SupervisorTeamStatsData, data: SupervisorTeamStatsData): string | number {
@@ -29,6 +30,7 @@ function formatStatValue(key: keyof SupervisorTeamStatsData, data: SupervisorTea
 }
 
 const TeamStatsScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [data, setData] = useState<SupervisorTeamStatsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,17 +45,17 @@ const TeamStatsScreen: React.FC = () => {
         .then((res) => {
           if (!cancelled) {
             setData(res ?? null);
-            setError(res ? null : 'Failed to load team stats.');
+            setError(res ? null : t('teamStatsScreen.loadFailed'));
           }
         })
         .catch(() => {
-          if (!cancelled) setError('Failed to load team stats.');
+          if (!cancelled) setError(t('teamStatsScreen.loadFailed'));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
         });
       return () => { cancelled = true; };
-    }, [])
+    }, [t])
   );
 
   const renderMember = ({ item }: { item: SupervisorTeamStatsMember }) => (
@@ -75,7 +77,7 @@ const TeamStatsScreen: React.FC = () => {
       </View>
       <View style={styles.memberInfo}>
         <Text style={styles.memberName}>{item.name}</Text>
-        <Text style={styles.memberMeta}>Completed: {item.completed} • Rating: {item.rating === 0 ? '0' : item.rating.toFixed(1)}</Text>
+        <Text style={styles.memberMeta}>{t('teamStatsScreen.completedRating', { completed: item.completed, rating: item.rating === 0 ? '0' : item.rating.toFixed(1) })}</Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
     </TouchableOpacity>
@@ -88,12 +90,12 @@ const TeamStatsScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Team Stats</Text>
+          <Text style={styles.headerTitle}>{t('teamStatsScreen.title')}</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('teamStatsScreen.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -106,7 +108,7 @@ const TeamStatsScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Team Stats</Text>
+          <Text style={styles.headerTitle}>{t('teamStatsScreen.title')}</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.centered}>
@@ -130,7 +132,7 @@ const TeamStatsScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Team Stats</Text>
+        <Text style={styles.headerTitle}>{t('teamStatsScreen.title')}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -145,12 +147,12 @@ const TeamStatsScreen: React.FC = () => {
                       <Ionicons name={s.icon as any} size={20} color={s.color} />
                     </View>
                     <Text style={styles.statValue}>{formatStatValue(s.key, statsData)}</Text>
-                    <Text style={styles.statLabel}>{s.label}</Text>
+                    <Text style={styles.statLabel}>{t(`teamStatsScreen.${s.labelKey}`)}</Text>
                   </View>
                 </View>
               ))}
             </View>
-            <Text style={styles.sectionTitle}>Members</Text>
+            <Text style={styles.sectionTitle}>{t('teamStatsScreen.members')}</Text>
           </>
         }
         data={statsData.members}

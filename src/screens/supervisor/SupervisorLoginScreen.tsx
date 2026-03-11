@@ -12,12 +12,14 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { Button } from '../../components/common/Button';
 import { authService } from '../../services/authService';
 import { useAppStore } from '../../store';
 
 const SupervisorLoginScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const { setUser, setAuthenticated } = useAppStore();
   const [email, setEmail] = useState('');
@@ -28,7 +30,7 @@ const SupervisorLoginScreen: React.FC = () => {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter your email and password');
+      Alert.alert(t('common.error'), t('admin.supervisorLogin.errorEnterCredentials'));
       return;
     }
 
@@ -45,7 +47,7 @@ const SupervisorLoginScreen: React.FC = () => {
       // Verify the role is supervisor
       const userRole = response.data?.role || response.data?.user?.role;
       if (userRole !== 'supervisor') {
-        Alert.alert('Access Denied', 'This account is not authorized for supervisor access.');
+        Alert.alert(t('admin.supervisorLogin.accessDenied'), t('admin.supervisorLogin.accessDeniedMessage'));
         setIsLoading(false);
         return;
       }
@@ -61,17 +63,15 @@ const SupervisorLoginScreen: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Supervisor login error:', err);
-      
-      const errorMessage = 
-        err.response?.data?.message || 
-        err.message || 
-        'Login failed. Please check your credentials and try again.';
-      
+      const errorMessage =
+        err.response?.data?.message ||
+        err.message ||
+        t('admin.supervisorLogin.loginFailed');
       setError(errorMessage);
       Alert.alert(
-        'Login Error',
+        t('admin.supervisorLogin.loginError'),
         errorMessage,
-        [{ text: 'OK' }]
+        [{ text: t('common.ok') }]
       );
     } finally {
       setIsLoading(false);
@@ -92,8 +92,8 @@ const SupervisorLoginScreen: React.FC = () => {
           <View style={styles.iconCircle}>
             <Ionicons name="people" size={64} color={COLORS.primary} />
           </View>
-          <Text style={styles.title}>Supervisor Login</Text>
-          <Text style={styles.subtitle}>Team Leader Access</Text>
+          <Text style={styles.title}>{t('admin.supervisorLogin.title')}</Text>
+          <Text style={styles.subtitle}>{t('admin.supervisorLogin.subtitle')}</Text>
         </View>
 
         {/* Login Form */}
@@ -106,12 +106,12 @@ const SupervisorLoginScreen: React.FC = () => {
 
           {/* Email Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>{t('admin.supervisorLogin.email')}</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="mail-outline" size={20} color={COLORS.textSecondary} />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your email"
+                placeholder={t('admin.supervisorLogin.emailPlaceholder')}
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
@@ -126,12 +126,12 @@ const SupervisorLoginScreen: React.FC = () => {
 
           {/* Password Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>{t('admin.supervisorLogin.password')}</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your password"
+                placeholder={t('admin.supervisorLogin.passwordPlaceholder')}
                 value={password}
                 onChangeText={(text) => {
                   setPassword(text);
@@ -152,12 +152,12 @@ const SupervisorLoginScreen: React.FC = () => {
 
           {/* Forgot Password */}
           <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            <Text style={styles.forgotPasswordText}>{t('admin.supervisorLogin.forgotPassword')}</Text>
           </TouchableOpacity>
 
           {/* Login Button */}
           <Button
-            title={isLoading ? 'Signing in...' : 'Sign In'}
+            title={isLoading ? t('admin.supervisorLogin.signingIn') : t('admin.supervisorLogin.signIn')}
             onPress={handleLogin}
             loading={isLoading}
             disabled={isLoading}
@@ -168,7 +168,7 @@ const SupervisorLoginScreen: React.FC = () => {
           <View style={styles.infoBox}>
             <Ionicons name="information-circle-outline" size={20} color={COLORS.info} />
             <Text style={styles.infoText}>
-              Supervisors manage field workers and review reports
+              {t('admin.supervisorLogin.infoText')}
             </Text>
           </View>
         </View>
@@ -186,7 +186,7 @@ const SupervisorLoginScreen: React.FC = () => {
           }}
         >
           <Ionicons name="arrow-back" size={20} color={COLORS.primary} />
-          <Text style={styles.backText}>Back to Role Selection</Text>
+          <Text style={styles.backText}>{t('admin.supervisorLogin.backToRoles')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -12,6 +12,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { getSupervisorAssignmentDetail, SupervisorAssignmentDetail } from '../../services/supervisorService';
 
@@ -29,7 +30,15 @@ function formatDuration(minutes: number): string {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
+const statusLabelKey: Record<string, string> = {
+  pending: 'statusPending',
+  completed: 'statusCompleted',
+  in_progress: 'statusInProgress',
+  cancelled: 'statusCancelled',
+};
+
 const SupervisorAssignmentDetailScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const assignmentId = route.params?.assignmentId ?? route.params?.visit_id ?? route.params?.id;
@@ -40,7 +49,7 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       if (assignmentId == null) {
-        setError('No assignment selected.');
+        setError(t('taskDetailScreen.noAssignmentSelected'));
         setLoading(false);
         return;
       }
@@ -53,7 +62,7 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
         })
         .catch(() => {
           if (!cancelled) {
-            setError('Could not load assignment.');
+            setError(t('taskDetailScreen.couldNotLoad'));
             setAssignment(null);
           }
         })
@@ -61,7 +70,7 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
           if (!cancelled) setLoading(false);
         });
       return () => { cancelled = true; };
-    }, [assignmentId])
+    }, [assignmentId, t])
   );
 
   if (loading) {
@@ -71,12 +80,12 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Task Detail</Text>
+          <Text style={styles.headerTitle}>{t('taskDetailScreen.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centerBox}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('taskDetailScreen.loading')}</Text>
         </View>
       </View>
     );
@@ -89,12 +98,12 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Task Detail</Text>
+          <Text style={styles.headerTitle}>{t('taskDetailScreen.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centerBox}>
           <Ionicons name="document-text-outline" size={48} color={COLORS.textSecondary} />
-          <Text style={styles.errorText}>{error || 'Assignment not found.'}</Text>
+          <Text style={styles.errorText}>{error || t('taskDetailScreen.assignmentNotFound')}</Text>
         </View>
       </View>
     );
@@ -109,7 +118,7 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Task Detail</Text>
+        <Text style={styles.headerTitle}>{t('taskDetailScreen.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -129,7 +138,7 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
           ) : null}
           <View style={[styles.statusPill, { backgroundColor: statusBg + '22' }]}>
             <Text style={[styles.statusText, { color: statusBg }]}>
-              {(assignment.status || 'pending').toUpperCase()}
+              {t(`taskDetailScreen.${statusLabelKey[status] || 'statusPending'}`)}
             </Text>
           </View>
         </View>
@@ -139,7 +148,7 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Ionicons name="person-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.cardTitle}>Customer</Text>
+              <Text style={styles.cardTitle}>{t('taskDetailScreen.customer')}</Text>
             </View>
             <View style={styles.customerRow}>
               {assignment.customer.profile_picture_url ? (
@@ -162,7 +171,7 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
                     style={styles.contactLine}
                     onPress={() => {
                       const url = `mailto:${assignment.customer!.email}`;
-                      Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open email.'));
+                      Linking.openURL(url).catch(() => Alert.alert(t('common.error'), t('supervisorDashboard.couldNotOpenEmail')));
                     }}
                   >
                     <Ionicons name="mail-outline" size={16} color={COLORS.primary} />
@@ -174,7 +183,7 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
                     style={styles.contactLine}
                     onPress={() => {
                       const url = `tel:${assignment.customer!.phone.replace(/\s/g, '')}`;
-                      Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open phone.'));
+                      Linking.openURL(url).catch(() => Alert.alert(t('common.error'), t('supervisorDashboard.couldNotOpenPhone')));
                     }}
                   >
                     <Ionicons name="call-outline" size={16} color={COLORS.primary} />
@@ -191,7 +200,7 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Ionicons name="construct-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.cardTitle}>Assigned Technician</Text>
+              <Text style={styles.cardTitle}>{t('taskDetailScreen.assignedTechnician')}</Text>
             </View>
             <View style={styles.customerRow}>
               {assignment.technician.profile_picture_url ? (
@@ -217,7 +226,7 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
                     style={styles.contactLine}
                     onPress={() => {
                       const url = `tel:${(assignment.technician!.phone || '').replace(/\s/g, '')}`;
-                      Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open phone.'));
+                      Linking.openURL(url).catch(() => Alert.alert(t('common.error'), t('supervisorDashboard.couldNotOpenPhone')));
                     }}
                   >
                     <Ionicons name="call-outline" size={16} color={COLORS.primary} />
@@ -233,19 +242,19 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="information-circle-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>Overview</Text>
+            <Text style={styles.cardTitle}>{t('taskDetailScreen.overview')}</Text>
           </View>
           {assignment.job_time ? (
             <View style={styles.row}>
               <Ionicons name="time-outline" size={18} color={COLORS.textSecondary} />
-              <Text style={styles.rowLabel}>Scheduled</Text>
+              <Text style={styles.rowLabel}>{t('taskDetailScreen.scheduled')}</Text>
               <Text style={styles.rowValue}>{assignment.job_time}</Text>
             </View>
           ) : null}
           {assignment.location ? (
             <View style={styles.row}>
               <Ionicons name="location-outline" size={18} color={COLORS.textSecondary} />
-              <Text style={styles.rowLabel}>Location</Text>
+              <Text style={styles.rowLabel}>{t('taskDetailScreen.location')}</Text>
               <Text style={styles.rowValue}>{assignment.location}</Text>
             </View>
           ) : null}
@@ -255,15 +264,15 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="construct-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>Service</Text>
+            <Text style={styles.cardTitle}>{t('taskDetailScreen.service')}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Duration</Text>
+            <Text style={styles.rowLabel}>{t('taskDetailScreen.duration')}</Text>
             <Text style={styles.rowValue}>{formatDuration(assignment.duration_minutes)}</Text>
           </View>
           {assignment.price_display ? (
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>Price</Text>
+              <Text style={styles.rowLabel}>{t('taskDetailScreen.price')}</Text>
               <Text style={[styles.rowValue, styles.price]}>{assignment.price_display}</Text>
             </View>
           ) : null}
@@ -274,7 +283,7 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Ionicons name="document-text-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.cardTitle}>Notes</Text>
+              <Text style={styles.cardTitle}>{t('taskDetailScreen.notes')}</Text>
             </View>
             <Text style={styles.notesText}>{assignment.notes.trim()}</Text>
           </View>

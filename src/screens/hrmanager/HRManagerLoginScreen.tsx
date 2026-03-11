@@ -12,12 +12,14 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { Button } from '../../components/common/Button';
 import { authService } from '../../services/authService';
 import { useAppStore } from '../../store';
 
 const HRManagerLoginScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const { setUser, setAuthenticated } = useAppStore();
   const [email, setEmail] = useState('');
@@ -28,7 +30,7 @@ const HRManagerLoginScreen: React.FC = () => {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter your email and password');
+      Alert.alert(t('common.error'), t('admin.hrManagerLogin.errorEnterCredentials'));
       return;
     }
 
@@ -45,7 +47,7 @@ const HRManagerLoginScreen: React.FC = () => {
       // Verify the role is hr
       const userRole = response.data?.role || response.data?.user?.role;
       if (userRole !== 'hr') {
-        Alert.alert('Access Denied', 'This account is not authorized for HR manager access.');
+        Alert.alert(t('admin.hrManagerLogin.accessDenied'), t('admin.hrManagerLogin.accessDeniedMessage'));
         setIsLoading(false);
         return;
       }
@@ -62,16 +64,15 @@ const HRManagerLoginScreen: React.FC = () => {
     } catch (err: any) {
       console.error('HR Manager login error:', err);
       
-      const errorMessage = 
-        err.response?.data?.message || 
-        err.message || 
-        'Login failed. Please check your credentials and try again.';
-      
+      const errorMessage =
+        err.response?.data?.message ||
+        err.message ||
+        t('admin.hrManagerLogin.loginFailed');
       setError(errorMessage);
       Alert.alert(
-        'Login Error',
+        t('admin.hrManagerLogin.loginError'),
         errorMessage,
-        [{ text: 'OK' }]
+        [{ text: t('common.ok') }]
       );
     } finally {
       setIsLoading(false);
@@ -92,8 +93,8 @@ const HRManagerLoginScreen: React.FC = () => {
           <View style={styles.iconCircle}>
             <Ionicons name="briefcase" size={64} color={COLORS.primary} />
           </View>
-          <Text style={styles.title}>HR Manager Login</Text>
-          <Text style={styles.subtitle}>Human Resources Access</Text>
+          <Text style={styles.title}>{t('admin.hrManagerLogin.title')}</Text>
+          <Text style={styles.subtitle}>{t('admin.hrManagerLogin.subtitle')}</Text>
         </View>
 
         {/* Login Form */}
@@ -106,12 +107,12 @@ const HRManagerLoginScreen: React.FC = () => {
 
           {/* Email Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>{t('admin.hrManagerLogin.email')}</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="mail-outline" size={20} color={COLORS.textSecondary} />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your email"
+                placeholder={t('admin.hrManagerLogin.emailPlaceholder')}
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
@@ -126,12 +127,12 @@ const HRManagerLoginScreen: React.FC = () => {
 
           {/* Password Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>{t('admin.hrManagerLogin.password')}</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your password"
+                placeholder={t('admin.hrManagerLogin.passwordPlaceholder')}
                 value={password}
                 onChangeText={(text) => {
                   setPassword(text);
@@ -152,12 +153,12 @@ const HRManagerLoginScreen: React.FC = () => {
 
           {/* Forgot Password */}
           <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            <Text style={styles.forgotPasswordText}>{t('admin.hrManagerLogin.forgotPassword')}</Text>
           </TouchableOpacity>
 
           {/* Login Button */}
           <Button
-            title={isLoading ? 'Signing in...' : 'Sign In'}
+            title={isLoading ? t('admin.hrManagerLogin.signingIn') : t('admin.hrManagerLogin.signIn')}
             onPress={handleLogin}
             loading={isLoading}
             disabled={isLoading}
@@ -168,7 +169,7 @@ const HRManagerLoginScreen: React.FC = () => {
           <View style={styles.infoBox}>
             <Ionicons name="information-circle-outline" size={20} color={COLORS.info} />
             <Text style={styles.infoText}>
-              HR Managers handle employee management and scheduling
+              {t('admin.hrManagerLogin.infoText')}
             </Text>
           </View>
         </View>
@@ -186,7 +187,7 @@ const HRManagerLoginScreen: React.FC = () => {
           }}
         >
           <Ionicons name="arrow-back" size={20} color={COLORS.primary} />
-          <Text style={styles.backText}>Back to Role Selection</Text>
+          <Text style={styles.backText}>{t('admin.hrManagerLogin.backToRoles')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

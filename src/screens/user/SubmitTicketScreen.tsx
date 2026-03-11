@@ -30,15 +30,15 @@ const SubmitTicketScreen: React.FC = () => {
     const trimmedEmail = email.trim();
     const trimmedDescription = description.trim();
     if (!trimmedSubject) {
-      Alert.alert(t('common.error', 'Error'), t('helpCenter.submitTicket.subjectPlaceholder', 'Please enter a subject.'));
+      Alert.alert(t('common.error'), t('helpCenter.submitTicket.subjectPlaceholder'));
       return;
     }
     if (!trimmedEmail) {
-      Alert.alert(t('common.error', 'Error'), t('helpCenter.submitTicket.emailPlaceholder', 'Please enter your email.'));
+      Alert.alert(t('common.error'), t('helpCenter.submitTicket.emailPlaceholder'));
       return;
     }
     if (!trimmedDescription) {
-      Alert.alert(t('common.error', 'Error'), t('helpCenter.submitTicket.messagePlaceholder', 'Please enter your message.'));
+      Alert.alert(t('common.error'), t('helpCenter.submitTicket.messagePlaceholder'));
       return;
     }
 
@@ -50,14 +50,14 @@ const SubmitTicketScreen: React.FC = () => {
         Alert.alert(
           t('helpCenter.submitTicket.successTitle'),
           t('helpCenter.submitTicket.successMessage'),
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
+          [{ text: t('common.ok'), onPress: () => navigation.goBack() }]
         );
       } else {
-        Alert.alert(t('common.error', 'Error'), result.message || t('helpCenter.submitTicket.errorMessage'));
+        Alert.alert(t('common.error'), result.message || t('helpCenter.submitTicket.errorMessage'));
       }
     } catch {
       setSubmitting(false);
-      Alert.alert(t('common.error', 'Error'), t('helpCenter.submitTicket.errorMessage'));
+      Alert.alert(t('common.error'), t('helpCenter.submitTicket.errorMessage'));
     }
   };
 
@@ -97,7 +97,7 @@ const SubmitTicketScreen: React.FC = () => {
               style={styles.input}
               value={email}
               onChangeText={setEmail}
-              placeholder={t('helpCenter.submitTicket.emailPlaceholder', 'Your email address')}
+              placeholder={t('helpCenter.submitTicket.emailPlaceholder')}
               placeholderTextColor={COLORS.textSecondary}
               editable={!submitting}
               keyboardType="email-address"

@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import {
   COLORS,
@@ -29,6 +30,7 @@ import {
 const todayStr = () => dayjs().format('YYYY-MM-DD');
 
 const TeamMemberProgressScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const params = route.params as {
@@ -52,7 +54,7 @@ const TeamMemberProgressScreen: React.FC = () => {
 
   const load = useCallback(async (isRefresh = false) => {
     if (memberId == null) {
-      setError('No member selected.');
+      setError(t('memberProgressScreen.noMemberSelected'));
       setLoading(false);
       return;
     }
@@ -71,14 +73,14 @@ const TeamMemberProgressScreen: React.FC = () => {
         (a) => a.technician_id === memberId && (a.scheduled_date || '').startsWith(today)
       );
       setJobsToday(forToday);
-      if (!memberRes && !isRefresh) setError('Could not load member.');
+      if (!memberRes && !isRefresh) setError(t('memberProgressScreen.couldNotLoadMember'));
     } catch {
-      if (!isRefresh) setError('Could not load data.');
+      if (!isRefresh) setError(t('memberProgressScreen.couldNotLoadData'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [memberId]);
+  }, [memberId, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -109,11 +111,11 @@ const TeamMemberProgressScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Member Progress</Text>
+          <Text style={styles.headerTitle}>{t('memberProgressScreen.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
-          <Text style={styles.errorText}>No member selected.</Text>
+          <Text style={styles.errorText}>{t('memberProgressScreen.noMemberSelected')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -126,12 +128,12 @@ const TeamMemberProgressScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Member Progress</Text>
+          <Text style={styles.headerTitle}>{t('memberProgressScreen.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('memberProgressScreen.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -144,13 +146,13 @@ const TeamMemberProgressScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Member Progress</Text>
+          <Text style={styles.headerTitle}>{t('memberProgressScreen.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={() => load()}>
-            <Text style={styles.retryBtnText}>Retry</Text>
+            <Text style={styles.retryBtnText}>{t('memberProgressScreen.retry')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -163,7 +165,7 @@ const TeamMemberProgressScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Member Progress</Text>
+        <Text style={styles.headerTitle}>{t('memberProgressScreen.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -181,7 +183,7 @@ const TeamMemberProgressScreen: React.FC = () => {
             <Text style={styles.avatarLetter}>{displayInitial}</Text>
           </View>
           <Text style={styles.heroName}>{displayName}</Text>
-          <Text style={styles.heroSubtitle}>Today’s progress</Text>
+          <Text style={styles.heroSubtitle}>{t('memberProgressScreen.todaysProgress')}</Text>
         </View>
 
         {/* Stats row */}
@@ -191,14 +193,14 @@ const TeamMemberProgressScreen: React.FC = () => {
               <Ionicons name="checkmark-circle" size={28} color={COLORS.success} />
             </View>
             <Text style={styles.statNumber}>{completedCount}</Text>
-            <Text style={styles.statLabel}>Completed today</Text>
+            <Text style={styles.statLabel}>{t('memberProgressScreen.completedToday')}</Text>
           </View>
           <View style={styles.statCard}>
             <View style={[styles.statIconWrap, { backgroundColor: COLORS.primary + '22' }]}>
               <Ionicons name="briefcase-outline" size={28} color={COLORS.primary} />
             </View>
             <Text style={styles.statNumber}>{totalToday}</Text>
-            <Text style={styles.statLabel}>Jobs today</Text>
+            <Text style={styles.statLabel}>{t('memberProgressScreen.jobsToday')}</Text>
           </View>
           <View style={styles.statCard}>
             <View style={[styles.statIconWrap, { backgroundColor: COLORS.warning + '22' }]}>
@@ -207,14 +209,14 @@ const TeamMemberProgressScreen: React.FC = () => {
             <Text style={styles.statNumber}>
               {passedRating === 0 ? '0' : passedRating.toFixed(1)}
             </Text>
-            <Text style={styles.statLabel}>Rating</Text>
+            <Text style={styles.statLabel}>{t('memberProgressScreen.rating')}</Text>
           </View>
         </View>
 
         {/* Progress bar */}
         <View style={styles.progressCard}>
           <View style={styles.progressHeader}>
-            <Text style={styles.progressTitle}>Today’s completion</Text>
+            <Text style={styles.progressTitle}>{t('memberProgressScreen.todaysCompletion')}</Text>
             <Text style={styles.progressPercent}>{progressPercent}%</Text>
           </View>
           <View style={styles.progressTrack}>
@@ -226,11 +228,11 @@ const TeamMemberProgressScreen: React.FC = () => {
 
         {/* Jobs today list */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Jobs today</Text>
+          <Text style={styles.sectionTitle}>{t('memberProgressScreen.jobsToday')}</Text>
           {jobsToday.length === 0 ? (
             <View style={styles.emptyJobs}>
               <Ionicons name="calendar-outline" size={48} color={COLORS.textSecondary} />
-              <Text style={styles.emptyJobsText}>No jobs scheduled for today</Text>
+              <Text style={styles.emptyJobsText}>{t('memberProgressScreen.noJobsScheduled')}</Text>
             </View>
           ) : (
             jobsToday.map((job) => {
@@ -257,7 +259,7 @@ const TeamMemberProgressScreen: React.FC = () => {
                       <Text style={styles.jobService}>{job.service_name}</Text>
                       <View style={[styles.jobBadge, isCompleted && styles.jobBadgeDone]}>
                         <Text style={[styles.jobBadgeText, isCompleted && styles.jobBadgeTextDone]}>
-                          {isCompleted ? 'Done' : 'Pending'}
+                          {isCompleted ? t('memberProgressScreen.done') : t('memberProgressScreen.pending')}
                         </Text>
                       </View>
                     </View>

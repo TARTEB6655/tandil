@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
@@ -21,6 +22,7 @@ import {
 dayjs.extend(relativeTime);
 
 const RegionAlertsScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [alerts, setAlerts] = useState<AreaManagerDashboardAlert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,12 +92,12 @@ const RegionAlertsScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Region Alerts</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerDashboard.regionAlerts')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('admin.areaManagerDashboard.loading')}</Text>
         </View>
       </View>
     );
@@ -107,7 +109,7 @@ const RegionAlertsScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Region Alerts</Text>
+        <Text style={styles.headerTitle}>{t('admin.areaManagerDashboard.regionAlerts')}</Text>
         <View style={styles.headerSpacer} />
       </View>
       <FlatList
@@ -118,7 +120,7 @@ const RegionAlertsScreen: React.FC = () => {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="notifications-off-outline" size={48} color={COLORS.textSecondary} />
-            <Text style={styles.emptyText}>No alerts at this time.</Text>
+            <Text style={styles.emptyText}>{t('admin.areaManagerDashboard.noAlerts')}</Text>
           </View>
         }
         refreshControl={

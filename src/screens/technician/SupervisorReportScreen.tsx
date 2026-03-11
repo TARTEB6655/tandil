@@ -43,18 +43,18 @@ const SupervisorReportScreen: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
 
   const [reportOptions, setReportOptions] = useState<ReportOption[]>([
-    { id: 'fertilizer', label: 'Needs Fertilizer', icon: 'nutrition-outline', selected: false },
-    { id: 'vitamins', label: 'Needs Vitamins', icon: 'medical-outline', selected: false },
-    { id: 'watering', label: 'Needs Watering', icon: 'water-outline', selected: false },
-    { id: 'soil', label: 'Needs New Soil', icon: 'cube-outline', selected: false },
-    { id: 'pruning', label: 'Needs Pruning', icon: 'cut-outline', selected: false },
+    { id: 'fertilizer', label: 'needsFertilizer', icon: 'nutrition-outline', selected: false },
+    { id: 'vitamins', label: 'needsVitamins', icon: 'medical-outline', selected: false },
+    { id: 'watering', label: 'needsWatering', icon: 'water-outline', selected: false },
+    { id: 'soil', label: 'needsNewSoil', icon: 'cube-outline', selected: false },
+    { id: 'pruning', label: 'needsPruning', icon: 'cut-outline', selected: false },
   ]);
 
   useFocusEffect(
     useCallback(() => {
       if (reportId == null) {
         setLoading(false);
-        setError('Report ID is missing.');
+        setError(t('supervisorReport.reportIdMissing'));
         return;
       }
       let cancelled = false;
@@ -68,17 +68,17 @@ const SupervisorReportScreen: React.FC = () => {
             setSupervisorNotes(data.supervisor_notes ?? '');
           } else if (!cancelled) {
             setReport(null);
-            setError('Failed to load report.');
+            setError(t('supervisorReport.loadFailed'));
           }
         })
         .catch(() => {
-          if (!cancelled) setError('Failed to load report.');
+          if (!cancelled) setError(t('supervisorReport.loadFailed'));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
         });
       return () => { cancelled = true; };
-    }, [reportId])
+    }, [reportId, t])
   );
 
   const toggleOption = (id: string) => {
@@ -90,20 +90,20 @@ const SupervisorReportScreen: React.FC = () => {
   const handleSubmitReport = async () => {
     const selectedOptions = reportOptions.filter(opt => opt.selected);
     if (selectedOptions.length === 0) {
-      Alert.alert('Selection Required', 'Please select at least one recommendation');
+      Alert.alert(t('supervisorReport.selectionRequired'), t('supervisorReport.selectOneRecommendation'));
       return;
     }
     if (!report) return;
     const visitId = report.visit_id;
-    const recommendations = selectedOptions.map(opt => opt.label);
+    const recommendations = selectedOptions.map(opt => t(`supervisorReport.${opt.label}`));
     const customerName = report.visit?.client_name ?? report.location ?? 'client';
     const confirm = await new Promise<boolean>((resolve) => {
       Alert.alert(
-        'Submit Supervisor Report',
-        `Send report to ${customerName} with recommendations: ${recommendations.join(', ')}?`,
+        t('supervisorReport.submitTitle'),
+        t('supervisorReport.submitMessage', { name: customerName, list: recommendations.join(', ') }),
         [
-          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Send Report', onPress: () => resolve(true) },
+          { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+          { text: t('supervisorReport.sendReport'), onPress: () => resolve(true) },
         ]
       );
     });
@@ -116,14 +116,14 @@ const SupervisorReportScreen: React.FC = () => {
         recommendations,
       });
       if (result.success) {
-        Alert.alert('Success', result.message ?? 'Supervisor report sent to client successfully!', [
-          { text: 'OK', onPress: () => navigation.goBack() },
+        Alert.alert(t('common.success'), result.message ?? t('supervisorReport.sentSuccess'), [
+          { text: t('common.ok'), onPress: () => navigation.goBack() },
         ]);
       } else {
-        Alert.alert('Error', result.message ?? 'Failed to submit report.');
+        Alert.alert(t('common.error'), result.message ?? t('supervisorReport.submitFailed'));
       }
     } catch {
-      Alert.alert('Error', 'Failed to submit report. Please try again.');
+      Alert.alert(t('common.error'), t('supervisorReport.tryAgain'));
     } finally {
       setSubmitting(false);
     }
@@ -141,7 +141,7 @@ const SupervisorReportScreen: React.FC = () => {
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading report…</Text>
+          <Text style={styles.loadingText}>{t('supervisorReport.loadingReport')}</Text>
         </View>
       </View>
     );
@@ -158,7 +158,7 @@ const SupervisorReportScreen: React.FC = () => {
           <View style={styles.placeholder} />
         </View>
         <View style={styles.centered}>
-          <Text style={styles.errorText}>{error ?? 'Report not found.'}</Text>
+          <Text style={styles.errorText}>{error ?? t('supervisorReport.reportNotFound')}</Text>
         </View>
       </View>
     );
@@ -189,7 +189,7 @@ const SupervisorReportScreen: React.FC = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Technician Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Field Worker</Text>
+          <Text style={styles.sectionTitle}>{t('supervisorReport.fieldWorker')}</Text>
           <View style={styles.techCard}>
             <View style={styles.techInfo}>
               <View style={styles.avatar}>
@@ -199,7 +199,7 @@ const SupervisorReportScreen: React.FC = () => {
               </View>
               <View>
                 <Text style={styles.techName}>{report.technician_name}</Text>
-                <Text style={styles.techId}>ID: {report.employee_id}</Text>
+                <Text style={styles.techId}>{t('supervisorDashboard.idPrefix')}{report.employee_id}</Text>
               </View>
             </View>
           </View>
@@ -207,7 +207,7 @@ const SupervisorReportScreen: React.FC = () => {
 
         {/* Visit Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Visit Information</Text>
+          <Text style={styles.sectionTitle}>{t('supervisorReport.visitInformation')}</Text>
           <View style={styles.visitCard}>
             <Text style={styles.customerName}>{displayLocation}</Text>
             <Text style={styles.serviceName}>{report.service}</Text>
@@ -226,21 +226,21 @@ const SupervisorReportScreen: React.FC = () => {
 
         {/* Field Notes */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Field Notes</Text>
+          <Text style={styles.sectionTitle}>{t('supervisorReport.fieldNotes')}</Text>
           <View style={styles.notesCard}>
             <Text style={styles.notesText}>
-              {report.technician_notes ?? 'No notes provided.'}
+              {report.technician_notes ?? t('supervisorReport.noNotesProvided')}
             </Text>
           </View>
         </View>
 
         {/* Photos */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Field Photos</Text>
+          <Text style={styles.sectionTitle}>{t('supervisorReport.fieldPhotos')}</Text>
           <View style={styles.photosContainer}>
             {report.before_photos?.length > 0 && (
               <>
-                <Text style={styles.photoLabel}>Before</Text>
+                <Text style={styles.photoLabel}>{t('supervisorReport.before')}</Text>
                 {report.before_photos.map((p) => (
                   <Image key={p.id} source={{ uri: p.photo_url }} style={styles.photo} />
                 ))}
@@ -248,25 +248,25 @@ const SupervisorReportScreen: React.FC = () => {
             )}
             {report.after_photos?.length > 0 && (
               <>
-                <Text style={styles.photoLabel}>After</Text>
+                <Text style={styles.photoLabel}>{t('supervisorReport.after')}</Text>
                 {report.after_photos.map((p) => (
                   <Image key={p.id} source={{ uri: p.photo_url }} style={styles.photo} />
                 ))}
               </>
             )}
             {(!report.before_photos?.length && !report.after_photos?.length) && (
-              <Text style={styles.noPhotosText}>No photos</Text>
+              <Text style={styles.noPhotosText}>{t('supervisorReport.noPhotos')}</Text>
             )}
           </View>
         </View>
 
         {/* Supervisor Notes */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Supervisor Notes</Text>
+          <Text style={styles.sectionTitle}>{t('supervisorReport.supervisorNotes')}</Text>
           <View style={styles.notesCard}>
             <TextInput
               style={styles.supervisorNotesInput}
-              placeholder="Add your notes about this report…"
+              placeholder={t('supervisorReport.supervisorNotesPlaceholder')}
               placeholderTextColor={COLORS.textSecondary}
               value={supervisorNotes}
               onChangeText={setSupervisorNotes}
@@ -278,9 +278,9 @@ const SupervisorReportScreen: React.FC = () => {
 
         {/* Supervisor Recommendations */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Recommendations</Text>
+          <Text style={styles.sectionTitle}>{t('supervisorReport.selectRecommendations')}</Text>
           <Text style={styles.sectionSubtitle}>
-            Choose what the farm needs based on the field report
+            {t('supervisorReport.selectRecommendationsSubtitle')}
           </Text>
           <View style={styles.optionsContainer}>
             {reportOptions.map((option) => (
@@ -306,7 +306,7 @@ const SupervisorReportScreen: React.FC = () => {
                   styles.optionLabel,
                   option.selected && styles.optionLabelSelected
                 ]}>
-                  {option.label}
+                  {t(`supervisorReport.${option.label}`)}
                 </Text>
                 {option.selected && (
                   <Ionicons name="checkmark-circle" size={24} color={COLORS.primary} />
@@ -319,7 +319,7 @@ const SupervisorReportScreen: React.FC = () => {
         {/* Submit Button */}
         <View style={styles.section}>
           <Button
-            title={submitting ? 'Sending…' : 'Submit Report to Client'}
+            title={submitting ? t('supervisorReport.sending') : t('supervisorReport.submitButton')}
             onPress={handleSubmitReport}
             style={styles.submitButton}
             disabled={submitting}

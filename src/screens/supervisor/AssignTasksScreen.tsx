@@ -14,11 +14,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { getSupervisorTeam, getSupervisorAssignments, assignSupervisorAssignment, SupervisorTeamMember, SupervisorAssignment } from '../../services/supervisorService';
 
 const AssignTasksScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [teamMembers, setTeamMembers] = useState<SupervisorTeamMember[]>([]);
   const [assignments, setAssignments] = useState<SupervisorAssignment[]>([]);
@@ -87,7 +89,7 @@ const AssignTasksScreen: React.FC = () => {
             {item.status || '—'}
           </Text>
         </View>
-        <Text style={styles.teamCardTasks}>Tasks: {item.tasks_display || '0/0'}</Text>
+        <Text style={styles.teamCardTasks}>{t('supervisorDashboard.tasksLabel')}{item.tasks_display || '0/0'}</Text>
       </TouchableOpacity>
     );
   };
@@ -101,7 +103,7 @@ const AssignTasksScreen: React.FC = () => {
 
   const handleAssign = async (job: SupervisorAssignment) => {
     if (!selectedMemberId) {
-      Alert.alert('Select a member', 'Please select a team member first.');
+      Alert.alert(t('assignTasksScreen.selectMemberTitle'), t('assignTasksScreen.selectMemberMessage'));
       return;
     }
     setAssigningId(job.id);
@@ -111,19 +113,19 @@ const AssignTasksScreen: React.FC = () => {
         const member = teamMembers.find((m) => m.id === selectedMemberId);
         const dateStr = dayjs(scheduleDate).format('MMM D, YYYY');
         Alert.alert(
-          'Assigned',
-          `"${job.service_name}" assigned to ${member?.name ?? 'technician'} for ${dateStr}.`,
-          [{ text: 'OK', onPress: () => {
+          t('assignTasksScreen.assignedTitle'),
+          t('assignTasksScreen.assignedMessage', { service: job.service_name, name: member?.name ?? 'technician', date: dateStr }),
+          [{ text: t('common.ok'), onPress: () => {
             setAssignments((prev) => prev.filter((a) => a.id !== job.id));
           } }]
         );
       } else {
-        Alert.alert('Assign failed', result.message ?? 'Could not assign task. Try again.');
+        Alert.alert(t('assignTasksScreen.assignFailedTitle'), result.message ?? t('assignTasksScreen.assignFailedMessage'));
       }
     } catch (e: any) {
       Alert.alert(
-        'Assign failed',
-        e?.response?.data?.message ?? e?.message ?? 'Could not assign task. Try again.'
+        t('assignTasksScreen.assignFailedTitle'),
+        e?.response?.data?.message ?? e?.message ?? t('assignTasksScreen.assignFailedMessage')
       );
     } finally {
       setAssigningId(null);
@@ -142,7 +144,7 @@ const AssignTasksScreen: React.FC = () => {
         </View>
         <View style={styles.taskContent}>
           <Text style={styles.taskTitle}>{item.service_name}</Text>
-          <Text style={styles.taskMeta}>Duration: {formatDuration(item.duration_minutes)}</Text>
+          <Text style={styles.taskMeta}>{t('assignTasksScreen.duration')} {formatDuration(item.duration_minutes)}</Text>
           {item.title ? <Text style={styles.taskSub} numberOfLines={1}>{item.title}</Text> : null}
           {item.location ? <Text style={styles.taskLocation} numberOfLines={1}>{item.location}</Text> : null}
         </View>
@@ -157,7 +159,7 @@ const AssignTasksScreen: React.FC = () => {
         {assigningId === item.id ? (
           <ActivityIndicator size="small" color={COLORS.background} />
         ) : (
-          <Text style={styles.assignBtnText}>Assign</Text>
+          <Text style={styles.assignBtnText}>{t('assignTasksScreen.assign')}</Text>
         )}
       </TouchableOpacity>
     </View>
@@ -169,7 +171,7 @@ const AssignTasksScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Assign Tasks</Text>
+        <Text style={styles.headerTitle}>{t('assignTasksScreen.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -178,7 +180,7 @@ const AssignTasksScreen: React.FC = () => {
         <View style={styles.scheduleCard}>
           <Ionicons name="calendar-outline" size={24} color={COLORS.primary} />
           <View style={styles.scheduleContent}>
-            <Text style={styles.scheduleLabel}>Schedule for</Text>
+            <Text style={styles.scheduleLabel}>{t('assignTasksScreen.scheduleFor')}</Text>
             <TouchableOpacity
               style={styles.scheduleDateBtn}
               onPress={() => setShowDatePicker(true)}
@@ -200,19 +202,19 @@ const AssignTasksScreen: React.FC = () => {
         )}
         {Platform.OS === 'ios' && showDatePicker && (
           <TouchableOpacity style={styles.datePickerDone} onPress={() => setShowDatePicker(false)}>
-            <Text style={styles.datePickerDoneText}>Done</Text>
+            <Text style={styles.datePickerDoneText}>{t('assignTasksScreen.done')}</Text>
           </TouchableOpacity>
         )}
 
-        <Text style={styles.sectionTitle}>Team Members</Text>
+        <Text style={styles.sectionTitle}>{t('assignTasksScreen.teamMembers')}</Text>
         {loading ? (
           <View style={styles.teamLoading}>
             <ActivityIndicator size="small" color={COLORS.primary} />
-            <Text style={styles.teamLoadingText}>Loading team…</Text>
+            <Text style={styles.teamLoadingText}>{t('assignTasksScreen.loadingTeam')}</Text>
           </View>
         ) : teamMembers.length === 0 ? (
           <View style={styles.teamEmpty}>
-            <Text style={styles.teamEmptyText}>No team members. Add members from Zones & Teams.</Text>
+            <Text style={styles.teamEmptyText}>{t('assignTasksScreen.emptyTeam')}</Text>
           </View>
         ) : (
           <FlatList
@@ -227,15 +229,15 @@ const AssignTasksScreen: React.FC = () => {
       </View>
 
       {/* Scrollable: Available Tasks only */}
-      <Text style={[styles.sectionTitle, styles.taskListSectionTitle]}>Available Tasks</Text>
+      <Text style={[styles.sectionTitle, styles.taskListSectionTitle]}>{t('assignTasksScreen.availableTasks')}</Text>
       {tasksLoading ? (
         <View style={styles.tasksLoadingBox}>
           <ActivityIndicator size="small" color={COLORS.primary} />
-          <Text style={styles.teamLoadingText}>Loading tasks…</Text>
+          <Text style={styles.teamLoadingText}>{t('assignTasksScreen.loadingTasks')}</Text>
         </View>
       ) : assignments.length === 0 ? (
         <View style={styles.tasksEmptyBox}>
-          <Text style={styles.teamEmptyText}>No available tasks. Check back later.</Text>
+          <Text style={styles.teamEmptyText}>{t('assignTasksScreen.emptyTasks')}</Text>
         </View>
       ) : (
         <ScrollView

@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../../constants';
 import {
   getAreaManagerAnalytics,
@@ -17,10 +18,10 @@ import {
   AreaManagerAnalyticsPeriod,
 } from '../../services/areaManagerService';
 
-const PERIOD_OPTIONS: { value: AreaManagerAnalyticsPeriod; label: string }[] = [
-  { value: 'today', label: 'Today' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
+const PERIOD_KEYS: { value: AreaManagerAnalyticsPeriod; labelKey: 'today' | 'week' | 'month' }[] = [
+  { value: 'today', labelKey: 'today' },
+  { value: 'week', labelKey: 'week' },
+  { value: 'month', labelKey: 'month' },
 ];
 
 const TREND_BAR_MAX_HEIGHT = 72;
@@ -34,6 +35,7 @@ function formatAvgTime(minutes: number): string {
 }
 
 const AnalyticsScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [period, setPeriod] = useState<AreaManagerAnalyticsPeriod>('week');
   const [data, setData] = useState<AreaManagerAnalyticsData | null>(null);
@@ -47,11 +49,11 @@ const AnalyticsScreen: React.FC = () => {
     getAreaManagerAnalytics(period)
       .then((res) => {
         setData(res ?? null);
-        if (!res) setError('Failed to load analytics.');
+        if (!res) setError(t('admin.areaManagerAnalytics.failedToLoad'));
       })
-      .catch(() => setError('Failed to load analytics.'))
+      .catch(() => setError(t('admin.areaManagerAnalytics.failedToLoad')))
       .finally(() => setLoading(false));
-  }, [period]);
+  }, [period, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -90,12 +92,12 @@ const AnalyticsScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Analytics</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerAnalytics.title')}</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('admin.areaManagerAnalytics.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -108,7 +110,7 @@ const AnalyticsScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Analytics</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerAnalytics.title')}</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.centered}>
@@ -124,7 +126,7 @@ const AnalyticsScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Analytics</Text>
+        <Text style={styles.headerTitle}>{t('admin.areaManagerAnalytics.title')}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -134,7 +136,7 @@ const AnalyticsScreen: React.FC = () => {
       >
         {/* Period Filters */}
         <View style={styles.filtersRow}>
-          {PERIOD_OPTIONS.map((opt) => (
+          {PERIOD_KEYS.map((opt) => (
             <TouchableOpacity
               key={opt.value}
               style={[styles.filterChip, period === opt.value && styles.filterChipActive]}
@@ -146,7 +148,7 @@ const AnalyticsScreen: React.FC = () => {
                   period === opt.value && styles.filterTextActive,
                 ]}
               >
-                {opt.label}
+                {t(`admin.areaManagerAnalytics.${opt.labelKey}`)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -159,14 +161,14 @@ const AnalyticsScreen: React.FC = () => {
               <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
             </View>
             <Text style={styles.gridValue}>{visits}</Text>
-            <Text style={styles.gridLabel}>Visits</Text>
+            <Text style={styles.gridLabel}>{t('admin.areaManagerAnalytics.visits')}</Text>
           </View>
           <View style={styles.gridItem}>
             <View style={[styles.iconCircle, { backgroundColor: COLORS.success + '20' }]}>
               <Ionicons name="checkmark-done-outline" size={18} color={COLORS.success} />
             </View>
             <Text style={styles.gridValue}>{Math.round(completionPercent)}%</Text>
-            <Text style={styles.gridLabel}>Completion</Text>
+            <Text style={styles.gridLabel}>{t('admin.areaManagerAnalytics.completion')}</Text>
             <View style={styles.progressTrack}>
               <View
                 style={[
@@ -184,20 +186,20 @@ const AnalyticsScreen: React.FC = () => {
               <Ionicons name="time-outline" size={18} color={COLORS.warning} />
             </View>
             <Text style={styles.gridValue}>{formatAvgTime(avgTimeMinutes)}</Text>
-            <Text style={styles.gridLabel}>Avg Time</Text>
+            <Text style={styles.gridLabel}>{t('admin.areaManagerAnalytics.avgTime')}</Text>
           </View>
           <View style={styles.gridItem}>
             <View style={[styles.iconCircle, { backgroundColor: COLORS.primary + '20' }]}>
               <Ionicons name="people-outline" size={18} color={COLORS.primary} />
             </View>
             <Text style={styles.gridValue}>{activeTeams}</Text>
-            <Text style={styles.gridLabel}>Active Teams</Text>
+            <Text style={styles.gridLabel}>{t('admin.areaManagerAnalytics.activeTeams')}</Text>
           </View>
         </View>
 
         {/* Weekly Trend */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Weekly Trend</Text>
+          <Text style={styles.cardTitle}>{t('admin.areaManagerAnalytics.weeklyTrend')}</Text>
           <View style={styles.barsRow}>
             {barHeights.length > 0 ? (
               barHeights.map((h, i) => (
@@ -217,18 +219,21 @@ const AnalyticsScreen: React.FC = () => {
 
         {/* Top Teams */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Top Teams</Text>
+          <Text style={styles.cardTitle}>{t('admin.areaManagerAnalytics.topTeams')}</Text>
           {topTeams.length === 0 ? (
-            <Text style={styles.emptyTeamsText}>No teams yet</Text>
+            <Text style={styles.emptyTeamsText}>{t('admin.areaManagerAnalytics.noTeamsYet')}</Text>
           ) : (
-            topTeams.map((t) => (
-              <View key={t.id} style={styles.teamRow}>
+            topTeams.map((team) => (
+              <View key={team.id} style={styles.teamRow}>
                 <View style={[styles.iconCircle, { backgroundColor: COLORS.primary + '10' }]}>
                   <Ionicons name="ribbon-outline" size={18} color={COLORS.primary} />
                 </View>
-                <Text style={styles.teamName}>{t.employee_id}</Text>
+                <Text style={styles.teamName}>{team.employee_id}</Text>
                 <Text style={styles.teamMetric}>
-                  {t.visits} visits • {(typeof t.rating === 'number' ? t.rating : Number(t.rating) || 0).toFixed(1)}★
+                  {t('admin.areaManagerAnalytics.visitsAndRating', {
+                    count: team.visits,
+                    rating: (typeof team.rating === 'number' ? team.rating : Number(team.rating) || 0).toFixed(1),
+                  })}
                 </Text>
               </View>
             ))

@@ -11,6 +11,7 @@ import MapView, { Marker, Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import {
   getAreaManagerRegionMap,
@@ -81,6 +82,7 @@ export interface MapMarkerItem {
 }
 
 const RegionMapScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const { width, height } = useWindowDimensions();
   const mapHeight = Math.max(280, height * 0.5);
@@ -100,7 +102,7 @@ const RegionMapScreen: React.FC = () => {
       getAreaManagerRegionMap()
         .then((regionData) => {
           if (cancelled || !regionData) {
-            if (!cancelled) setError(regionData ? null : 'Failed to load region map.');
+            if (!cancelled) setError(regionData ? null : t('admin.areaManagerRegionMap.failedToLoad'));
             return;
           }
           setData(regionData);
@@ -143,13 +145,13 @@ const RegionMapScreen: React.FC = () => {
             });
         })
         .catch(() => {
-          if (!cancelled) setError('Failed to load region map.');
+          if (!cancelled) setError(t('admin.areaManagerRegionMap.failedToLoad'));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
         });
       return () => { cancelled = true; };
-    }, [])
+    }, [t])
   );
 
   if (loading && !data) {
@@ -159,12 +161,12 @@ const RegionMapScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Region Map</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerRegionMap.title')}</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading map…</Text>
+          <Text style={styles.loadingText}>{t('admin.areaManagerRegionMap.loadingMap')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -177,7 +179,7 @@ const RegionMapScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Region Map</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerRegionMap.title')}</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.centered}>
@@ -193,7 +195,7 @@ const RegionMapScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Region Map</Text>
+        <Text style={styles.headerTitle}>{t('admin.areaManagerRegionMap.title')}</Text>
         <View style={{ width: 24 }} />
       </View>
       <View style={[styles.mapWrap, { height: mapHeight }]}>
@@ -216,22 +218,22 @@ const RegionMapScreen: React.FC = () => {
         {(geocoding || (data && markers.length === 0 && (data.areas.length > 0 || data.team_leaders.length > 0))) && (
           <View style={styles.overlay}>
             <ActivityIndicator size="small" color={COLORS.primary} />
-            <Text style={styles.overlayText}>{geocoding ? 'Finding locations…' : 'No coordinates for locations.'}</Text>
+            <Text style={styles.overlayText}>{geocoding ? t('admin.areaManagerRegionMap.findingLocations') : t('admin.areaManagerRegionMap.noCoordinates')}</Text>
           </View>
         )}
       </View>
       <View style={styles.legend}>
-        <Text style={styles.legendTitle}>Locations</Text>
+        <Text style={styles.legendTitle}>{t('admin.areaManagerRegionMap.locations')}</Text>
         {data?.areas?.length ? (
-          <Text style={styles.legendText}>Areas: {data.areas.map((a) => a.location || a.name).filter(Boolean).join(', ') || '—'}</Text>
+          <Text style={styles.legendText}>{t('admin.areaManagerRegionMap.areas', { list: data.areas.map((a) => a.location || a.name).filter(Boolean).join(', ') || '—' })}</Text>
         ) : null}
         {data?.team_leaders?.length ? (
           <Text style={styles.legendText}>
-            Team leaders: {data.team_leaders.map((tl) => `${tl.name} (${tl.location})`).join(', ')}
+            {t('admin.areaManagerRegionMap.teamLeaders', { list: data.team_leaders.map((tl) => `${tl.name} (${tl.location})`).join(', ') })}
           </Text>
         ) : null}
         {(!data?.areas?.length && !data?.team_leaders?.length) && (
-          <Text style={styles.legendEmpty}>No areas or team leaders with location.</Text>
+          <Text style={styles.legendEmpty}>{t('admin.areaManagerRegionMap.noAreasOrLeaders')}</Text>
         )}
       </View>
     </SafeAreaView>

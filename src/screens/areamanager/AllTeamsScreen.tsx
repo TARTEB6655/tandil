@@ -4,10 +4,12 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { getAreaManagerTeamLeaders, AreaManagerTeamLeader } from '../../services/areaManagerService';
 
 const AllTeamsScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [teamLeaders, setTeamLeaders] = useState<AreaManagerTeamLeader[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,13 +27,13 @@ const AllTeamsScreen: React.FC = () => {
           }
         })
         .catch(() => {
-          if (!cancelled) setError('Failed to load teams.');
+          if (!cancelled) setError(t('admin.areaManagerAllTeams.failedToLoad'));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
         });
       return () => { cancelled = true; };
-    }, [])
+    }, [t])
   );
 
   const renderTeam = ({ item }: { item: AreaManagerTeamLeader }) => (
@@ -68,15 +70,15 @@ const AllTeamsScreen: React.FC = () => {
       <View style={styles.metricsRow}>
         <View style={styles.metricChip}>
           <Ionicons name="people-outline" size={16} color={COLORS.primary} />
-          <Text style={styles.metricText}>Team {item.team}</Text>
+          <Text style={styles.metricText}>{t('admin.areaManagerAllTeams.teamCount', { count: item.team })}</Text>
         </View>
         <View style={styles.metricChip}>
           <Ionicons name="flash-outline" size={16} color={COLORS.warning} />
-          <Text style={styles.metricText}>Active {item.active}</Text>
+          <Text style={styles.metricText}>{t('admin.areaManagerAllTeams.activeCount', { count: item.active })}</Text>
         </View>
         <View style={styles.metricChip}>
           <Ionicons name="checkmark-done-outline" size={16} color={COLORS.success} />
-          <Text style={styles.metricText}>Done {item.done}</Text>
+          <Text style={styles.metricText}>{t('admin.areaManagerAllTeams.doneCount', { count: item.done })}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -89,12 +91,12 @@ const AllTeamsScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>All Teams</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerAllTeams.title')}</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('admin.areaManagerAllTeams.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -107,7 +109,7 @@ const AllTeamsScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>All Teams</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerAllTeams.title')}</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.centered}>
@@ -123,7 +125,7 @@ const AllTeamsScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>All Teams</Text>
+        <Text style={styles.headerTitle}>{t('admin.areaManagerAllTeams.title')}</Text>
         <View style={{ width: 24 }} />
       </View>
       <FlatList

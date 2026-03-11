@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { adminService, type AdminTechnician } from '../../services/adminService';
 
@@ -18,6 +19,7 @@ const PER_PAGE = 50;
 const SEARCH_DEBOUNCE_MS = 400;
 
 const AdminTechniciansScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [technicians, setTechnicians] = useState<AdminTechnician[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,13 +41,13 @@ const AdminTechniciansScreen: React.FC = () => {
       });
       setTechnicians(res.data ?? []);
     } catch (e: any) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Failed to load technicians');
+      setError(e?.response?.data?.message ?? e?.message ?? t('admin.allTechnicians.failedToLoad'));
       setTechnicians([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -73,19 +75,19 @@ const AdminTechniciansScreen: React.FC = () => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>All Technicians</Text>
+        <Text style={styles.headerTitle}>{t('admin.allTechnicians.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       <Text style={styles.hint}>
-        See which zone and supervisor each technician is assigned to.
+        {t('admin.allTechnicians.hint')}
       </Text>
 
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by name, email, employee ID..."
+          placeholder={t('admin.allTechnicians.searchPlaceholder')}
           placeholderTextColor={COLORS.textSecondary}
           value={searchInput}
           onChangeText={setSearchInput}
@@ -101,8 +103,8 @@ const AdminTechniciansScreen: React.FC = () => {
         <View style={styles.errorBox}>
           <Ionicons name="alert-circle-outline" size={24} color={COLORS.error} />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => fetchTechnicians(searchQuery)}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={() => fetchTechnicians(searchQuery)}>
+            <Text style={styles.retryButtonText}>{t('admin.allTechnicians.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -110,7 +112,7 @@ const AdminTechniciansScreen: React.FC = () => {
       {loading && technicians.length === 0 ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading technicians...</Text>
+          <Text style={styles.loadingText}>{t('admin.allTechnicians.loading')}</Text>
         </View>
       ) : (
         <ScrollView
@@ -124,7 +126,7 @@ const AdminTechniciansScreen: React.FC = () => {
             <View style={styles.emptyBox}>
               <Ionicons name="people-outline" size={48} color={COLORS.textSecondary} />
               <Text style={styles.emptyText}>
-                {searchQuery ? 'No technicians match your search.' : 'No technicians yet.'}
+                {searchQuery ? t('admin.allTechnicians.noTechniciansSearch') : t('admin.allTechnicians.noTechniciansYet')}
               </Text>
             </View>
           ) : (
@@ -145,12 +147,12 @@ const AdminTechniciansScreen: React.FC = () => {
                   <View style={styles.techRow2}>
                     <View style={styles.badge}>
                       <Ionicons name="location-outline" size={14} color={COLORS.textSecondary} />
-                      <Text style={styles.badgeLabel}>Zone</Text>
+                      <Text style={styles.badgeLabel}>{t('admin.allTechnicians.zone')}</Text>
                       <Text style={styles.badgeValue}>{zoneName}</Text>
                     </View>
                     <View style={styles.badge}>
                       <Ionicons name="person-outline" size={14} color={COLORS.textSecondary} />
-                      <Text style={styles.badgeLabel}>Supervisor</Text>
+                      <Text style={styles.badgeLabel}>{t('admin.allTechnicians.supervisor')}</Text>
                       <Text style={styles.badgeValue}>{supervisorName}</Text>
                     </View>
                   </View>

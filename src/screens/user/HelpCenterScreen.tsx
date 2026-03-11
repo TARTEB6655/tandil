@@ -64,8 +64,8 @@ const HelpCenterScreen: React.FC = () => {
     },
     {
       icon: 'list-outline',
-      title: t('helpCenter.categories.myTickets.title', 'My Tickets'),
-      subtitle: t('helpCenter.categories.myTickets.subtitle', 'View your support tickets'),
+      title: t('helpCenter.categories.myTickets.title'),
+      subtitle: t('helpCenter.categories.myTickets.subtitle'),
       action: () => navigation.navigate('MyTickets'),
     },
   ];

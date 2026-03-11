@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { adminService, type AdminSupervisor } from '../../services/adminService';
 
@@ -18,6 +19,7 @@ const PER_PAGE = 50;
 const SEARCH_DEBOUNCE_MS = 400;
 
 const AdminSupervisorsScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [supervisors, setSupervisors] = useState<AdminSupervisor[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,13 +41,13 @@ const AdminSupervisorsScreen: React.FC = () => {
       });
       setSupervisors(res.data ?? []);
     } catch (e: any) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Failed to load supervisors');
+      setError(e?.response?.data?.message ?? e?.message ?? t('admin.supervisorsTeams.failedToLoad'));
       setSupervisors([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -70,7 +72,7 @@ const AdminSupervisorsScreen: React.FC = () => {
   const zoneDisplay = (sup: AdminSupervisor) => {
     if (sup.zone?.name) return sup.zone.name;
     if (sup.assigned_zones?.length) return sup.assigned_zones.map((z) => z.name).join(', ');
-    return 'No zone assigned';
+    return t('admin.supervisorsTeams.noZoneAssigned');
   };
 
   return (
@@ -79,17 +81,17 @@ const AdminSupervisorsScreen: React.FC = () => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Supervisors & Teams</Text>
+        <Text style={styles.headerTitle}>{t('admin.supervisorsTeams.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      <Text style={styles.hint}>Tap a supervisor to view their team and assign technicians.</Text>
+      <Text style={styles.hint}>{t('admin.supervisorsTeams.hint')}</Text>
 
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by name, email, employee ID..."
+          placeholder={t('admin.supervisorsTeams.searchPlaceholder')}
           placeholderTextColor={COLORS.textSecondary}
           value={searchInput}
           onChangeText={setSearchInput}
@@ -106,7 +108,7 @@ const AdminSupervisorsScreen: React.FC = () => {
           <Ionicons name="alert-circle-outline" size={24} color={COLORS.error} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => fetchSupervisors(searchQuery)}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t('admin.supervisorsTeams.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -114,7 +116,7 @@ const AdminSupervisorsScreen: React.FC = () => {
       {loading && supervisors.length === 0 ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading supervisors...</Text>
+          <Text style={styles.loadingText}>{t('admin.supervisorsTeams.loading')}</Text>
         </View>
       ) : (
         <ScrollView
@@ -128,7 +130,7 @@ const AdminSupervisorsScreen: React.FC = () => {
             <View style={styles.emptyBox}>
               <Ionicons name="people-outline" size={48} color={COLORS.textSecondary} />
               <Text style={styles.emptyText}>
-                {searchQuery ? 'No supervisors match your search.' : 'No supervisors yet.'}
+                {searchQuery ? t('admin.supervisorsTeams.noSupervisorsSearch') : t('admin.supervisorsTeams.noSupervisorsYet')}
               </Text>
             </View>
           ) : (

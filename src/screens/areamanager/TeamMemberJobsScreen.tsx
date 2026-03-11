@@ -11,6 +11,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import {
   getAreaManagerMemberJobs,
@@ -25,10 +26,10 @@ type RouteParams = {
   employeeId?: string;
 };
 
-const STATUS_OPTIONS: { value: AreaManagerMemberJobsStatus; label: string }[] = [
-  { value: 'processing', label: 'Processing' },
-  { value: 'all', label: 'All' },
-  { value: 'completed', label: 'Completed' },
+const STATUS_OPTIONS: { value: AreaManagerMemberJobsStatus; labelKey: 'filterProcessing' | 'filterAll' | 'filterCompleted' }[] = [
+  { value: 'processing', labelKey: 'filterProcessing' },
+  { value: 'all', labelKey: 'filterAll' },
+  { value: 'completed', labelKey: 'filterCompleted' },
 ];
 
 function getStatusColor(status?: string) {
@@ -50,12 +51,21 @@ function formatDate(value?: string) {
   }
 }
 
+const JOB_STATUS_KEYS: Record<string, string> = {
+  completed: 'statusCompleted',
+  pending_acceptance: 'statusPendingAcceptance',
+  processing: 'statusProcessing',
+  in_progress: 'statusInProgress',
+  done: 'statusDone',
+};
+
 const TeamMemberJobsScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const params = (route.params ?? {}) as RouteParams;
   const memberId = params?.memberId ?? '';
-  const fallbackName = params?.memberName ?? 'Team member';
+  const fallbackName = params?.memberName ?? t('admin.areaManagerJobs.teamMemberFallback');
   const fallbackEmployeeId = params?.employeeId ?? '';
 
   const [data, setData] = useState<AreaManagerMemberJobsData | null>(null);
@@ -67,7 +77,7 @@ const TeamMemberJobsScreen: React.FC = () => {
   const fetchJobs = useCallback(() => {
     if (!memberId) {
       setLoading(false);
-      setError('Missing member.');
+      setError(t('admin.areaManagerJobs.missingMember'));
       setData(null);
       return;
     }
@@ -76,11 +86,11 @@ const TeamMemberJobsScreen: React.FC = () => {
     getAreaManagerMemberJobs(memberId, { status: statusFilter, per_page: 20 })
       .then((res) => {
         setData(res ?? null);
-        if (!res) setError('Failed to load jobs.');
+        if (!res) setError(t('admin.areaManagerJobs.failedToLoad'));
       })
-      .catch(() => setError('Failed to load jobs.'))
+      .catch(() => setError(t('admin.areaManagerJobs.failedToLoad')))
       .finally(() => setLoading(false));
-  }, [memberId, statusFilter]);
+  }, [memberId, statusFilter, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -101,11 +111,18 @@ const TeamMemberJobsScreen: React.FC = () => {
   const memberName = teamMember?.name ?? fallbackName;
   const employeeId = teamMember?.employee_id ?? fallbackEmployeeId;
 
+  const translateStatus = (status: string | undefined): string => {
+    if (!status) return '';
+    const key = JOB_STATUS_KEYS[status.toLowerCase().replace(/\s+/g, '_')];
+    return key ? t(`admin.areaManagerJobs.${key}`) : status;
+  };
+
   const renderJob = ({ item }: { item: AreaManagerMemberJob }) => {
     const statusColor = getStatusColor(item.status);
-    const title = item.title || item.job_number || `Job #${item.id}`;
+    const title = item.title || item.job_number || t('admin.areaManagerJobs.jobNumber', { id: item.id });
     const location = item.location ?? '—';
     const dateStr = item.scheduled_at || item.created_at || item.updated_at || item.completed_at;
+    const statusLabel = translateStatus(item.status);
     return (
       <View style={styles.card}>
         <View style={[styles.statusBar, { backgroundColor: statusColor }]} />
@@ -120,9 +137,9 @@ const TeamMemberJobsScreen: React.FC = () => {
           ) : null}
           <View style={styles.footer}>
             <Text style={styles.date}>{formatDate(dateStr)}</Text>
-            {item.status ? (
+            {statusLabel ? (
               <View style={[styles.statusChip, { backgroundColor: statusColor + '22' }]}>
-                <Text style={[styles.statusText, { color: statusColor }]}>{item.status}</Text>
+                <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
               </View>
             ) : null}
           </View>
@@ -138,11 +155,11 @@ const TeamMemberJobsScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Jobs</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerJobs.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
-          <Text style={styles.errorText}>Missing member.</Text>
+          <Text style={styles.errorText}>{t('admin.areaManagerJobs.missingMember')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -154,7 +171,7 @@ const TeamMemberJobsScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Jobs</Text>
+        <Text style={styles.headerTitle}>{t('admin.areaManagerJobs.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
       <View style={styles.hero}>
@@ -179,7 +196,7 @@ const TeamMemberJobsScreen: React.FC = () => {
         </View>
         <View style={styles.jobsCount}>
           <Ionicons name="briefcase-outline" size={18} color={COLORS.background} />
-          <Text style={styles.jobsCountText}>{jobs.length} jobs</Text>
+          <Text style={styles.jobsCountText}>{t('admin.areaManagerJobs.jobsCount', { count: jobs.length })}</Text>
         </View>
       </View>
       <View style={styles.filterRow}>
@@ -198,7 +215,7 @@ const TeamMemberJobsScreen: React.FC = () => {
                 statusFilter === opt.value && styles.filterChipTextActive,
               ]}
             >
-              {opt.label}
+              {t(`admin.areaManagerJobs.${opt.labelKey}`)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -206,7 +223,7 @@ const TeamMemberJobsScreen: React.FC = () => {
       {loading && !data ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('admin.areaManagerJobs.loading')}</Text>
         </View>
       ) : error && !data ? (
         <View style={styles.centered}>
@@ -221,7 +238,7 @@ const TeamMemberJobsScreen: React.FC = () => {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="briefcase-outline" size={48} color={COLORS.textSecondary} />
-              <Text style={styles.emptyText}>No jobs assigned</Text>
+              <Text style={styles.emptyText}>{t('admin.areaManagerJobs.noJobsAssigned')}</Text>
             </View>
           }
         />

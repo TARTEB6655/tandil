@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { adminService, type AdminSupervisor, type AdminTechnician } from '../../services/adminService';
 
@@ -35,6 +36,7 @@ type SupervisorDetail = {
 };
 
 const AdminSupervisorTeamScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const supervisorParam = route.params?.supervisor as AdminSupervisor | undefined;
@@ -64,13 +66,13 @@ const AdminSupervisorTeamScreen: React.FC = () => {
       if (Array.isArray(data?.team)) setTeam(data.team);
       else setTeam([]);
     } catch (e: any) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Failed to load team');
+      setError(e?.response?.data?.message ?? e?.message ?? t('admin.supervisorTeam.failedToLoadTeam'));
       setTeam([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [supervisorId]);
+  }, [supervisorId, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -119,8 +121,8 @@ const AdminSupervisorTeamScreen: React.FC = () => {
       ]);
       setAssignModalVisible(false);
     } catch (e: any) {
-      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to add technician to team';
-      Alert.alert('Error', msg);
+      const msg = e?.response?.data?.message ?? e?.message ?? t('admin.supervisorTeam.failedToAddTechnician');
+      Alert.alert(t('admin.supervisorTeam.error'), msg);
     } finally {
       setAddingTechnicianId(null);
     }
@@ -129,20 +131,20 @@ const AdminSupervisorTeamScreen: React.FC = () => {
   const removeFromTeam = (tech: SupervisorTeamMember) => {
     if (supervisorId == null) return;
     Alert.alert(
-      'Remove from team',
-      'Remove this technician from the supervisor’s team?',
+      t('admin.supervisorTeam.removeFromTeamTitle'),
+      t('admin.supervisorTeam.removeFromTeamMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('admin.zones.cancel'), style: 'cancel' },
         {
-          text: 'Remove',
+          text: t('admin.supervisorTeam.remove'),
           style: 'destructive',
           onPress: async () => {
             try {
               await adminService.removeSupervisorTeamMember(supervisorId, tech.id);
-              setTeam((prev) => prev.filter((t) => t.id !== tech.id));
+              setTeam((prev) => prev.filter((tm) => tm.id !== tech.id));
             } catch (e: any) {
-              const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to remove technician from team';
-              Alert.alert('Error', msg);
+              const msg = e?.response?.data?.message ?? e?.message ?? t('admin.supervisorTeam.failedToRemoveTechnician');
+              Alert.alert(t('admin.supervisorTeam.error'), msg);
             }
           },
         },
@@ -156,7 +158,7 @@ const AdminSupervisorTeamScreen: React.FC = () => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.errorText}>No supervisor selected.</Text>
+        <Text style={styles.errorText}>{t('admin.supervisorTeam.noSupervisorSelected')}</Text>
       </View>
     );
   }
@@ -175,7 +177,7 @@ const AdminSupervisorTeamScreen: React.FC = () => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Supervisor Team</Text>
+        <Text style={styles.headerTitle}>{t('admin.supervisorTeam.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -184,7 +186,7 @@ const AdminSupervisorTeamScreen: React.FC = () => {
           <Ionicons name="alert-circle-outline" size={24} color={COLORS.error} />
           <Text style={styles.errorMsg}>{error}</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={() => fetchTeam()}>
-            <Text style={styles.retryBtnText}>Retry</Text>
+            <Text style={styles.retryBtnText}>{t('admin.supervisorTeam.retry')}</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -205,20 +207,20 @@ const AdminSupervisorTeamScreen: React.FC = () => {
       </View>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Technicians in this team</Text>
+        <Text style={styles.sectionTitle}>{t('admin.supervisorTeam.techniciansInTeam')}</Text>
         <TouchableOpacity
           style={styles.assignButton}
           onPress={() => setAssignModalVisible(true)}
         >
           <Ionicons name="person-add" size={20} color={COLORS.primary} />
-          <Text style={styles.assignButtonText}>Assign Technicians</Text>
+          <Text style={styles.assignButtonText}>{t('admin.supervisorTeam.assignTechnicians')}</Text>
         </TouchableOpacity>
       </View>
 
       {loading && team.length === 0 ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading team...</Text>
+          <Text style={styles.loadingText}>{t('admin.supervisorTeam.loadingTeam')}</Text>
         </View>
       ) : (
         <ScrollView
@@ -229,7 +231,7 @@ const AdminSupervisorTeamScreen: React.FC = () => {
           }
         >
           {team.length === 0 ? (
-            <Text style={styles.emptyText}>No technicians assigned. Tap “Assign Technicians” to add.</Text>
+            <Text style={styles.emptyText}>{t('admin.supervisorTeam.noTechniciansAssigned')}</Text>
           ) : (
             team.map((tech) => (
               <View key={tech.id} style={styles.techRow}>
@@ -261,7 +263,7 @@ const AdminSupervisorTeamScreen: React.FC = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Assign technician to team</Text>
+              <Text style={styles.modalTitle}>{t('admin.supervisorTeam.modalTitle')}</Text>
               <TouchableOpacity onPress={() => setAssignModalVisible(false)}>
                 <Ionicons name="close" size={28} color={COLORS.text} />
               </TouchableOpacity>
@@ -269,7 +271,7 @@ const AdminSupervisorTeamScreen: React.FC = () => {
             {loadingTechnicians ? (
               <View style={styles.modalLoading}>
                 <ActivityIndicator size="small" color={COLORS.primary} />
-                <Text style={styles.modalLoadingText}>Loading technicians...</Text>
+                <Text style={styles.modalLoadingText}>{t('admin.supervisorTeam.loadingTechnicians')}</Text>
               </View>
             ) : (
               <FlatList
@@ -312,7 +314,7 @@ const AdminSupervisorTeamScreen: React.FC = () => {
                   );
                 }}
                 ListEmptyComponent={
-                  <Text style={styles.modalEmpty}>All technicians are already in this team.</Text>
+                  <Text style={styles.modalEmpty}>{t('admin.supervisorTeam.allTechniciansInTeam')}</Text>
                 }
               />
             )}

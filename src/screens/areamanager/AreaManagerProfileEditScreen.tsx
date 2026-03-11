@@ -12,6 +12,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { useAppStore } from '../../store';
@@ -22,6 +23,7 @@ import {
 } from '../../services/areaManagerService';
 
 const AreaManagerProfileEditScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const { user } = useAppStore();
 
@@ -73,7 +75,7 @@ const AreaManagerProfileEditScreen: React.FC = () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow access to your photos to change profile picture.');
+        Alert.alert(t('admin.areaManagerProfileEdit.permissionNeeded'), t('admin.areaManagerProfileEdit.permissionMessage'));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -90,8 +92,8 @@ const AreaManagerProfileEditScreen: React.FC = () => {
         });
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to open photos';
-      Alert.alert('Error', message);
+      const message = err instanceof Error ? err.message : t('admin.areaManagerProfileEdit.errorOpenPhotos');
+      Alert.alert(t('common.error'), message);
     }
   };
 
@@ -99,11 +101,11 @@ const AreaManagerProfileEditScreen: React.FC = () => {
     const trimmedName = name.trim();
     const trimmedEmail = email.trim();
     if (!trimmedName) {
-      Alert.alert('Error', 'Name is required.');
+      Alert.alert(t('common.error'), t('admin.areaManagerProfileEdit.errorNameRequired'));
       return;
     }
     if (!trimmedEmail) {
-      Alert.alert('Error', 'Email is required.');
+      Alert.alert(t('common.error'), t('admin.areaManagerProfileEdit.errorEmailRequired'));
       return;
     }
     setSaving(true);
@@ -116,11 +118,11 @@ const AreaManagerProfileEditScreen: React.FC = () => {
       });
       setSaving(false);
       if (updated) {
-        Alert.alert('Success', 'Profile updated successfully.', [
-          { text: 'OK', onPress: () => navigation.goBack() },
+        Alert.alert(t('admin.areaManagerProfileEdit.successTitle'), t('admin.areaManagerProfileEdit.successUpdated'), [
+          { text: t('common.ok'), onPress: () => navigation.goBack() },
         ]);
       } else {
-        Alert.alert('Error', 'Failed to update profile.');
+        Alert.alert(t('common.error'), t('admin.areaManagerProfileEdit.errorUpdateFailed'));
       }
     } catch (err: unknown) {
       setSaving(false);
@@ -128,8 +130,8 @@ const AreaManagerProfileEditScreen: React.FC = () => {
         (err as { response?: { data?: { message?: string }; message?: string } })?.response?.data
           ?.message ??
         (err as Error)?.message ??
-        'Failed to update profile.';
-      Alert.alert('Error', typeof msg === 'string' ? msg : 'Failed to update profile.');
+        t('admin.areaManagerProfileEdit.errorUpdateFailed');
+      Alert.alert(t('common.error'), typeof msg === 'string' ? msg : t('admin.areaManagerProfileEdit.errorUpdateFailed'));
     }
   };
 
@@ -142,7 +144,7 @@ const AreaManagerProfileEditScreen: React.FC = () => {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile information</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerProfileEdit.title')}</Text>
           <View style={styles.backBtn} />
         </View>
         <View style={styles.centered}>
@@ -158,7 +160,7 @@ const AreaManagerProfileEditScreen: React.FC = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile information</Text>
+        <Text style={styles.headerTitle}>{t('admin.areaManagerProfileEdit.title')}</Text>
         <View style={styles.backBtn} />
       </View>
 
@@ -168,7 +170,7 @@ const AreaManagerProfileEditScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Profile photo</Text>
+          <Text style={styles.sectionTitle}>{t('admin.areaManagerProfileEdit.profilePhoto')}</Text>
           <TouchableOpacity onPress={pickImage} style={styles.avatarWrap}>
             {displayImageUri ? (
               <Image source={{ uri: displayImageUri }} style={styles.avatarImage} contentFit="cover" />
@@ -181,35 +183,35 @@ const AreaManagerProfileEditScreen: React.FC = () => {
               <Ionicons name="create" size={14} color={COLORS.background} />
             </View>
           </TouchableOpacity>
-          <Text style={styles.optionalHint}>Optional</Text>
+          <Text style={styles.optionalHint}>{t('admin.areaManagerProfileEdit.optional')}</Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Personal information</Text>
-          <Text style={styles.label}>Name</Text>
+          <Text style={styles.sectionTitle}>{t('admin.areaManagerProfileEdit.personalInfo')}</Text>
+          <Text style={styles.label}>{t('admin.areaManagerProfileEdit.name')}</Text>
           <TextInput
             style={styles.input}
             value={name}
             onChangeText={setName}
-            placeholder="Full name"
+            placeholder={t('admin.areaManagerProfileEdit.fullNamePlaceholder')}
             placeholderTextColor={COLORS.textSecondary}
           />
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>{t('admin.areaManagerProfileEdit.email')}</Text>
           <TextInput
             style={styles.input}
             value={email}
             onChangeText={setEmail}
-            placeholder="Email address"
+            placeholder={t('admin.areaManagerProfileEdit.emailPlaceholder')}
             placeholderTextColor={COLORS.textSecondary}
             keyboardType="email-address"
             autoCapitalize="none"
           />
-          <Text style={styles.label}>Phone</Text>
+          <Text style={styles.label}>{t('admin.areaManagerProfileEdit.phone')}</Text>
           <TextInput
             style={styles.input}
             value={phone}
             onChangeText={setPhone}
-            placeholder="Phone number"
+            placeholder={t('admin.areaManagerProfileEdit.phonePlaceholder')}
             placeholderTextColor={COLORS.textSecondary}
             keyboardType="phone-pad"
           />
@@ -223,7 +225,7 @@ const AreaManagerProfileEditScreen: React.FC = () => {
           {saving ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text style={styles.saveBtnText}>Save changes</Text>
+            <Text style={styles.saveBtnText}>{t('admin.areaManagerProfileEdit.saveChanges')}</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

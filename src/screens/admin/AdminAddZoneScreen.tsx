@@ -13,6 +13,7 @@ import {
 import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { getAddressFromCoordinates } from '../../utils/addressFromLocation';
 import { adminService, type AdminSupervisor } from '../../services/adminService';
@@ -39,6 +40,7 @@ async function searchPlace(query: string): Promise<{ lat: number; lng: number } 
 }
 
 const AdminAddZoneScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const mapRef = useRef<MapView>(null);
 
@@ -130,7 +132,7 @@ const AdminAddZoneScreen: React.FC = () => {
         longitudeDelta: DEFAULT_DELTA,
       }, 400);
     } else {
-      Alert.alert('Search', 'Location not found. Try e.g. Dubai, Abu Dhabi, Sharjah, UAE.');
+      Alert.alert(t('admin.addZone.searchTitle'), t('admin.addZone.searchNotFound'));
     }
   };
 
@@ -144,11 +146,11 @@ const AdminAddZoneScreen: React.FC = () => {
   const handleSave = async () => {
     const location = zoneName.trim() || zoneAddress.trim() || '';
     if (!location) {
-      Alert.alert('Location required', 'Search for a city or drag the pin to set the zone location. Zone name is set from the location.');
+      Alert.alert(t('admin.addZone.locationRequired'), t('admin.addZone.locationRequiredMessage'));
       return;
     }
     if (selectedSupervisorId == null) {
-      Alert.alert('Supervisor required', 'Please select a supervisor for this zone.');
+      Alert.alert(t('admin.addZone.supervisorRequired'), t('admin.addZone.supervisorRequiredMessage'));
       return;
     }
     setSaving(true);
@@ -156,13 +158,13 @@ const AdminAddZoneScreen: React.FC = () => {
       const res = await adminService.createArea(location, selectedSupervisorId);
       if (res.success) {
         navigation.navigate('AdminZones', { areasRefresh: true });
-        Alert.alert('Zone added', `"${location}" has been added and assigned to the supervisor.`);
+        Alert.alert(t('admin.addZone.zoneAdded'), t('admin.addZone.zoneAddedMessage', { location }));
       } else {
-        Alert.alert('Error', res.message ?? 'Failed to add zone.');
+        Alert.alert(t('admin.zones.error'), res.message ?? t('admin.addZone.failedToAdd'));
       }
     } catch (e: any) {
-      const msg = e?.response?.data?.message ?? e?.message ?? 'Failed to add zone.';
-      Alert.alert('Error', msg);
+      const msg = e?.response?.data?.message ?? e?.message ?? t('admin.addZone.failedToAdd');
+      Alert.alert(t('admin.zones.error'), msg);
     } finally {
       setSaving(false);
     }
@@ -181,14 +183,14 @@ const AdminAddZoneScreen: React.FC = () => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add Zone</Text>
+        <Text style={styles.headerTitle}>{t('admin.addZone.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <Text style={styles.label}>Location (search or drag pin) – zone name is set from location</Text>
-        <Text style={styles.addressText}>{zoneAddress || 'Search for a city in UAE'}{geocoding ? '…' : ''}</Text>
-        {zoneName ? <Text style={styles.zoneNameText}>Zone name: {zoneName}</Text> : null}
+        <Text style={styles.label}>{t('admin.addZone.label')}</Text>
+        <Text style={styles.addressText}>{zoneAddress || t('admin.addZone.searchForCity')}{geocoding ? '…' : ''}</Text>
+        {zoneName ? <Text style={styles.zoneNameText}>{t('admin.addZone.zoneNameLabel', { name: zoneName })}</Text> : null}
 
         <View style={styles.mapContainer}>
           <MapView
@@ -202,7 +204,7 @@ const AdminAddZoneScreen: React.FC = () => {
           >
             <Marker
               coordinate={{ latitude: zoneLat, longitude: zoneLng }}
-              title={zoneName || 'New zone'}
+              title={zoneName || t('admin.addZone.newZone')}
               description={zoneAddress}
               draggable
               onDragEnd={handleMarkerDragEnd}
@@ -212,7 +214,7 @@ const AdminAddZoneScreen: React.FC = () => {
             <Ionicons name="search" size={20} color={COLORS.textSecondary} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search city (e.g. Dubai, Abu Dhabi)"
+              placeholder={t('admin.addZone.searchPlaceholder')}
               placeholderTextColor={COLORS.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -237,15 +239,15 @@ const AdminAddZoneScreen: React.FC = () => {
           </View>
         </View>
 
-        <Text style={styles.sectionLabel}>Assign supervisor to this zone (required)</Text>
-        <Text style={styles.sectionHint}>Select a supervisor to manage this area.</Text>
+        <Text style={styles.sectionLabel}>{t('admin.addZone.assignSupervisorLabel')}</Text>
+        <Text style={styles.sectionHint}>{t('admin.addZone.assignSupervisorHint')}</Text>
         {loadingSupervisors ? (
           <View style={styles.supervisorsLoading}>
             <ActivityIndicator size="small" color={COLORS.primary} />
-            <Text style={styles.supervisorsLoadingText}>Loading supervisors…</Text>
+            <Text style={styles.supervisorsLoadingText}>{t('admin.addZone.loadingSupervisors')}</Text>
           </View>
         ) : supervisors.length === 0 ? (
-          <Text style={styles.supervisorsEmpty}>No supervisors available.</Text>
+          <Text style={styles.supervisorsEmpty}>{t('admin.addZone.noSupervisors')}</Text>
         ) : (
           supervisors.map((sup) => {
             const isSelected = selectedSupervisorId === sup.id;
@@ -278,7 +280,7 @@ const AdminAddZoneScreen: React.FC = () => {
           {saving ? (
             <ActivityIndicator size="small" color={COLORS.background} />
           ) : (
-            <Text style={styles.saveButtonText}>Add Zone</Text>
+            <Text style={styles.saveButtonText}>{t('admin.addZone.saveButton')}</Text>
           )}
         </TouchableOpacity>
       </ScrollView>
