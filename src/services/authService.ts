@@ -74,15 +74,18 @@ export const authService = {
       const role = responseData.data?.role;
       const userData = responseData.data?.user;
       
-      // Store token and user
+      // Store token, role, and user
       if (token) {
         await AsyncStorage.setItem('auth_token', token);
+        if (role) {
+          await AsyncStorage.setItem('auth_role', role);
+        }
         if (userData) {
           const appUser = mapLaravelUserToAppUser(userData);
           await AsyncStorage.setItem('user', JSON.stringify(appUser));
         }
       }
-      
+
       // Return response in expected format for backward compatibility
       return responseData;
     } catch (error: any) {
@@ -129,6 +132,7 @@ export const authService = {
       console.error('Logout error:', error);
     } finally {
       await AsyncStorage.removeItem('auth_token');
+      await AsyncStorage.removeItem('auth_role');
       await AsyncStorage.removeItem('user');
     }
   },
@@ -151,6 +155,15 @@ export const authService = {
       return await AsyncStorage.getItem('auth_token');
     } catch (error) {
       console.error('Error getting stored token:', error);
+      return null;
+    }
+  },
+
+  getStoredRole: async (): Promise<string | null> => {
+    try {
+      return await AsyncStorage.getItem('auth_role');
+    } catch (error) {
+      console.error('Error getting stored role:', error);
       return null;
     }
   },

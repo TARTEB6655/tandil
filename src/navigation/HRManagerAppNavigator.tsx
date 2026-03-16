@@ -12,7 +12,12 @@ import AddEmployeeScreen from '../screens/hrmanager/AddEmployeeScreen';
 import EmployeeListScreen from '../screens/hrmanager/EmployeeListScreen';
 import EditEmployeeScreen from '../screens/hrmanager/EditEmployeeScreen';
 import ManageLeavesScreen from '../screens/hrmanager/ManageLeavesScreen';
-import TechnicianProfileScreen from '../screens/technician/TechnicianProfileScreen';
+import HRManagerProfileScreen from '../screens/hrmanager/HRManagerProfileScreen';
+import HRManagerProfileEditScreen from '../screens/hrmanager/HRManagerProfileEditScreen';
+import HRManagerSubmitTicketScreen from '../screens/hrmanager/HRManagerSubmitTicketScreen';
+import HelpCenterScreen from '../screens/user/HelpCenterScreen';
+import MyTicketsScreen from '../screens/user/MyTicketsScreen';
+import SupportTicketChatScreen from '../screens/user/SupportTicketChatScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -69,7 +74,7 @@ const TabNavigator = () => {
       />
       <Tab.Screen
         name="ProfileTab"
-        component={TechnicianProfileScreen}
+        component={HRManagerProfileScreen}
         options={{
           tabBarLabel: TAB_LABELS.profile,
           tabBarIcon: ({ color, size }) => (
@@ -95,6 +100,11 @@ const HRManagerAppNavigator = () => {
         <Stack.Screen name="EmployeeList" component={EmployeeListScreen} />
         <Stack.Screen name="EditEmployee" component={EditEmployeeScreen} />
         <Stack.Screen name="ManageLeaves" component={ManageLeavesScreen} />
+        <Stack.Screen name="HRManagerProfileEdit" component={HRManagerProfileEditScreen} />
+        <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+        <Stack.Screen name="SubmitTicket" component={HRManagerSubmitTicketScreen} />
+        <Stack.Screen name="MyTickets" component={MyTicketsScreen} />
+        <Stack.Screen name="SupportTicketChat" component={SupportTicketChatScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

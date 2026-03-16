@@ -70,6 +70,47 @@ export async function updateSupervisorProfile(params: {
   return null;
 }
 
+/** Leave request item from GET /api/supervisor/leave-requests */
+export interface SupervisorLeaveRequest {
+  id: number;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  duration_days: number;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewed_at: string | null;
+  created_at: string;
+  working_days?: string[];
+}
+
+export interface SupervisorLeaveRequestsResponse {
+  success: boolean;
+  data: SupervisorLeaveRequest[];
+  meta?: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+}
+
+/**
+ * GET /api/supervisor/leave-requests?status=pending|approved|rejected&per_page=20&page=1
+ * Returns list of leave requests for the supervisor. status is optional.
+ */
+export async function getSupervisorLeaveRequests(params?: {
+  status?: 'pending' | 'approved' | 'rejected';
+  page?: number;
+  per_page?: number;
+}): Promise<SupervisorLeaveRequestsResponse> {
+  const response = await apiClient.get<SupervisorLeaveRequestsResponse>('/supervisor/leave-requests', {
+    params: { per_page: 20, ...params },
+    timeout: 15000,
+  });
+  return response.data;
+}
+
 /**
  * POST /api/supervisor/leave-requests
  * Submit a leave request. Body: form-data leave_type (required), start_date (Y-m-d), end_date (Y-m-d), reason (optional), working_days (optional, comma-separated e.g. mon,tue,wed,thu,fri,sat).

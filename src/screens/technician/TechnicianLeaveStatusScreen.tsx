@@ -14,6 +14,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { getTechnicianLeaveRequests, TechnicianLeaveRequest } from '../../services/technicianService';
+import { getSupervisorLeaveRequests } from '../../services/supervisorService';
+import { authService } from '../../services/authService';
 
 export type LeaveStatusType = 'pending' | 'approved' | 'rejected';
 
@@ -50,9 +52,13 @@ const TechnicianLeaveStatusScreen: React.FC = () => {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       setError(null);
-      const res = await getTechnicianLeaveRequests({ per_page: PER_PAGE });
+      const role = await authService.getStoredRole();
+      const isSupervisor = role === 'supervisor';
+      const res = isSupervisor
+        ? await getSupervisorLeaveRequests({ per_page: PER_PAGE })
+        : await getTechnicianLeaveRequests({ per_page: PER_PAGE });
       if (res?.success && Array.isArray(res.data)) {
-        setList(res.data);
+        setList(res.data as TechnicianLeaveRequest[]);
       } else {
         setList([]);
       }

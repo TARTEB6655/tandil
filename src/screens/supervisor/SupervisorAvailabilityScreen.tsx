@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,14 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
-import { submitSupervisorLeaveRequest } from '../../services/supervisorService';
+import { submitSupervisorLeaveRequest, getSupervisorLeaveRequests, SupervisorLeaveRequest } from '../../services/supervisorService';
 
 const DAY_IDS = [
   { id: 'monday', shortKey: 'mon' },
@@ -36,8 +37,6 @@ const LEAVE_TYPES = [
   { value: 'other', apiValue: 'other', labelKey: 'technician.vacation.leaveType.other' },
 ] as const;
 
-type LeaveItem = { start_date: string; end_date: string; leave_type: string; reason: string };
-
 function formatDateToYYYYMMDD(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -54,11 +53,41 @@ const SupervisorAvailabilityScreen: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [leaveType, setLeaveType] = useState('');
   const [reason, setReason] = useState('');
-  const [leaves, setLeaves] = useState<LeaveItem[]>([]);
+  const [leaves, setLeaves] = useState<SupervisorLeaveRequest[]>([]);
+  const [leavesLoading, setLeavesLoading] = useState(true);
+  const [leavesRefreshing, setLeavesRefreshing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState<'start' | 'end' | null>(null);
   const [pickerValue, setPickerValue] = useState<Date>(new Date());
   const [leaveTypeModalVisible, setLeaveTypeModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const fetchLeaves = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setLeavesRefreshing(true);
+    else setLeavesLoading(true);
+    try {
+      const res = await getSupervisorLeaveRequests({ per_page: 50 });
+      if (res?.success && Array.isArray(res.data)) {
+        setLeaves(res.data);
+      } else {
+        setLeaves([]);
+      }
+    } catch {
+      setLeaves([]);
+    } finally {
+      setLeavesLoading(false);
+      setLeavesRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchLeaves();
+    }, [fetchLeaves])
+  );
+
+  const onRefreshLeaves = useCallback(() => {
+    fetchLeaves(true);
+  }, [fetchLeaves]);
 
   const toggleDay = (dayId: string) => {
     setAvailableDays(prev =>
@@ -98,11 +127,11 @@ const SupervisorAvailabilityScreen: React.FC = () => {
         working_days: workingDaysStr || undefined,
       });
       if (res?.success) {
-        setLeaves(prev => [...prev, { start_date: startDate, end_date: endDate, leave_type: leaveType, reason: reason.trim() }]);
         setStartDate('');
         setEndDate('');
         setLeaveType('');
         setReason('');
+        fetchLeaves(true);
         Alert.alert(t('supervisor.availability.savedTitle', 'Saved'), t('supervisor.availability.leaveRequestSubmitted', 'Leave request submitted successfully.'));
       } else {
         Alert.alert(t('technician.error', 'Error'), res?.message || 'Failed to submit leave request.');
@@ -117,6 +146,17 @@ const SupervisorAvailabilityScreen: React.FC = () => {
 
   const removeLeave = (index: number) => {
     setLeaves(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const getLeaveTypeLabel = (apiLeaveType: string) => {
+    const found = LEAVE_TYPES.find(l => l.apiValue === apiLeaveType);
+    return found ? t(found.labelKey) : apiLeaveType;
+  };
+
+  const getStatusStyle = (status: string) => {
+    if (status === 'approved') return { bg: COLORS.success + '20', color: COLORS.success };
+    if (status === 'rejected') return { bg: COLORS.error + '20', color: COLORS.error };
+    return { bg: COLORS.warning + '20', color: COLORS.warning };
   };
 
   const openStartPicker = () => {
@@ -173,7 +213,14 @@ const SupervisorAvailabilityScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={leavesRefreshing} onRefresh={onRefreshLeaves} colors={[COLORS.primary]} />
+        }
+      >
         {/* Availability – which days */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -330,28 +377,43 @@ const SupervisorAvailabilityScreen: React.FC = () => {
             </TouchableOpacity>
           </Modal>
 
-          {/* List of leaves */}
+          {/* List of leaves – from GET /supervisor/leave-requests */}
           <Text style={styles.listTitle}>{t('supervisor.availability.yourLeaves', 'Your leave requests')} ({leaves.length})</Text>
-          {leaves.length === 0 ? (
+          {leavesLoading && leaves.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+              <Text style={styles.emptyText}>{t('technician.loading', 'Loading...')}</Text>
+            </View>
+          ) : leaves.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="calendar-outline" size={40} color={COLORS.textSecondary} />
               <Text style={styles.emptyText}>{t('supervisor.availability.noLeaves', 'No leave requests added yet.')}</Text>
             </View>
           ) : (
-            leaves.map((leave, index) => (
-              <View key={index} style={styles.leaveCard}>
-                <View style={styles.leaveCardContent}>
-                  <Text style={styles.leaveDates}>{leave.start_date} – {leave.end_date}</Text>
-                  <Text style={styles.leaveTypeText}>
-                    {LEAVE_TYPES.find(l => l.value === leave.leave_type) ? t(LEAVE_TYPES.find(l => l.value === leave.leave_type)!.labelKey) : leave.leave_type}
-                  </Text>
-                  {leave.reason ? <Text style={styles.leaveReason}>{leave.reason}</Text> : null}
+            leaves.map((leave, index) => {
+              const statusStyle = getStatusStyle(leave.status);
+              const statusLabel = leave.status === 'approved' ? (t('technician.leaveStatus.approved') || 'Approved') : leave.status === 'rejected' ? (t('technician.leaveStatus.rejected') || 'Rejected') : (t('technician.leaveStatus.pending') || 'Pending');
+              return (
+                <View key={leave.id} style={styles.leaveCard}>
+                  <View style={styles.leaveCardContent}>
+                    <View style={styles.leaveCardHeader}>
+                      <Text style={styles.leaveDates}>{leave.start_date} – {leave.end_date}</Text>
+                      <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                        <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{statusLabel}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.leaveTypeText}>{getLeaveTypeLabel(leave.leave_type)}</Text>
+                    {leave.duration_days != null ? (
+                      <Text style={styles.leaveMeta}>{leave.duration_days} {leave.duration_days === 1 ? 'day' : 'days'}</Text>
+                    ) : null}
+                    {leave.reason ? <Text style={styles.leaveReason}>{leave.reason}</Text> : null}
+                  </View>
+                  <TouchableOpacity onPress={() => removeLeave(index)} style={styles.removeBtn}>
+                    <Ionicons name="trash-outline" size={22} color={COLORS.error} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => removeLeave(index)} style={styles.removeBtn}>
-                  <Ionicons name="trash-outline" size={22} color={COLORS.error} />
-                </TouchableOpacity>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -545,14 +607,35 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   leaveCardContent: { flex: 1 },
+  leaveCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
   leaveDates: {
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
   },
+  statusBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  statusBadgeText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
   leaveTypeText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.primary,
+    marginTop: 4,
+  },
+  leaveMeta: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
     marginTop: 2,
   },
   leaveReason: {
