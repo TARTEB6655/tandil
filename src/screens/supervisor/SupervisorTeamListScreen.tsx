@@ -65,6 +65,17 @@ const SupervisorTeamListScreen: React.FC = () => {
               {item.status || '—'}
             </Text>
           </View>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              navigation.navigate('SupervisorEditTeamMember' as never, {
+                technicianId: item.id,
+              } as never);
+            }}
+          >
+            <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+          </TouchableOpacity>
         </View>
         <Text style={styles.memberTask}>{item.current_activity || '—'}</Text>
         <View style={styles.memberStats}>
@@ -192,6 +203,10 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  editButton: {
+    marginLeft: SPACING.xs,
+    padding: SPACING.xs,
   },
   memberTask: {
     fontSize: FONT_SIZES.sm,

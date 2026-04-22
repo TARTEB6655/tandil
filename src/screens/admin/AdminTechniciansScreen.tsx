@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -27,6 +28,7 @@ const AdminTechniciansScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openingUserId, setOpeningUserId] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchTechnicians = useCallback(async (search: string, isRefresh = false) => {
@@ -69,6 +71,28 @@ const AdminTechniciansScreen: React.FC = () => {
     fetchTechnicians(searchQuery, true);
   }, [fetchTechnicians, searchQuery]);
 
+  const handleAddTechnician = useCallback(() => {
+    navigation.navigate('AddUser', { preselectedRole: 'technician', lockRole: true });
+  }, [navigation]);
+
+  const handleEditTechnician = useCallback(async (technicianId: number) => {
+    setOpeningUserId(technicianId);
+    try {
+      const response = await adminService.getUserById(technicianId);
+      const user = response?.data;
+      if (!user) {
+        Alert.alert(t('admin.users.error'), t('admin.editUser.userNotFound'));
+        return;
+      }
+      navigation.navigate('EditUser', { user, lockRole: true, forcedRole: 'technician' });
+    } catch (e: any) {
+      const message = e?.response?.data?.message ?? e?.message ?? t('admin.users.loadFailed');
+      Alert.alert(t('admin.users.error'), message);
+    } finally {
+      setOpeningUserId(null);
+    }
+  }, [navigation, t]);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -76,7 +100,9 @@ const AdminTechniciansScreen: React.FC = () => {
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('admin.allTechnicians.title')}</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity style={styles.addButton} onPress={handleAddTechnician}>
+          <Ionicons name="person-add-outline" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.hint}>
@@ -133,8 +159,15 @@ const AdminTechniciansScreen: React.FC = () => {
             technicians.map((tech) => {
               const zoneName = tech.zone?.name ?? '—';
               const supervisorName = tech.supervisor?.name ?? '—';
+              const isOpening = openingUserId === tech.id;
               return (
-                <View key={tech.id} style={styles.techCard}>
+                <TouchableOpacity
+                  key={tech.id}
+                  style={styles.techCard}
+                  activeOpacity={0.85}
+                  onPress={() => handleEditTechnician(tech.id)}
+                  disabled={isOpening}
+                >
                   <View style={styles.techRow1}>
                     <View style={styles.techAvatar}>
                       <Text style={styles.techAvatarText}>{tech.name.charAt(0).toUpperCase()}</Text>
@@ -143,6 +176,11 @@ const AdminTechniciansScreen: React.FC = () => {
                       <Text style={styles.techName}>{tech.name}</Text>
                       <Text style={styles.techId}>{tech.employee_id}</Text>
                     </View>
+                    {isOpening ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : (
+                      <Ionicons name="create-outline" size={18} color={COLORS.textSecondary} />
+                    )}
                   </View>
                   <View style={styles.techRow2}>
                     <View style={styles.badge}>
@@ -156,7 +194,7 @@ const AdminTechniciansScreen: React.FC = () => {
                       <Text style={styles.badgeValue}>{supervisorName}</Text>
                     </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           )}
@@ -188,8 +226,8 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     textAlign: 'center',
   },
-  headerSpacer: {
-    width: 40,
+  addButton: {
+    padding: SPACING.sm,
   },
   hint: {
     fontSize: FONT_SIZES.sm,

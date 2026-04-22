@@ -8,6 +8,7 @@ export interface TechnicianSignupRequest {
   name: string;
   email: string;
   phone: string;
+  service_area?: string;
   password: string;
   password_confirmation: string;
   created_at: string;
@@ -33,6 +34,7 @@ export const technicianSignupRequestService = {
     name: string;
     email: string;
     phone: string;
+    service_area?: string;
     password: string;
     password_confirmation: string;
   }): Promise<TechnicianSignupRequest> {
@@ -46,6 +48,7 @@ export const technicianSignupRequestService = {
       name: params.name.trim(),
       email: params.email.trim(),
       phone: params.phone.trim(),
+      service_area: params.service_area?.trim() || undefined,
       password: params.password,
       password_confirmation: params.password_confirmation,
       created_at: new Date().toISOString(),
@@ -64,6 +67,7 @@ export const technicianSignupRequestService = {
         name: 'Ali Technician',
         email: 'ali.tech@example.com',
         phone: '+971501112233',
+        service_area: 'Abu Dhabi',
         password: 'dummy123',
         password_confirmation: 'dummy123',
         created_at: new Date().toISOString(),

@@ -42,6 +42,7 @@ import AdminSupervisorsScreen from '../screens/admin/AdminSupervisorsScreen';
 import AdminSupervisorTeamScreen from '../screens/admin/AdminSupervisorTeamScreen';
 import AdminTechniciansScreen from '../screens/admin/AdminTechniciansScreen';
 import AdminAddZoneScreen from '../screens/admin/AdminAddZoneScreen';
+import AdminNotificationsScreen from '../screens/admin/AdminNotificationsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -145,6 +146,7 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminSupervisorTeam" component={AdminSupervisorTeamScreen} />
         <Stack.Screen name="AdminTechnicians" component={AdminTechniciansScreen} />
         <Stack.Screen name="AdminAddZone" component={AdminAddZoneScreen} />
+        <Stack.Screen name="AdminNotifications" component={AdminNotificationsScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

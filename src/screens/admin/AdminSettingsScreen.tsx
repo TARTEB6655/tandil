@@ -68,9 +68,8 @@ const AdminSettingsScreen: React.FC = () => {
           icon: 'notifications',
           titleKey: 'admin.settings.pushNotifications.title',
           subtitleKey: 'admin.settings.pushNotifications.subtitle',
-          type: 'toggle',
-          value: notificationsEnabled,
-          onToggle: setNotificationsEnabled,
+          type: 'navigation',
+          onPress: () => navigation.navigate('AdminNotifications'),
         },
         {
           icon: 'person',

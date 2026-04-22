@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -16,6 +17,7 @@ import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { useTranslation } from 'react-i18next';
 import { technicianSignupRequestService } from '../../services/technicianSignupRequestService';
+import { getAddressFromCurrentLocation } from '../../utils/addressFromLocation';
 
 const TechnicianSignupScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -24,15 +26,17 @@ const TechnicianSignupScreen: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [serviceArea, setServiceArea] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locatingServiceArea, setLocatingServiceArea] = useState(false);
 
   const validate = (): boolean => {
-    if (!name.trim() || !email.trim() || !phone.trim() || !password.trim() || !confirmPassword.trim()) {
+    if (!name.trim() || !email.trim() || !phone.trim() || !serviceArea.trim() || !password.trim() || !confirmPassword.trim()) {
       Alert.alert(
         t('booking.missingTitle', { defaultValue: 'Missing Information' }),
         t('booking.missingBody', { defaultValue: 'Please fill in all fields' })
@@ -72,6 +76,7 @@ const TechnicianSignupScreen: React.FC = () => {
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim(),
+        service_area: serviceArea.trim(),
         password,
         password_confirmation: confirmPassword,
       });
@@ -93,6 +98,29 @@ const TechnicianSignupScreen: React.FC = () => {
       Alert.alert(t('common.error', { defaultValue: 'Error' }), errorMessage);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleUseCurrentLocation = async () => {
+    setLocatingServiceArea(true);
+    try {
+      const result = await getAddressFromCurrentLocation();
+      if (!result.ok) {
+        Alert.alert(
+          t('common.error', { defaultValue: 'Error' }),
+          t('locationError', { defaultValue: 'Could not get current location. Please allow location access or enter manually.' })
+        );
+        return;
+      }
+      const a = result.address;
+      const area =
+        [a.city, a.state, a.country].filter(Boolean).join(', ').trim() ||
+        a.street_address ||
+        t('serviceArea.selectedLocation', { defaultValue: 'Selected location' });
+      setServiceArea(area);
+      setError(null);
+    } finally {
+      setLocatingServiceArea(false);
     }
   };
 
@@ -152,6 +180,33 @@ const TechnicianSignupScreen: React.FC = () => {
             keyboardType="phone-pad"
             leftIcon="call-outline"
           />
+          <Input
+            label={t('technicianSignup.serviceArea', { defaultValue: 'Service Area' })}
+            placeholder={t('technicianSignup.serviceAreaPlaceholder', { defaultValue: 'Enter your service area' })}
+            value={serviceArea}
+            onChangeText={(text) => {
+              setServiceArea(text);
+              setError(null);
+            }}
+            leftIcon="location-outline"
+          />
+          <TouchableOpacity
+            style={[styles.useCurrentLocationButton, locatingServiceArea && styles.useCurrentLocationButtonDisabled]}
+            onPress={handleUseCurrentLocation}
+            disabled={locatingServiceArea}
+            activeOpacity={0.8}
+          >
+            {locatingServiceArea ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <Ionicons name="locate-outline" size={18} color={COLORS.primary} />
+            )}
+            <Text style={styles.useCurrentLocationText}>
+              {locatingServiceArea
+                ? t('serviceArea.findingLocations', { defaultValue: 'Finding locations...' })
+                : t('useCurrentLocation', { defaultValue: 'Use current location' })}
+            </Text>
+          </TouchableOpacity>
           <Input
             label={t('auth.passwordLabel', { defaultValue: 'Password' })}
             placeholder={t('auth.passwordPlaceholder', { defaultValue: 'Enter your password' })}
@@ -225,6 +280,27 @@ const styles = StyleSheet.create({
   },
   signupButton: {
     marginTop: SPACING.md,
+  },
+  useCurrentLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.sm,
+    marginTop: 2,
+    marginBottom: SPACING.xs,
+    backgroundColor: COLORS.primary + '10',
+  },
+  useCurrentLocationButtonDisabled: {
+    opacity: 0.7,
+  },
+  useCurrentLocationText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.medium,
+    color: COLORS.primary,
   },
   errorContainer: {
     backgroundColor: '#FFEBEE',

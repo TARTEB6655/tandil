@@ -22,6 +22,8 @@ const EditUserScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const user: AdminUser = route.params?.user;
+  const lockRole = Boolean(route.params?.lockRole);
+  const forcedRole = (route.params?.forcedRole as string | undefined) || '';
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -41,10 +43,10 @@ const EditUserScreen: React.FC = () => {
       setName(user.name || '');
       setEmail(user.email || '');
       setPhone(user.phone || '');
-      setRole(user.role || '');
+      setRole(forcedRole || user.role || '');
       setStatus(user.status || 'active');
     }
-  }, [user]);
+  }, [user, forcedRole]);
 
   const roles = [
     { value: 'client', labelKey: 'admin.editUser.roleClient' },
@@ -112,7 +114,7 @@ const EditUserScreen: React.FC = () => {
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim() || undefined,
-        role,
+        role: lockRole ? (forcedRole || role || 'technician') : role,
         status,
       };
 
@@ -355,22 +357,33 @@ const EditUserScreen: React.FC = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('admin.editUser.roleAndStatus')}</Text>
-          {renderDropdown(
-            t('admin.editUser.userRole'),
-            role,
-            roles,
-            showRoleDropdown,
-            () => {
-              setShowRoleDropdown(!showRoleDropdown);
-              setShowStatusDropdown(false);
-            },
-            (value) => {
-              setRole(value);
-              if (errors.role) setErrors({ ...errors, role: '' });
-            },
-            errors.role,
-            undefined,
-            'admin.editUser.selectRole'
+          {lockRole ? (
+            <View style={styles.dropdownWrapper}>
+              <Text style={styles.label}>{t('admin.editUser.userRole')} *</Text>
+              <View style={[styles.dropdown, styles.dropdownLocked]}>
+                <Text style={styles.dropdownText}>
+                  {getRoleLabel(forcedRole || role || 'technician')}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            renderDropdown(
+              t('admin.editUser.userRole'),
+              role,
+              roles,
+              showRoleDropdown,
+              () => {
+                setShowRoleDropdown(!showRoleDropdown);
+                setShowStatusDropdown(false);
+              },
+              (value) => {
+                setRole(value);
+                if (errors.role) setErrors({ ...errors, role: '' });
+              },
+              errors.role,
+              undefined,
+              'admin.editUser.selectRole'
+            )
           )}
           {renderDropdown(
             t('admin.editUser.accountStatus'),
@@ -474,6 +487,9 @@ const styles = StyleSheet.create({
   },
   dropdownOpen: {
     borderColor: COLORS.primary,
+  },
+  dropdownLocked: {
+    backgroundColor: COLORS.surface,
   },
   dropdownError: {
     borderColor: COLORS.error,

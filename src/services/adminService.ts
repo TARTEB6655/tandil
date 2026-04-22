@@ -302,6 +302,56 @@ export const adminService = {
     return response.data;
   },
 
+  /** GET /notifications - authenticated notifications list (admin token supported). */
+  getNotifications: async (params?: { page?: number; per_page?: number }): Promise<{
+    success: boolean;
+    message?: string;
+    list: AdminNotificationItem[];
+    currentPage: number;
+    lastPage: number;
+    total: number;
+    perPage: number;
+  }> => {
+    const response = await apiClient.get('/notifications', {
+      params: params ?? {},
+      timeout: 15000,
+    });
+    const body = response?.data ?? {};
+    const notifications = body?.data?.notifications;
+    const pageData = notifications?.data;
+    const rawList = Array.isArray(pageData)
+      ? pageData
+      : Array.isArray(body?.data?.data)
+        ? body.data.data
+        : Array.isArray(body?.data)
+          ? body.data
+          : [];
+
+    const list: AdminNotificationItem[] = rawList.map((item: any) => ({
+      id: item?.id ?? String(Math.random()),
+      type: item?.type,
+      notifiable_type: item?.notifiable_type,
+      notifiable_id: item?.notifiable_id,
+      read_at: item?.read_at ?? null,
+      created_at: item?.created_at,
+      updated_at: item?.updated_at,
+      title: String(item?.data?.title ?? item?.title ?? 'Notification'),
+      message: String(item?.data?.message ?? item?.message ?? ''),
+      action: item?.data?.meta?.action ?? item?.meta?.action ?? null,
+      meta: item?.data?.meta ?? item?.meta ?? null,
+    }));
+
+    return {
+      success: body?.success === true,
+      message: body?.message,
+      list,
+      currentPage: Number(notifications?.current_page ?? body?.data?.current_page ?? 1),
+      lastPage: Number(notifications?.last_page ?? body?.data?.last_page ?? 1),
+      total: Number(notifications?.total ?? body?.data?.total ?? list.length),
+      perPage: Number(notifications?.per_page ?? body?.data?.per_page ?? params?.per_page ?? 20),
+    };
+  },
+
   /** GET /admin/dashboard/profile – admin profile for dashboard header */
   getDashboardProfile: async (): Promise<{ success: boolean; data: AdminDashboardProfile }> => {
     const response = await apiClient.get<{ success: boolean; data: AdminDashboardProfile }>(
@@ -1570,5 +1620,19 @@ export interface AdminActivity {
   created_at?: string;
   related_id?: number;
   related_type?: string;
+}
+
+export interface AdminNotificationItem {
+  id: string | number;
+  type?: string;
+  notifiable_type?: string;
+  notifiable_id?: number;
+  read_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  title: string;
+  message: string;
+  action?: string | null;
+  meta?: Record<string, unknown> | null;
 }
 

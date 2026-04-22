@@ -204,6 +204,8 @@ export async function getSupervisorTeam(): Promise<SupervisorTeamMember[]> {
 export interface SupervisorTeamMemberDetail extends SupervisorTeamMember {
   email?: string;
   phone?: string;
+  emails?: string[];
+  phones?: string[];
 }
 
 export interface SupervisorTeamMemberDetailResponse {
@@ -224,6 +226,50 @@ export async function getSupervisorTeamMember(technicianId: number): Promise<Sup
     return response.data.data;
   }
   return null;
+}
+
+/**
+ * POST /api/supervisor/team/:member_id
+ * Update a team member. Body: form-data name, email, phone, emails[index], phones[index].
+ */
+export async function updateSupervisorTeamMember(
+  technicianId: number,
+  params: {
+    name: string;
+    email: string;
+    phone: string;
+    emails?: string[];
+    phones?: string[];
+  }
+): Promise<{ success: boolean; message?: string; data?: SupervisorTeamMemberDetail }> {
+  const formData = new FormData();
+  formData.append('name', params.name.trim());
+  formData.append('email', params.email.trim());
+  formData.append('phone', params.phone.trim());
+  (params.emails ?? [])
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .forEach((value, index) => {
+      formData.append(`emails[${index}]`, value);
+    });
+  (params.phones ?? [])
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .forEach((value, index) => {
+      formData.append(`phones[${index}]`, value);
+    });
+
+  const response = await apiClient.post<{
+    success?: boolean;
+    message?: string;
+    data?: SupervisorTeamMemberDetail;
+  }>(`/supervisor/team/${technicianId}`, formData, { timeout: 15000 });
+
+  return {
+    success: response.data?.success === true,
+    message: response.data?.message,
+    data: response.data?.data,
+  };
 }
 
 /** Assignment/job from GET /api/supervisor/assignments */

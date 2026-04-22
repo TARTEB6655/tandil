@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -27,6 +28,7 @@ const AdminSupervisorsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openingUserId, setOpeningUserId] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchSupervisors = useCallback(async (search: string, isRefresh = false) => {
@@ -75,6 +77,28 @@ const AdminSupervisorsScreen: React.FC = () => {
     return t('admin.supervisorsTeams.noZoneAssigned');
   };
 
+  const handleAddSupervisor = useCallback(() => {
+    navigation.navigate('AddUser', { preselectedRole: 'supervisor', lockRole: true });
+  }, [navigation]);
+
+  const handleEditSupervisor = useCallback(async (supervisorId: number) => {
+    setOpeningUserId(supervisorId);
+    try {
+      const response = await adminService.getUserById(supervisorId);
+      const user = response?.data;
+      if (!user) {
+        Alert.alert(t('admin.users.error'), t('admin.editUser.userNotFound'));
+        return;
+      }
+      navigation.navigate('EditUser', { user, lockRole: true, forcedRole: 'supervisor' });
+    } catch (e: any) {
+      const message = e?.response?.data?.message ?? e?.message ?? t('admin.users.loadFailed');
+      Alert.alert(t('admin.users.error'), message);
+    } finally {
+      setOpeningUserId(null);
+    }
+  }, [navigation, t]);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -82,7 +106,9 @@ const AdminSupervisorsScreen: React.FC = () => {
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('admin.supervisorsTeams.title')}</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity style={styles.addButton} onPress={handleAddSupervisor}>
+          <Ionicons name="person-add-outline" size={24} color={COLORS.primary} />
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.hint}>{t('admin.supervisorsTeams.hint')}</Text>
@@ -134,23 +160,40 @@ const AdminSupervisorsScreen: React.FC = () => {
               </Text>
             </View>
           ) : (
-            supervisors.map((sup) => (
-              <TouchableOpacity
-                key={sup.id}
-                style={styles.supervisorCard}
-                onPress={() => navigation.navigate('AdminSupervisorTeam', { supervisor: sup })}
-              >
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{sup.name.charAt(0).toUpperCase()}</Text>
-                </View>
-                <View style={styles.supervisorContent}>
-                  <Text style={styles.supervisorName}>{sup.name}</Text>
-                  <Text style={styles.supervisorId}>{sup.employee_id}</Text>
-                  <Text style={styles.supervisorZone}>{zoneDisplay(sup)}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
-              </TouchableOpacity>
-            ))
+            supervisors.map((sup) => {
+              const isOpening = openingUserId === sup.id;
+              return (
+                <TouchableOpacity
+                  key={sup.id}
+                  style={styles.supervisorCard}
+                  onPress={() => navigation.navigate('AdminSupervisorTeam', { supervisor: sup })}
+                >
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{sup.name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.supervisorContent}>
+                    <Text style={styles.supervisorName}>{sup.name}</Text>
+                    <Text style={styles.supervisorId}>{sup.employee_id}</Text>
+                    <Text style={styles.supervisorZone}>{zoneDisplay(sup)}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleEditSupervisor(sup.id);
+                    }}
+                    disabled={isOpening}
+                  >
+                    {isOpening ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : (
+                      <Ionicons name="create-outline" size={20} color={COLORS.textSecondary} />
+                    )}
+                  </TouchableOpacity>
+                  <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+              );
+            })
           )}
         </ScrollView>
       )}
@@ -180,8 +223,8 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     textAlign: 'center',
   },
-  headerSpacer: {
-    width: 40,
+  addButton: {
+    padding: SPACING.sm,
   },
   hint: {
     fontSize: FONT_SIZES.sm,
@@ -307,6 +350,10 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     marginTop: 2,
+  },
+  editButton: {
+    padding: SPACING.xs,
+    marginRight: SPACING.xs,
   },
 });
 

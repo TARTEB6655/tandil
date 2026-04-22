@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { Input } from '../../components/common/Input';
@@ -20,13 +20,16 @@ import { adminService } from '../../services/adminService';
 const AddUserScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const lockRole = Boolean(route.params?.lockRole);
+  const preselectedRole = (route.params?.preselectedRole as string | undefined) || '';
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState<string>('');
+  const [role, setRole] = useState<string>(preselectedRole);
   const [status, setStatus] = useState<string>('active');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -45,6 +48,12 @@ const AddUserScreen: React.FC = () => {
     ],
     [t]
   );
+
+  useEffect(() => {
+    if (lockRole && preselectedRole) {
+      setRole(preselectedRole);
+    }
+  }, [lockRole, preselectedRole]);
 
   const statusOptions = useMemo(
     () => [
@@ -110,7 +119,7 @@ const AddUserScreen: React.FC = () => {
               setPhone('');
               setPassword('');
               setConfirmPassword('');
-              setRole('');
+              setRole(preselectedRole);
               setStatus('active');
               setErrors({});
               // Navigate back and refresh users list
@@ -317,21 +326,32 @@ const AddUserScreen: React.FC = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('admin.addUser.roleAndStatus')}</Text>
-          {renderDropdown(
-            t('admin.addUser.userRole'),
-            role,
-            roleOptions,
-            showRoleDropdown,
-            () => {
-              setShowRoleDropdown(!showRoleDropdown);
-              setShowStatusDropdown(false);
-            },
-            (value) => {
-              setRole(value);
-              if (errors.role) setErrors({ ...errors, role: '' });
-            },
-            errors.role,
-            undefined
+          {lockRole ? (
+            <View style={styles.dropdownWrapper}>
+              <Text style={styles.label}>{t('admin.addUser.userRole')} *</Text>
+              <View style={[styles.dropdown, styles.dropdownLocked]}>
+                <Text style={styles.dropdownText}>
+                  {roleOptions.find((opt) => opt.value === role)?.label || role || t('admin.addUser.roleTechnician')}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            renderDropdown(
+              t('admin.addUser.userRole'),
+              role,
+              roleOptions,
+              showRoleDropdown,
+              () => {
+                setShowRoleDropdown(!showRoleDropdown);
+                setShowStatusDropdown(false);
+              },
+              (value) => {
+                setRole(value);
+                if (errors.role) setErrors({ ...errors, role: '' });
+              },
+              errors.role,
+              undefined
+            )
           )}
           {renderDropdown(
             t('admin.addUser.accountStatus'),
@@ -434,6 +454,9 @@ const styles = StyleSheet.create({
   },
   dropdownOpen: {
     borderColor: COLORS.primary,
+  },
+  dropdownLocked: {
+    backgroundColor: COLORS.surface,
   },
   dropdownError: {
     borderColor: COLORS.error,
