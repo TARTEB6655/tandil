@@ -100,6 +100,117 @@ export interface HRVisitAssignmentsResponse {
   data: HRVisitAssignmentsData;
 }
 
+/** Summary from GET /hr/visit-assignments/summary */
+export interface HRVisitAssignmentSummaryData {
+  total_jobs: number;
+  unassigned: number;
+  pending_acceptance: number;
+}
+
+export interface HRVisitAssignmentSummaryResponse {
+  success: boolean;
+  data: HRVisitAssignmentSummaryData;
+}
+
+export interface HRVisitAssignmentListItem {
+  id: number;
+  scheduled_date: string;
+  status: string;
+  accept_by?: string | null;
+  title?: string;
+  service_name?: string;
+  location?: string;
+  price?: number;
+  notes_preview?: string;
+  client?: { id: number; name: string } | null;
+  area?: { id: number; name: string } | null;
+  supervisor?: { id: number; name: string } | null;
+  technician?: { id: number; name: string } | null;
+  flags?: {
+    is_unassigned?: boolean;
+    is_escalated?: boolean;
+    is_pending_acceptance?: boolean;
+  };
+}
+
+export interface HRVisitAssignmentListResponse {
+  success: boolean;
+  data: HRVisitAssignmentListItem[];
+  meta?: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+}
+
+export interface HRVisitAssignmentTeamMember {
+  id: number;
+  name: string;
+  employee_id?: string;
+  profile_picture_url?: string | null;
+  on_leave_today?: boolean;
+}
+
+export interface HRVisitAssignmentsAssignScreenResponse {
+  success: boolean;
+  data: {
+    team_members: HRVisitAssignmentTeamMember[];
+    available_tasks: HRVisitAssignmentListItem[];
+  };
+  meta?: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+}
+
+export interface HROfferVisitToTechnicianPayload {
+  technician_id: number;
+  scheduled_date: string;
+  note?: string;
+}
+
+export interface HRTechnicianMonthlyPreviewParams {
+  technician_id: number;
+  year: number;
+  month: number;
+}
+
+export interface HRGeneratedReportItem {
+  id: number | string;
+  status?: 'pending' | 'generated' | 'failed' | string;
+  type?: string;
+  generated_at?: string | null;
+  created_at?: string | null;
+  file_url?: string | null;
+  download_url?: string | null;
+  technician_name?: string | null;
+  technician?: { id: number; name: string } | null;
+  month?: number | string | null;
+  year?: number | string | null;
+}
+
+export interface HRGeneratedReportsResponse {
+  success?: boolean;
+  data?: HRGeneratedReportItem[];
+  meta?: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+  message?: string;
+}
+
+export interface HRGenerateReportPayload {
+  technician_id: number;
+  year: number;
+  month: number;
+  format?: 'pdf' | string;
+}
+
 export interface Employee {
   id: number;
   name: string;
@@ -194,6 +305,130 @@ export const hrService = {
   /** GET /hr/dashboard/visit-assignments – today and tomorrow visit stats */
   getVisitAssignments: async (): Promise<HRVisitAssignmentsResponse> => {
     const response = await apiClient.get<HRVisitAssignmentsResponse>('/hr/dashboard/visit-assignments');
+    return response.data;
+  },
+
+  /** GET /hr/visit-assignments/summary?scope=&date_from=&date_to=&status= */
+  getVisitAssignmentsSummary: async (params?: {
+    scope?: string;
+    date_from?: string;
+    date_to?: string;
+    status?: string;
+  }): Promise<HRVisitAssignmentSummaryResponse> => {
+    const response = await apiClient.get<HRVisitAssignmentSummaryResponse>('/hr/visit-assignments/summary', {
+      params,
+    });
+    return response.data;
+  },
+
+  /** GET /hr/visit-assignments?scope=&date_from=&date_to=&status=&per_page= */
+  getVisitAssignmentsList: async (params?: {
+    scope?: string;
+    date_from?: string;
+    date_to?: string;
+    status?: string;
+    per_page?: number;
+    page?: number;
+  }): Promise<HRVisitAssignmentListResponse> => {
+    const response = await apiClient.get<HRVisitAssignmentListResponse>('/hr/visit-assignments', {
+      params,
+    });
+    return response.data;
+  },
+
+  /** GET /hr/visit-assignments/assign-screen?scope=&date_from=&date_to=&status=&per_page= */
+  getVisitAssignmentsAssignScreen: async (params?: {
+    scope?: string;
+    date_from?: string;
+    date_to?: string;
+    status?: string;
+    per_page?: number;
+    page?: number;
+  }): Promise<HRVisitAssignmentsAssignScreenResponse> => {
+    const response = await apiClient.get<HRVisitAssignmentsAssignScreenResponse>(
+      '/hr/visit-assignments/assign-screen',
+      {
+        params,
+      }
+    );
+    return response.data;
+  },
+
+  /** POST /hr/visit-assignments/:visit_id */
+  offerVisitToTechnician: async (
+    visitId: number,
+    payload: HROfferVisitToTechnicianPayload
+  ): Promise<{ success?: boolean; message?: string }> => {
+    const response = await apiClient.post<{ success?: boolean; message?: string }>(
+      `/hr/visit-assignments/${visitId}`,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+      }
+    );
+    return response.data;
+  },
+
+  /** GET /hr/reports/technician-monthly?technician_id=&year=&month= */
+  getTechnicianMonthlyPreview: async (
+    params: HRTechnicianMonthlyPreviewParams
+  ): Promise<{ success?: boolean; data?: any; message?: string }> => {
+    const response = await apiClient.get<{ success?: boolean; data?: any; message?: string }>(
+      '/hr/reports/technician-monthly',
+      {
+        params,
+      }
+    );
+    return response.data;
+  },
+
+  /** GET /hr/reports?per_page=&status=&type=&page= */
+  getGeneratedReports: async (params?: {
+    per_page?: number;
+    status?: 'pending' | 'generated' | 'failed' | string;
+    type?: string;
+    page?: number;
+  }): Promise<HRGeneratedReportsResponse> => {
+    const response = await apiClient.get<HRGeneratedReportsResponse>('/hr/reports', {
+      params,
+    });
+    return response.data;
+  },
+
+  /** POST /hr/reports/generate */
+  generateReport: async (
+    payload: HRGenerateReportPayload
+  ): Promise<{ success?: boolean; message?: string; data?: HRGeneratedReportItem }> => {
+    const response = await apiClient.post<{ success?: boolean; message?: string; data?: HRGeneratedReportItem }>(
+      '/hr/reports/generate',
+      {
+        parameters: {
+          technician_id: payload.technician_id,
+          year: payload.year,
+          month: payload.month,
+          format: payload.format || 'pdf',
+        },
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+      }
+    );
+    return response.data;
+  },
+
+  /** DELETE /hr/reports/:report_id */
+  deleteGeneratedReport: async (
+    reportId: number | string
+  ): Promise<{ success?: boolean; message?: string }> => {
+    const response = await apiClient.delete<{ success?: boolean; message?: string }>(
+      `/hr/reports/${reportId}`
+    );
     return response.data;
   },
 

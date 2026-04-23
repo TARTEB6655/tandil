@@ -13,6 +13,9 @@ import AddEmployeeScreen from '../screens/hrmanager/AddEmployeeScreen';
 import EmployeeListScreen from '../screens/hrmanager/EmployeeListScreen';
 import EditEmployeeScreen from '../screens/hrmanager/EditEmployeeScreen';
 import ManageLeavesScreen from '../screens/hrmanager/ManageLeavesScreen';
+import HRAssignVisitsScreen from '../screens/hrmanager/HRAssignVisitsScreen';
+import HRReportsScreen from '../screens/hrmanager/HRReportsScreen';
+import HRReportPreviewDetailScreen from '../screens/hrmanager/HRReportPreviewDetailScreen';
 import HRManagerProfileScreen from '../screens/hrmanager/HRManagerProfileScreen';
 import HRManagerProfileEditScreen from '../screens/hrmanager/HRManagerProfileEditScreen';
 import HRManagerSubmitTicketScreen from '../screens/hrmanager/HRManagerSubmitTicketScreen';
@@ -95,6 +98,9 @@ const HRManagerAppNavigator = () => {
         <Stack.Screen name="EmployeeList" component={EmployeeListScreen} />
         <Stack.Screen name="EditEmployee" component={EditEmployeeScreen} />
         <Stack.Screen name="ManageLeaves" component={ManageLeavesScreen} />
+        <Stack.Screen name="HRAssignVisits" component={HRAssignVisitsScreen} />
+        <Stack.Screen name="HRReports" component={HRReportsScreen} />
+        <Stack.Screen name="HRReportPreviewDetail" component={HRReportPreviewDetailScreen} />
         <Stack.Screen name="HRManagerProfileEdit" component={HRManagerProfileEditScreen} />
         <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
         <Stack.Screen name="SubmitTicket" component={HRManagerSubmitTicketScreen} />

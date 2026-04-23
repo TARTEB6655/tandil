@@ -463,13 +463,7 @@ const HRManagerDashboardScreen: React.FC = () => {
 
             <TouchableOpacity 
               style={styles.quickAction}
-              onPress={() => {
-                Alert.alert(
-                  t('admin.hrManagerDashboard.assignVisitsTitle'),
-                  t('admin.hrManagerDashboard.assignVisitsMessage'),
-                  [{ text: t('common.ok') }]
-                );
-              }}
+              onPress={() => navigation.navigate('HRAssignVisits')}
             >
               <View style={styles.quickActionIcon}>
                 <Ionicons name="clipboard-outline" size={24} color={COLORS.primary} />
@@ -479,13 +473,7 @@ const HRManagerDashboardScreen: React.FC = () => {
 
             <TouchableOpacity 
               style={styles.quickAction}
-              onPress={() => {
-                Alert.alert(
-                  t('admin.hrManagerDashboard.reportsTitle'),
-                  t('admin.hrManagerDashboard.reportsMessage'),
-                  [{ text: t('common.ok') }]
-                );
-              }}
+              onPress={() => navigation.navigate('HRReports')}
             >
               <View style={styles.quickActionIcon}>
                 <Ionicons name="stats-chart-outline" size={24} color={COLORS.primary} />
