@@ -211,6 +211,45 @@ export interface HRGenerateReportPayload {
   format?: 'pdf' | string;
 }
 
+export interface HRNotificationItem {
+  id: string;
+  type: string;
+  notifiable_type?: string;
+  notifiable_id?: number;
+  data?: {
+    title?: string;
+    message?: string;
+    type?: string;
+    report_id?: number;
+    report_type?: string;
+    generated_at?: string;
+    meta?: Record<string, any>;
+  };
+  read_at?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface HRNotificationsResult {
+  success: boolean;
+  message?: string;
+  data?: {
+    notifications?: {
+      current_page: number;
+      data: HRNotificationItem[];
+      last_page: number;
+      total: number;
+      per_page: number;
+    };
+    unread_count?: number;
+  };
+}
+
+export interface HRNotificationActionResponse {
+  success?: boolean;
+  message?: string;
+}
+
 export interface Employee {
   id: number;
   name: string;
@@ -495,6 +534,78 @@ export const hrService = {
     const data = response.data;
     if (data?.success) return { success: true, message: data.message };
     return { success: false, message: (data as any)?.message ?? 'Failed to submit ticket.' };
+  },
+
+  /** GET /hr/notifications?per_page=&page= */
+  getNotifications: async (params?: {
+    per_page?: number;
+    page?: number;
+  }): Promise<{
+    list: HRNotificationItem[];
+    unreadCount: number;
+    currentPage: number;
+    lastPage: number;
+    total: number;
+    perPage: number;
+  }> => {
+    const response = await apiClient.get<HRNotificationsResult>('/hr/notifications', {
+      params: { per_page: params?.per_page ?? 20, page: params?.page ?? 1 },
+      timeout: 15000,
+    });
+    const payload = response.data?.data;
+    const notifications = payload?.notifications;
+    const list = Array.isArray(notifications?.data) ? notifications!.data : [];
+    return {
+      list,
+      unreadCount: payload?.unread_count ?? 0,
+      currentPage: notifications?.current_page ?? 1,
+      lastPage: notifications?.last_page ?? 1,
+      total: notifications?.total ?? 0,
+      perPage: notifications?.per_page ?? 20,
+    };
+  },
+
+  /** POST /hr/notifications/:notification_id/mark-read */
+  markNotificationAsRead: async (
+    notificationId: string
+  ): Promise<HRNotificationActionResponse> => {
+    const response = await apiClient.post<HRNotificationActionResponse>(
+      `/hr/notifications/${notificationId}/mark-read`,
+      null,
+      { timeout: 15000 }
+    );
+    return response.data ?? {};
+  },
+
+  /** POST /hr/notifications/mark-all-read */
+  markAllNotificationsAsRead: async (): Promise<HRNotificationActionResponse> => {
+    const response = await apiClient.post<HRNotificationActionResponse>(
+      '/hr/notifications/mark-all-read',
+      null,
+      { timeout: 15000 }
+    );
+    return response.data ?? {};
+  },
+
+  /** DELETE /hr/notifications/:notification_id */
+  deleteNotification: async (
+    notificationId: string
+  ): Promise<HRNotificationActionResponse> => {
+    const response = await apiClient.delete<HRNotificationActionResponse>(
+      `/hr/notifications/${notificationId}`,
+      { timeout: 15000 }
+    );
+    return response.data ?? {};
+  },
+
+  /** POST /hr/notifications/clear-all */
+  clearAllNotifications: async (): Promise<HRNotificationActionResponse> => {
+    const response = await apiClient.post<HRNotificationActionResponse>(
+      '/hr/notifications/clear-all',
+      null,
+      { timeout: 15000 }
+    );
+    return response.data ?? {};
   },
 };
 

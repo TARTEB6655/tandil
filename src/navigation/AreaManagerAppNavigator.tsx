@@ -4,6 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants';
+import { useTranslation } from 'react-i18next';
 
 // Screens
 import AreaManagerLoginScreen from '../screens/areamanager/AreaManagerLoginScreen';
@@ -21,14 +22,15 @@ import TeamMemberJobsScreen from '../screens/areamanager/TeamMemberJobsScreen';
 import AreaManagerProfileEditScreen from '../screens/areamanager/AreaManagerProfileEditScreen';
 import HelpCenterScreen from '../screens/user/HelpCenterScreen';
 import AreaManagerSubmitTicketScreen from '../screens/areamanager/AreaManagerSubmitTicketScreen';
+import AreaManagerNotificationsScreen from '../screens/areamanager/AreaManagerNotificationsScreen';
 import MyTicketsScreen from '../screens/user/MyTicketsScreen';
 import SupportTicketChatScreen from '../screens/user/SupportTicketChatScreen';
-import TechnicianNotificationsScreen from '../screens/technician/TechnicianNotificationsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const TabNavigator = () => {
+  const { t } = useTranslation();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -45,7 +47,7 @@ const TabNavigator = () => {
         name="DashboardTab"
         component={AreaManagerDashboardScreen}
         options={{
-          tabBarLabel: 'Dashboard',
+          tabBarLabel: t('admin.areaManagerDashboard.tabDashboard', { defaultValue: 'Dashboard' }),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
@@ -55,7 +57,7 @@ const TabNavigator = () => {
         name="TeamsTab"
         component={AllTeamsScreen}
         options={{
-          tabBarLabel: 'Teams',
+          tabBarLabel: t('admin.areaManagerDashboard.tabTeams', { defaultValue: 'Teams' }),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="people-outline" size={size} color={color} />
           ),
@@ -65,7 +67,7 @@ const TabNavigator = () => {
         name="ProfileTab"
         component={AreaManagerProfileScreen}
         options={{
-          tabBarLabel: 'Profile',
+          tabBarLabel: t('admin.areaManagerDashboard.tabProfile', { defaultValue: 'Profile' }),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
           ),
@@ -98,7 +100,7 @@ const AreaManagerAppNavigator = () => {
         <Stack.Screen name="SubmitTicket" component={AreaManagerSubmitTicketScreen} />
         <Stack.Screen name="MyTickets" component={MyTicketsScreen} />
         <Stack.Screen name="SupportTicketChat" component={SupportTicketChatScreen} />
-        <Stack.Screen name="Notifications" component={TechnicianNotificationsScreen} />
+        <Stack.Screen name="Notifications" component={AreaManagerNotificationsScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

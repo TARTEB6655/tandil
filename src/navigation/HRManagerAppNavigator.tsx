@@ -19,6 +19,7 @@ import HRReportPreviewDetailScreen from '../screens/hrmanager/HRReportPreviewDet
 import HRManagerProfileScreen from '../screens/hrmanager/HRManagerProfileScreen';
 import HRManagerProfileEditScreen from '../screens/hrmanager/HRManagerProfileEditScreen';
 import HRManagerSubmitTicketScreen from '../screens/hrmanager/HRManagerSubmitTicketScreen';
+import HRManagerNotificationsScreen from '../screens/hrmanager/HRManagerNotificationsScreen';
 import HelpCenterScreen from '../screens/user/HelpCenterScreen';
 import MyTicketsScreen from '../screens/user/MyTicketsScreen';
 import SupportTicketChatScreen from '../screens/user/SupportTicketChatScreen';
@@ -104,6 +105,7 @@ const HRManagerAppNavigator = () => {
         <Stack.Screen name="HRManagerProfileEdit" component={HRManagerProfileEditScreen} />
         <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
         <Stack.Screen name="SubmitTicket" component={HRManagerSubmitTicketScreen} />
+        <Stack.Screen name="Notifications" component={HRManagerNotificationsScreen} />
         <Stack.Screen name="MyTickets" component={MyTicketsScreen} />
         <Stack.Screen name="SupportTicketChat" component={SupportTicketChatScreen} />
       </Stack.Navigator>

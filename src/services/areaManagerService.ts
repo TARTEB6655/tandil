@@ -19,6 +19,45 @@ export interface AreaManagerProfileResponse {
   data?: AreaManagerProfileData;
 }
 
+export interface AreaManagerNotificationItem {
+  id: string;
+  type: string;
+  notifiable_type?: string;
+  notifiable_id?: number;
+  data?: {
+    title?: string;
+    message?: string;
+    type?: string;
+    report_id?: number;
+    report_type?: string;
+    generated_at?: string;
+    meta?: Record<string, any>;
+  };
+  read_at?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface AreaManagerNotificationsResponse {
+  success?: boolean;
+  message?: string;
+  data?: {
+    notifications?: {
+      current_page?: number;
+      data?: AreaManagerNotificationItem[];
+      last_page?: number;
+      total?: number;
+      per_page?: number;
+    };
+    unread_count?: number;
+  };
+}
+
+export interface AreaManagerNotificationActionResponse {
+  success?: boolean;
+  message?: string;
+}
+
 /**
  * GET /api/area-manager/profile
  * Returns area manager profile (name, email, phone, profile_picture_url). Requires Bearer token.
@@ -65,6 +104,91 @@ export async function updateAreaManagerProfile(params: {
     return response.data.data;
   }
   return null;
+}
+
+/**
+ * GET /api/area-manager/notifications?per_page=&page=
+ * Returns area manager notifications list + unread_count. Requires Bearer token.
+ */
+export async function getAreaManagerNotifications(params?: {
+  per_page?: number;
+  page?: number;
+}): Promise<{
+  list: AreaManagerNotificationItem[];
+  unreadCount: number;
+  currentPage: number;
+  lastPage: number;
+  total: number;
+  perPage: number;
+}> {
+  const response = await apiClient.get<AreaManagerNotificationsResponse>(
+    '/area-manager/notifications',
+    {
+      params: { per_page: params?.per_page ?? 20, page: params?.page ?? 1 },
+      timeout: 15000,
+    }
+  );
+  const payload = response.data?.data;
+  const notifications = payload?.notifications;
+  return {
+    list: Array.isArray(notifications?.data) ? notifications!.data : [],
+    unreadCount: payload?.unread_count ?? 0,
+    currentPage: notifications?.current_page ?? 1,
+    lastPage: notifications?.last_page ?? 1,
+    total: notifications?.total ?? 0,
+    perPage: notifications?.per_page ?? 20,
+  };
+}
+
+/**
+ * POST /api/area-manager/notifications/:notification_id/mark-read
+ */
+export async function markAreaManagerNotificationAsRead(
+  notificationId: string
+): Promise<AreaManagerNotificationActionResponse> {
+  const response = await apiClient.post<AreaManagerNotificationActionResponse>(
+    `/area-manager/notifications/${notificationId}/mark-read`,
+    null,
+    { timeout: 15000 }
+  );
+  return response.data ?? {};
+}
+
+/**
+ * POST /api/area-manager/notifications/mark-all-read
+ */
+export async function markAllAreaManagerNotificationsAsRead(): Promise<AreaManagerNotificationActionResponse> {
+  const response = await apiClient.post<AreaManagerNotificationActionResponse>(
+    '/area-manager/notifications/mark-all-read',
+    null,
+    { timeout: 15000 }
+  );
+  return response.data ?? {};
+}
+
+/**
+ * DELETE /api/area-manager/notifications/:notification_id
+ */
+export async function deleteAreaManagerNotification(
+  notificationId: string
+): Promise<AreaManagerNotificationActionResponse> {
+  const response = await apiClient.delete<AreaManagerNotificationActionResponse>(
+    `/area-manager/notifications/${notificationId}`,
+    { timeout: 15000 }
+  );
+  return response.data ?? {};
+}
+
+/**
+ * POST /api/area-manager/notifications/clear-all
+ */
+export async function clearAllAreaManagerNotifications(): Promise<AreaManagerNotificationActionResponse> {
+  const response = await apiClient.post<AreaManagerNotificationActionResponse>(
+    '/area-manager/notifications/clear-all',
+    null,
+    { timeout: 15000 }
+  );
+  return response.data ?? {};
 }
 
 /** Params for POST /api/area-manager/support/tickets */

@@ -65,6 +65,7 @@ const HRManagerDashboardScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionLeaveId, setActionLeaveId] = useState<number | null>(null);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   const fetchSummary = useCallback(async (showLoading = true) => {
     try {
@@ -92,10 +93,20 @@ const HRManagerDashboardScreen: React.FC = () => {
     }
   }, []);
 
+  const fetchUnreadNotificationsCount = useCallback(async () => {
+    try {
+      const result = await hrService.getNotifications({ per_page: 20, page: 1 });
+      setUnreadNotificationsCount(result.unreadCount ?? 0);
+    } catch {
+      setUnreadNotificationsCount(0);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       fetchSummary();
-    }, [fetchSummary])
+      fetchUnreadNotificationsCount();
+    }, [fetchSummary, fetchUnreadNotificationsCount])
   );
 
   const onRefresh = useCallback(() => {
@@ -354,18 +365,33 @@ const HRManagerDashboardScreen: React.FC = () => {
             <Text style={styles.managerRole}>{summary?.role ?? '—'}</Text>
             <Text style={styles.managerId}>ID: {summary?.id ?? '—'}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => navigation.navigate('Main' as never, { screen: 'ProfileTab' } as never)}
-          >
-            {summary?.profile_picture_url ? (
-              <Image source={{ uri: summary.profile_picture_url }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{(summary?.name ?? 'M').charAt(0)}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.notificationButton}
+              onPress={() => navigation.navigate('Notifications' as never)}
+            >
+              <Ionicons name="notifications-outline" size={22} color={COLORS.text} />
+              {unreadNotificationsCount > 0 ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                  </Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileButton}
+              onPress={() => navigation.navigate('Main' as never, { screen: 'ProfileTab' } as never)}
+            >
+              {summary?.profile_picture_url ? (
+                <Image source={{ uri: summary.profile_picture_url }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{(summary?.name ?? 'M').charAt(0)}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -545,6 +571,32 @@ const styles = StyleSheet.create({
   },
   profileButton: {
     padding: SPACING.sm,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  notificationButton: {
+    padding: SPACING.sm,
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: COLORS.background,
+    fontSize: 9,
+    fontWeight: FONT_WEIGHTS.bold,
   },
   avatar: {
     width: 40,

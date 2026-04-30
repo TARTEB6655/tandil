@@ -11,6 +11,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import {
   getAreaManagerTeamLeaders,
@@ -19,6 +20,7 @@ import {
 
 const TeamLeadersScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const [teamLeaders, setTeamLeaders] = useState<AreaManagerTeamLeader[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -74,15 +76,15 @@ const TeamLeadersScreen: React.FC = () => {
       </View>
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Team</Text>
+          <Text style={styles.statLabel}>{t('admin.areaManagerDashboard.team')}</Text>
           <Text style={styles.statValue}>{item.team}</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Active</Text>
+          <Text style={styles.statLabel}>{t('admin.areaManagerDashboard.active')}</Text>
           <Text style={styles.statValue}>{item.active}</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Done</Text>
+          <Text style={styles.statLabel}>{t('admin.areaManagerDashboard.done')}</Text>
           <Text style={styles.statValue}>{item.done}</Text>
         </View>
       </View>
@@ -96,12 +98,12 @@ const TeamLeadersScreen: React.FC = () => {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Team Leaders</Text>
+          <Text style={styles.headerTitle}>{t('admin.areaManagerDashboard.teamLeaders')}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading…</Text>
+          <Text style={styles.loadingText}>{t('admin.areaManagerDashboard.loading')}</Text>
         </View>
       </View>
     );
@@ -113,7 +115,7 @@ const TeamLeadersScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Team Leaders</Text>
+        <Text style={styles.headerTitle}>{t('admin.areaManagerDashboard.teamLeaders')}</Text>
         <View style={styles.headerSpacer} />
       </View>
       <FlatList
@@ -124,7 +126,7 @@ const TeamLeadersScreen: React.FC = () => {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="people-outline" size={48} color={COLORS.textSecondary} />
-            <Text style={styles.emptyText}>No team leaders yet.</Text>
+            <Text style={styles.emptyText}>{t('admin.areaManagerAnalytics.noTeamsYet')}</Text>
           </View>
         }
         refreshControl={

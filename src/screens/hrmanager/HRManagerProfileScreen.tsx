@@ -113,7 +113,7 @@ const HRManagerProfileScreen: React.FC = () => {
 
   const menuItems = [
     { icon: 'person-outline' as const, title: t('technician.profileInfo', 'Profile information'), onPress: () => navigation.navigate('HRManagerProfileEdit') },
-    { icon: 'notifications-outline' as const, title: t('technician.notifications', 'Notifications'), onPress: () => {} },
+    { icon: 'notifications-outline' as const, title: t('technician.notifications', 'Notifications'), onPress: () => navigation.navigate('Notifications') },
     { icon: 'help-circle-outline' as const, title: t('technician.helpSupport', 'Help & Support'), onPress: () => navigation.navigate('HelpCenter') },
     { icon: 'log-out-outline' as const, title: t('technician.logout', 'Log out'), onPress: handleLogout, color: COLORS.error },
   ];

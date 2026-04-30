@@ -21,6 +21,7 @@ import {
   getAreaManagerDashboardSummary,
   getAreaManagerDashboardAlerts,
   getAreaManagerTeamLeaders,
+  getAreaManagerNotifications,
   AreaManagerDashboardSummary,
   AreaManagerDashboardAlert,
   AreaManagerTeamLeader,
@@ -58,6 +59,7 @@ const AreaManagerDashboardScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -68,12 +70,14 @@ const AreaManagerDashboardScreen: React.FC = () => {
         getAreaManagerDashboardSummary(),
         getAreaManagerDashboardAlerts(),
         getAreaManagerTeamLeaders(),
+        getAreaManagerNotifications({ per_page: 20, page: 1 }).catch(() => null),
       ])
-        .then(([summaryData, alertsData, teamLeadersData]) => {
+        .then(([summaryData, alertsData, teamLeadersData, notificationsData]) => {
           if (!cancelled) {
             setSummary(summaryData ?? null);
             setAlerts(Array.isArray(alertsData) ? alertsData : []);
             setTeamLeaders(Array.isArray(teamLeadersData) ? teamLeadersData : []);
+            setUnreadNotificationsCount(notificationsData?.unreadCount ?? 0);
             setError(summaryData ? null : t('admin.areaManagerDashboard.failedToLoad'));
           }
         })
@@ -239,6 +243,20 @@ const AreaManagerDashboardScreen: React.FC = () => {
             <Text style={styles.managerId}>{t('admin.areaManagerDashboard.idLabel', { id: displayId })}</Text>
           </View>
           <View style={styles.headerRightRow}>
+            <TouchableOpacity
+              style={styles.notificationButton}
+              onPress={() => navigation.navigate('Notifications' as never)}
+              accessibilityLabel="Open notifications"
+            >
+              <Ionicons name="notifications-outline" size={22} color={COLORS.text} />
+              {unreadNotificationsCount > 0 ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                  </Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.languageButton}
               onPress={() => setLanguageModalVisible(true)}
@@ -448,6 +466,27 @@ const styles = StyleSheet.create({
   },
   languageButton: {
     padding: SPACING.sm,
+  },
+  notificationButton: {
+    padding: SPACING.sm,
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 0,
+    minWidth: 24,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: COLORS.background,
+    fontSize: 9,
+    fontWeight: FONT_WEIGHTS.bold,
   },
   profileButton: {
     padding: SPACING.sm,

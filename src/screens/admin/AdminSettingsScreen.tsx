@@ -105,13 +105,6 @@ const AdminSettingsScreen: React.FC = () => {
           type: 'navigation',
           onPress: () => setLanguageModalVisible(true),
         },
-        {
-          icon: 'card',
-          titleKey: 'admin.settings.paymentSettings.title',
-          subtitleKey: 'admin.settings.paymentSettings.subtitle',
-          type: 'navigation',
-          onPress: () => Alert.alert(t('admin.settings.paymentSettings.title'), t('admin.settings.paymentSettings.subtitle')),
-        },
       ],
     },
     {
@@ -135,62 +128,6 @@ const AdminSettingsScreen: React.FC = () => {
           subtitleKey: 'admin.settings.zonesAndTeams.subtitle',
           type: 'navigation',
           onPress: () => navigation.navigate('AdminZones'),
-        },
-      ],
-    },
-    {
-      titleKey: 'admin.settings.dataPrivacy',
-      items: [
-        {
-          icon: 'shield-checkmark',
-          titleKey: 'admin.settings.privacyPolicy.title',
-          subtitleKey: 'admin.settings.privacyPolicy.subtitle',
-          type: 'navigation',
-          onPress: () => Alert.alert(t('admin.settings.privacyPolicy.title'), t('admin.settings.privacyPolicy.subtitle')),
-        },
-        {
-          icon: 'document-text',
-          titleKey: 'admin.settings.termsOfService.title',
-          subtitleKey: 'admin.settings.termsOfService.subtitle',
-          type: 'navigation',
-          onPress: () => Alert.alert(t('admin.settings.termsOfService.title'), t('admin.settings.termsOfService.subtitle')),
-        },
-        {
-          icon: 'trash',
-          titleKey: 'admin.settings.clearCache.title',
-          subtitleKey: 'admin.settings.clearCache.subtitle',
-          type: 'navigation',
-          onPress: () =>
-            Alert.alert(t('admin.settings.clearCache.title'), t('admin.settings.clearCache.subtitle'), [
-              { text: t('admin.settings.cancel'), style: 'cancel' },
-              { text: t('admin.settings.clear'), onPress: () => Alert.alert(t('admin.settings.success'), t('admin.settings.cacheCleared')) },
-            ]),
-        },
-      ],
-    },
-    {
-      titleKey: 'admin.settings.advanced',
-      items: [
-        {
-          icon: 'code',
-          titleKey: 'admin.settings.developerOptions.title',
-          subtitleKey: 'admin.settings.developerOptions.subtitle',
-          type: 'navigation',
-          onPress: () => Alert.alert(t('admin.settings.developerOptions.title'), t('admin.settings.developerOptions.subtitle')),
-        },
-        {
-          icon: 'bug',
-          titleKey: 'admin.settings.debugLogs.title',
-          subtitleKey: 'admin.settings.debugLogs.subtitle',
-          type: 'navigation',
-          onPress: () => Alert.alert(t('admin.settings.debugLogs.title'), t('admin.settings.debugLogs.subtitle')),
-        },
-        {
-          icon: 'download',
-          titleKey: 'admin.settings.exportData.title',
-          subtitleKey: 'admin.settings.exportData.subtitle',
-          type: 'navigation',
-          onPress: () => Alert.alert(t('admin.settings.exportData.title'), t('admin.settings.exportData.subtitle')),
         },
       ],
     },

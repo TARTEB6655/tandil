@@ -15,9 +15,11 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { adminService, type AdminNotificationItem } from '../../services/adminService';
+import { useTranslation } from 'react-i18next';
 
 const AdminNotificationsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const [list, setList] = useState<AdminNotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -37,7 +39,7 @@ const AdminNotificationsScreen: React.FC = () => {
       const res = await adminService.getNotifications({ page: 1, per_page: 50 });
       setList(res.list ?? []);
     } catch (e: any) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Failed to load notifications.');
+      setError(e?.response?.data?.message ?? e?.message ?? t('notifications.errorLoad'));
       setList([]);
     } finally {
       setLoading(false);
@@ -121,7 +123,7 @@ const AdminNotificationsScreen: React.FC = () => {
       );
       setSelectedIds([]);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message ?? e?.message ?? 'Failed to mark selected notifications as read.');
+      Alert.alert(t('common.error', 'Error'), e?.response?.data?.message ?? e?.message ?? t('notifications.errorMarkAsReadSelected', 'Failed to mark selected notifications as read.'));
     } finally {
       setMarkingSelected(false);
     }
@@ -137,7 +139,7 @@ const AdminNotificationsScreen: React.FC = () => {
       setList((prev) => prev.map((item) => ({ ...item, read_at: item.read_at ?? now })));
       setSelectedIds([]);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message ?? e?.message ?? 'Failed to mark all notifications as read.');
+      Alert.alert(t('common.error', 'Error'), e?.response?.data?.message ?? e?.message ?? t('notifications.errorMarkAllRead'));
     } finally {
       setMarkingAll(false);
     }
@@ -151,7 +153,7 @@ const AdminNotificationsScreen: React.FC = () => {
       setList((prev) => prev.filter((item) => !selectedIds.includes(item.id)));
       setSelectedIds([]);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message ?? e?.message ?? 'Failed to delete selected notifications.');
+      Alert.alert(t('common.error', 'Error'), e?.response?.data?.message ?? e?.message ?? t('notifications.errorDeleteSelected', 'Failed to delete selected notifications.'));
     } finally {
       setDeletingSelected(false);
     }
@@ -166,7 +168,7 @@ const AdminNotificationsScreen: React.FC = () => {
       setList([]);
       setSelectedIds([]);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message ?? e?.message ?? 'Failed to clear all notifications.');
+      Alert.alert(t('common.error', 'Error'), e?.response?.data?.message ?? e?.message ?? t('notifications.errorClear'));
     } finally {
       setClearingAll(false);
     }
@@ -221,7 +223,7 @@ const AdminNotificationsScreen: React.FC = () => {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
+        <Text style={styles.headerTitle}>{t('notifications.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
       <View style={styles.actionsContainer}>
@@ -232,7 +234,9 @@ const AdminNotificationsScreen: React.FC = () => {
         >
         <TouchableOpacity style={styles.actionBtn} onPress={handleSelectAll}>
           <Text style={styles.actionBtnText}>
-            {list.length > 0 && list.every((item) => selectedIds.includes(item.id)) ? 'Unselect All' : 'Select All'}
+            {list.length > 0 && list.every((item) => selectedIds.includes(item.id))
+              ? t('notifications.unselectAll', 'Unselect All')
+              : t('notifications.selectAll', 'Select All')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -243,7 +247,7 @@ const AdminNotificationsScreen: React.FC = () => {
           {markingSelected ? (
             <ActivityIndicator size="small" color={COLORS.background} />
           ) : (
-            <Text style={styles.actionBtnPrimaryText}>Mark as Read</Text>
+            <Text style={styles.actionBtnPrimaryText}>{t('notifications.markAsRead', 'Mark as Read')}</Text>
           )}
         </TouchableOpacity>
         <TouchableOpacity
@@ -254,7 +258,7 @@ const AdminNotificationsScreen: React.FC = () => {
           {markingAll ? (
             <ActivityIndicator size="small" color={COLORS.primary} />
           ) : (
-            <Text style={styles.actionBtnOutlineText}>Mark All Read</Text>
+            <Text style={styles.actionBtnOutlineText}>{t('notifications.markAllRead')}</Text>
           )}
         </TouchableOpacity>
         <TouchableOpacity
@@ -265,7 +269,7 @@ const AdminNotificationsScreen: React.FC = () => {
           {deletingSelected ? (
             <ActivityIndicator size="small" color={COLORS.background} />
           ) : (
-            <Text style={styles.actionBtnDangerText}>Delete</Text>
+            <Text style={styles.actionBtnDangerText}>{t('common.delete', 'Delete')}</Text>
           )}
         </TouchableOpacity>
         <TouchableOpacity
@@ -276,7 +280,7 @@ const AdminNotificationsScreen: React.FC = () => {
           {clearingAll ? (
             <ActivityIndicator size="small" color={COLORS.error} />
           ) : (
-            <Text style={styles.actionBtnDangerOutlineText}>Clear All</Text>
+            <Text style={styles.actionBtnDangerOutlineText}>{t('notifications.clearAll')}</Text>
           )}
         </TouchableOpacity>
         </ScrollView>
@@ -296,7 +300,7 @@ const AdminNotificationsScreen: React.FC = () => {
       ) : list.length === 0 ? (
         <View style={styles.centerBox}>
           <Ionicons name="notifications-off-outline" size={44} color={COLORS.textSecondary} />
-          <Text style={styles.emptyText}>No notifications yet.</Text>
+          <Text style={styles.emptyText}>{t('notifications.empty')}</Text>
         </View>
       ) : (
         <FlatList
