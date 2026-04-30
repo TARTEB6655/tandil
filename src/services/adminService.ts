@@ -443,6 +443,13 @@ export const adminService = {
   },
 
   // Reports API
+  getReportStatistics: async (): Promise<{ success: boolean; data: AdminReportsStatistics }> => {
+    const response = await apiClient.get<{ success: boolean; data: AdminReportsStatistics }>(
+      '/admin/reports/statistics'
+    );
+    return response.data;
+  },
+
   getReports: async (params?: {
     page?: number;
     per_page?: number;
@@ -1636,6 +1643,15 @@ export interface ReportsListResponse {
   success?: boolean;
   data: AdminReport[];
   meta: ReportsMeta;
+}
+
+export interface AdminReportsStatistics {
+  total: number;
+  pending: number;
+  generated: number;
+  scheduled: number;
+  failed: number;
+  by_type: Record<string, number>;
 }
 
 export interface ShopOrder {

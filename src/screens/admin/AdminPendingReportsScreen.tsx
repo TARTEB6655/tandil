@@ -11,9 +11,13 @@ import {
   Alert,
   Modal,
   Share,
+  Linking,
   Switch,
   Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +26,13 @@ import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
-import { adminService, AdminReport, ReportsMeta } from '../../services/adminService';
+import {
+  adminService,
+  AdminReport,
+  ReportsMeta,
+  AdminReportsStatistics,
+} from '../../services/adminService';
+import { API_BASE_URL } from '../../config/api';
 
 function formatDateToYYYYMMDD(date: Date): string {
   const y = date.getFullYear();
@@ -31,9 +41,40 @@ function formatDateToYYYYMMDD(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-const PER_PAGE = 15;
+const PER_PAGE = 5;
 
-const REPORT_TYPE_KEYS = ['financial', 'performance', 'user', 'subscription'] as const;
+const REPORT_TYPE_KEYS = ['financial', 'performance', 'customer', 'operational', 'user'] as const;
+
+const REPORT_TYPE_FALLBACKS: Record<(typeof REPORT_TYPE_KEYS)[number], { label: string; description: string }> = {
+  financial: {
+    label: 'Financial',
+    description: 'Revenue, billing and payment summaries',
+  },
+  performance: {
+    label: 'Performance',
+    description: 'Team performance and KPI overview',
+  },
+  customer: {
+    label: 'Customer',
+    description: 'Customer activity, subscriptions and retention',
+  },
+  operational: {
+    label: 'Operational',
+    description: 'Visits, assignments and operational efficiency',
+  },
+  user: {
+    label: 'User',
+    description: 'User growth and engagement metrics',
+  },
+};
+
+const RECURRENCE_OPTIONS: Array<{ value: '' | 'daily' | 'weekly' | 'monthly' | 'yearly'; label: string }> = [
+  { value: '', label: 'None' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'yearly', label: 'Yearly' },
+];
 
 const AdminPendingReportsScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -41,6 +82,7 @@ const AdminPendingReportsScreen: React.FC = () => {
   const route = useRoute();
   const showBackButton = (route as { name?: string }).name !== 'ReportsTab';
   const [reports, setReports] = useState<AdminReport[]>([]);
+  const [statistics, setStatistics] = useState<AdminReportsStatistics | null>(null);
   const [meta, setMeta] = useState<ReportsMeta | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -75,8 +117,14 @@ const AdminPendingReportsScreen: React.FC = () => {
     () =>
       REPORT_TYPE_KEYS.map((value) => ({
         value,
-        label: t(`admin.reportsManagement.reportTypes.${value}.label`),
-        description: t(`admin.reportsManagement.reportTypes.${value}.description`),
+        label: t(
+          `admin.reportsManagement.reportTypes.${value}.label`,
+          REPORT_TYPE_FALLBACKS[value].label
+        ),
+        description: t(
+          `admin.reportsManagement.reportTypes.${value}.description`,
+          REPORT_TYPE_FALLBACKS[value].description
+        ),
       })),
     [t]
   );
@@ -90,15 +138,9 @@ const AdminPendingReportsScreen: React.FC = () => {
       const data = Array.isArray(response) ? response : (response as any).data ?? [];
       const list = Array.isArray(data) ? data : [];
       const responseMeta = (response as any).meta ?? null;
-      if (pageNum === 1 || isRefresh) {
-        setReports(list);
-        setMeta(responseMeta);
-        setPage(1);
-      } else {
-        setReports((prev) => [...prev, ...list]);
-        setMeta(responseMeta);
-        setPage(pageNum);
-      }
+      setReports(list);
+      setMeta(responseMeta);
+      setPage(pageNum);
     } catch (error: any) {
       console.error('Error fetching reports:', error);
       if (pageNum === 1) setReports([]);
@@ -110,24 +152,44 @@ const AdminPendingReportsScreen: React.FC = () => {
     }
   }, [t]);
 
+  const fetchStatistics = useCallback(async () => {
+    try {
+      const response = await adminService.getReportStatistics();
+      if (response?.success && response?.data) {
+        setStatistics(response.data);
+      } else {
+        setStatistics(null);
+      }
+    } catch {
+      setStatistics(null);
+    }
+  }, []);
+
   useEffect(() => {
     fetchReports(1);
-  }, [fetchReports]);
+    fetchStatistics();
+  }, [fetchReports, fetchStatistics]);
 
   useFocusEffect(
     useCallback(() => {
       fetchReports(1);
-    }, [fetchReports])
+      fetchStatistics();
+    }, [fetchReports, fetchStatistics])
   );
 
   const onRefresh = () => {
     fetchReports(1, true);
   };
 
-  const loadMore = useCallback(() => {
+  const goToNextPage = useCallback(() => {
     if (!meta || page >= meta.last_page || loadingMore) return;
     fetchReports(page + 1);
   }, [meta, page, loadingMore, fetchReports]);
+
+  const goToPreviousPage = useCallback(() => {
+    if (page <= 1 || loadingMore) return;
+    fetchReports(page - 1);
+  }, [page, loadingMore, fetchReports]);
 
   const handleMenuPress = (report: AdminReport) => {
     setSelectedReport(report);
@@ -284,14 +346,40 @@ const AdminPendingReportsScreen: React.FC = () => {
   };
 
   const handleDownloadReport = async (report: AdminReport) => {
-    if (!report.file_url) {
+    if (report.id == null) {
       Alert.alert(t('admin.users.error'), t('admin.reportsManagement.errorReportFileNotAvailable'));
       return;
     }
 
     try {
-      // TODO: Implement download functionality
-      Alert.alert(t('admin.users.success'), t('admin.reportsManagement.successDownloadStarted'));
+      const token = await AsyncStorage.getItem('auth_token');
+      if (!token) {
+        Alert.alert(t('admin.users.error'), t('auth.loginRequired', { defaultValue: 'Please login again.' }));
+        return;
+      }
+
+      const downloadUrl = `${API_BASE_URL}/admin/reports/${report.id}/download`;
+      const fileUri = `${FileSystem.cacheDirectory}admin-report-${report.id}.pdf`;
+      const result = await FileSystem.downloadAsync(downloadUrl, fileUri, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+      });
+
+      if (result.status !== 200) {
+        Alert.alert(t('admin.users.error'), t('admin.reportsManagement.errorDownloadReport'));
+        return;
+      }
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(result.uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: t('admin.reportsManagement.downloadReport'),
+        });
+      } else {
+        await Linking.openURL(result.uri);
+      }
       setShowActionMenu(false);
     } catch (error: any) {
       console.error('Error downloading report:', error);
@@ -341,7 +429,14 @@ const AdminPendingReportsScreen: React.FC = () => {
   };
 
   const renderReport = ({ item, index }: { item: AdminReport; index: number }) => {
-    const typeLabel = reportTypes.find(t => t.value === item.type)?.label || item.type || 'Report';
+    const normalizedType = (item.type || '').toLowerCase();
+    const typeLabel =
+      reportTypes.find(t => t.value === item.type)?.label ||
+      (normalizedType === 'hr_technician_monthly'
+        ? t('admin.reportsManagement.reportTypes.hr_technician_monthly.label', {
+            defaultValue: 'HR Technician Monthly',
+          })
+        : (item.type || 'Report').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
     const title = item.title ?? item.type ?? 'Report';
     const status = item.status ?? 'pending';
 
@@ -462,6 +557,38 @@ const AdminPendingReportsScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {statistics ? (
+        <View style={styles.statsContainer}>
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Total</Text>
+              <Text style={styles.statValue}>{statistics.total}</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Generated</Text>
+              <Text style={[styles.statValue, { color: COLORS.success }]}>{statistics.generated}</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Pending</Text>
+              <Text style={[styles.statValue, { color: COLORS.warning }]}>{statistics.pending}</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Scheduled</Text>
+              <Text style={[styles.statValue, { color: COLORS.info }]}>{statistics.scheduled}</Text>
+            </View>
+          </View>
+          <View style={styles.typeChipsWrap}>
+            {Object.entries(statistics.by_type || {}).map(([type, count]) => (
+              <View key={type} style={styles.typeChip}>
+                <Text style={styles.typeChipText}>
+                  {type.replace(/_/g, ' ')}: {count}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       {/* Reports List */}
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -481,17 +608,36 @@ const AdminPendingReportsScreen: React.FC = () => {
               colors={[COLORS.primary]}
             />
           }
-          onEndReached={() => { if (meta && page < meta.last_page) loadMore(); }}
-          onEndReachedThreshold={0.3}
           ListFooterComponent={
-            meta && page < meta.last_page && reports.length > 0 ? (
-              <TouchableOpacity style={styles.loadMoreButton} onPress={loadMore} disabled={loadingMore}>
-                {loadingMore ? (
-                  <ActivityIndicator size="small" color={COLORS.primary} />
-                ) : (
-                  <Text style={styles.loadMoreText}>{t('admin.reportsManagement.loadMore')}</Text>
-                )}
-              </TouchableOpacity>
+            meta && reports.length > 0 ? (
+              <View style={styles.paginationWrap}>
+                <TouchableOpacity
+                  style={[styles.pageButton, page <= 1 && styles.pageButtonDisabled]}
+                  onPress={goToPreviousPage}
+                  disabled={page <= 1 || loadingMore}
+                >
+                  <Text style={[styles.pageButtonText, page <= 1 && styles.pageButtonTextDisabled]}>
+                    Previous
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.pageText}>
+                  Page {page} / {meta.last_page}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.pageButton, page >= meta.last_page && styles.pageButtonDisabled]}
+                  onPress={goToNextPage}
+                  disabled={page >= meta.last_page || loadingMore}
+                >
+                  <Text
+                    style={[
+                      styles.pageButtonText,
+                      page >= meta.last_page && styles.pageButtonTextDisabled,
+                    ]}
+                  >
+                    Next
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ) : null
           }
           ListEmptyComponent={
@@ -742,14 +888,27 @@ const AdminPendingReportsScreen: React.FC = () => {
 
               <Text style={styles.modalLabel}>{t('admin.reportsManagement.recurrence')}</Text>
               <View style={styles.recurrenceRow}>
-                {(['', 'daily', 'weekly', 'monthly', 'yearly'] as const).map((rec) => (
+                {RECURRENCE_OPTIONS.map((option) => (
                   <TouchableOpacity
-                    key={rec || 'once'}
-                    style={[styles.recurrenceChip, scheduleRecurrence === rec && styles.recurrenceChipActive]}
-                    onPress={() => setScheduleRecurrence(rec)}
+                    key={option.value || 'none'}
+                    style={[
+                      styles.recurrenceChip,
+                      scheduleRecurrence === option.value && styles.recurrenceChipActive,
+                    ]}
+                    onPress={() => setScheduleRecurrence(option.value)}
                   >
-                    <Text style={[styles.recurrenceChipText, scheduleRecurrence === rec && styles.recurrenceChipTextActive]}>
-                      {rec === '' ? t('admin.reportsManagement.oneTime') : t(`admin.reportsManagement.${rec}`)}
+                    <Text
+                      style={[
+                        styles.recurrenceChipText,
+                        scheduleRecurrence === option.value && styles.recurrenceChipTextActive,
+                      ]}
+                    >
+                      {t(
+                        option.value === ''
+                          ? 'admin.reportsManagement.recurrenceNone'
+                          : `admin.reportsManagement.${option.value}`,
+                        option.label
+                      )}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -990,6 +1149,59 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.primary,
   },
+  statsContainer: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: '22%',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.sm,
+  },
+  statLabel: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+  },
+  statValue: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+    marginTop: SPACING.xs,
+  },
+  typeChipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginTop: SPACING.md,
+  },
+  typeChip: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  typeChipText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    textTransform: 'capitalize',
+  },
   listContent: {
     padding: SPACING.lg,
   },
@@ -1105,14 +1317,42 @@ const styles = StyleSheet.create({
   emptyButton: {
     marginTop: SPACING.md,
   },
-  loadMoreButton: {
-    paddingVertical: SPACING.md,
+  paginationWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  pageButton: {
+    minWidth: 88,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.primary,
+    borderWidth: 1,
+    borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
   },
-  loadMoreText: {
+  pageButtonDisabled: {
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+  },
+  pageButtonText: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.primary,
+  },
+  pageButtonTextDisabled: {
+    color: COLORS.textSecondary,
+  },
+  pageText: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHTS.medium,
   },
   modalOverlay: {
     flex: 1,
