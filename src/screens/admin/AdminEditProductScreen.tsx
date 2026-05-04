@@ -80,6 +80,8 @@ const AdminEditProductScreen: React.FC = () => {
   const [isFeatured, setIsFeatured] = useState(false); // 0 = no, 1 = yes
   const [sku, setSku] = useState('');
   const [handle, setHandle] = useState('');
+  const [estimatedArrival, setEstimatedArrival] = useState('');
+  const [jobDuration, setJobDuration] = useState('');
   const [mainImage, setMainImage] = useState<{ uri: string } | null>(null);
   const [extraImages, setExtraImages] = useState<{ uri: string }[]>([]);
   const [removedGalleryImageIds, setRemovedGalleryImageIds] = useState<number[]>([]);
@@ -169,6 +171,10 @@ const AdminEditProductScreen: React.FC = () => {
     setIsFeatured(Number(raw) === 1 || raw === true);
     setSku(productDetails.sku ?? '');
     setHandle(productDetails.handle ?? '');
+    setEstimatedArrival(
+      productDetails.estimated_arrival != null ? String(productDetails.estimated_arrival) : ''
+    );
+    setJobDuration(productDetails.job_duration != null ? String(productDetails.job_duration) : '');
   }, [productDetails, hasUserEdited]);
 
   useFocusEffect(
@@ -320,6 +326,8 @@ const AdminEditProductScreen: React.FC = () => {
         is_featured: isFeatured ? 1 : 0,
         sku: sku.trim(),
         handle: handle.trim(),
+        estimated_arrival: estimatedArrival.trim(),
+        job_duration: jobDuration.trim(),
         image_ids_to_remove: removedGalleryImageIds.length > 0 ? removedGalleryImageIds : undefined,
       };
 
@@ -635,6 +643,35 @@ const AdminEditProductScreen: React.FC = () => {
           </View>
 
           <View style={styles.section}>
+            <View style={styles.serviceTimingCard}>
+              <Text style={styles.serviceTimingTitle}>
+                {t('admin.addProduct.serviceTimingTitle')}
+              </Text>
+              <Text style={styles.serviceTimingHint}>
+                {t('admin.addProduct.serviceTimingHint')}
+              </Text>
+              <View style={styles.serviceTimingRow}>
+                <View style={styles.serviceTimingField}>
+                  <Input
+                    label={t('admin.addProduct.estimatedArrivalLabel')}
+                    placeholder={t('admin.addProduct.estimatedArrivalPlaceholder')}
+                    value={estimatedArrival}
+                    onChangeText={setEstimatedArrival}
+                  />
+                </View>
+                <View style={styles.serviceTimingField}>
+                  <Input
+                    label={t('admin.addProduct.jobDurationLabel')}
+                    placeholder={t('admin.addProduct.jobDurationPlaceholder')}
+                    value={jobDuration}
+                    onChangeText={setJobDuration}
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('admin.editProduct.mainImageTitle')}</Text>
             <Text style={styles.uploadedHint}>{t('admin.editProduct.mainImageHint')}</Text>
             {!mainImage && (
@@ -768,6 +805,34 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { padding: SPACING.lg },
   section: { marginBottom: SPACING.xl },
+  serviceTimingCard: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.background,
+    padding: SPACING.md,
+  },
+  serviceTimingTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  serviceTimingHint: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+    marginBottom: SPACING.md,
+  },
+  serviceTimingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.md,
+  },
+  serviceTimingField: {
+    flex: 1,
+    minWidth: 0,
+  },
   sectionTitle: {
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.semiBold,

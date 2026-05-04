@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,143 +7,157 @@ import {
   TouchableOpacity,
   Alert,
   Image,
+  ActivityIndicator,
+  Dimensions,
 } from 'react-native';
-import BeforeAfter from '../../components/common/BeforeAfter';
-import { Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { useTranslation } from 'react-i18next';
 import Header from '../../components/common/Header';
-import { StatusStepper } from '../../components/common/StatusStepper';
-import { useAppStore } from '../../store';
+import { TrackingTimeline } from '../../components/common/TrackingTimeline';
+import {
+  getOrderTrack,
+  maintenancePhotoUrl,
+  type OrderTrackData,
+} from '../../services/orderService';
+import { buildFullImageUrl } from '../../config/api';
+
+function resolveTrackPhotoUrl(entry: unknown): string | null {
+  const raw = maintenancePhotoUrl(entry);
+  if (!raw) return null;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  return buildFullImageUrl(raw);
+}
+
+function badgeColorForStatus(statusLabel: string): string {
+  const s = statusLabel.toLowerCase();
+  if (s.includes('cancel')) return COLORS.error;
+  if (s.includes('deliver') || s.includes('complete')) return COLORS.success;
+  if (s.includes('progress') || s.includes('assign')) return COLORS.primary;
+  if (s.includes('confirm')) return COLORS.info;
+  if (s.includes('pending')) return COLORS.warning;
+  return COLORS.textSecondary;
+}
 
 const OrderTrackingScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { orderId } = route.params;
+  const { orderId } = route.params || {};
   const { t, i18n } = useTranslation();
-  const { orders } = useAppStore();
-  const [order, setOrder] = useState<any>(null);
+  const [track, setTrack] = useState<OrderTrackData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (orderId == null || orderId === '') {
+      setError(t('orders.invalidOrder', 'Invalid order.'));
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, message } = await getOrderTrack(orderId);
+      if (data) {
+        setTrack(data);
+      } else {
+        setError(message || t('orders.trackLoadFailed', 'Could not load tracking.'));
+        setTrack(null);
+      }
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (e as Error)?.message ||
+        t('orders.trackLoadFailed', 'Could not load tracking.');
+      setError(msg);
+      setTrack(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [orderId, t]);
 
   useEffect(() => {
-    const foundOrder = orders.find(o => o.id === orderId);
-    if (foundOrder) {
-      setOrder(foundOrder);
-    } else {
-      // Mock order for demo
-      setOrder({
-        id: orderId,
-        serviceId: 'service_001',
-        status: 'in_progress',
-        totalAmount: 25.00,
-        createdAt: new Date('2024-01-15T10:30:00'),
-        scheduledDate: new Date('2024-01-16T14:00:00'),
-        address: {
-          street: '123 Main Street',
-          city: 'New York',
-          state: 'NY',
-          zipCode: '10001',
-          country: 'USA',
-        },
-        technicianId: 'tech_001',
-        tracking: [
-          {
-            id: '1',
-            status: 'pending',
-            timestamp: new Date('2024-01-15T10:30:00'),
-            message: 'Order placed successfully',
-          },
-          {
-            id: '2',
-            status: 'confirmed',
-            timestamp: new Date('2024-01-15T11:00:00'),
-            message: 'Order confirmed by technician',
-          },
-          {
-            id: '3',
-            status: 'assigned',
-            timestamp: new Date('2024-01-15T13:30:00'),
-            message: 'Technician assigned to your order',
-          },
-          {
-            id: '4',
-            status: 'in_progress',
-            timestamp: new Date('2024-01-16T14:00:00'),
-            message: 'Technician is on the way',
-          },
-          {
-            id: '5',
-            status: 'completed',
-            timestamp: new Date('2024-01-16T16:30:00'),
-            message: 'Maintenance completed with before/after photos',
-            photos: {
-              before: [
-                'https://images.unsplash.com/photo-1522156373667-4c7234bbd804?w=400',
-                'https://images.unsplash.com/photo-1523345863763-5b0b9c4a9d17?w=400',
-              ],
-              after: [
-                'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?w=400',
-                'https://images.unsplash.com/photo-1501004314611-86f71c37b23a?w=400',
-              ],
-            },
-          },
-        ],
-        paymentMethod: 'card',
-        specialInstructions: 'Please call before arrival',
-      });
-    }
-  }, [orderId, orders]);
-
-  const handleContactTechnician = () => {
-    Alert.alert('Contact Technician', 'Calling technician...');
-  };
+    load();
+  }, [load]);
 
   const handleCancelOrder = () => {
     Alert.alert(
-      'Cancel Order',
-      'Are you sure you want to cancel this order?',
+      t('orders.cancelTitle', 'Cancel order'),
+      t('orders.cancelConfirm', 'Are you sure you want to cancel this order?'),
       [
-        { text: 'No', style: 'cancel' },
-        { text: 'Yes', style: 'destructive', onPress: () => navigation.goBack() },
+        { text: t('common.no', 'No'), style: 'cancel' },
+        {
+          text: t('common.yes', 'Yes'),
+          style: 'destructive',
+          onPress: () => navigation.goBack(),
+        },
       ]
     );
   };
 
   const handleRateService = () => {
-    console.log('OrderTrackingScreen: Rate service pressed, navigating to RateReview');
     try {
-      navigation.navigate('RateReview', { orderId });
-    } catch (error) {
-      console.error('OrderTrackingScreen: Navigation error to RateReview:', error);
+      navigation.navigate('RateReview', { orderId: String(orderId) });
+    } catch {
+      // ignore
     }
   };
 
-  if (!order) {
+  const photoUrls =
+    track?.maintenance_photos?.map(resolveTrackPhotoUrl).filter((u): u is string => u != null) ??
+    [];
+
+  const summary = track?.order_summary;
+  const placedDate =
+    summary?.placed_at != null
+      ? (() => {
+          const d = new Date(summary.placed_at);
+          if (isNaN(d.getTime())) return '—';
+          const loc =
+            i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'ur' ? 'ur-PK' : 'en-US';
+          return `${d.toLocaleDateString(loc)} ${d.toLocaleTimeString(loc, {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}`;
+        })()
+      : '—';
+
+  const statusLower = track?.tracking?.status?.toLowerCase() ?? '';
+  const isDone = statusLower === 'completed' || statusLower === 'delivered';
+  const thumb = Math.min(Dimensions.get('window').width - SPACING.lg * 2, 120);
+
+  if (loading && !track) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading order details...</Text>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>{t('orders.loadingTracking', 'Loading…')}</Text>
       </View>
     );
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return COLORS.warning;
-      case 'confirmed': return COLORS.info;
-      case 'assigned': return COLORS.primary;
-      case 'in_progress': return COLORS.primary;
-      case 'completed': return COLORS.success;
-      case 'delivered': return COLORS.success;
-      case 'cancelled': return COLORS.error;
-      default: return COLORS.textSecondary;
-    }
-  };
+  if (error && !track) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorTitle}>{t('common.error', 'Error')}</Text>
+        <Text style={styles.errorBody}>{error}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={load}>
+          <Text style={styles.retryText}>{t('common.retry', 'Retry')}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!track) {
+    return null;
+  }
+
+  const badgeBg = badgeColorForStatus(track.current_status);
 
   return (
     <View style={styles.container}>
-      <Header 
-        title={t('tabs.orders')} 
+      <Header
+        title={t('tabs.orders')}
         showBack={true}
         rightComponent={
           <TouchableOpacity style={styles.moreButton}>
@@ -152,181 +166,109 @@ const OrderTrackingScreen: React.FC = () => {
         }
       />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Order Status */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.statusContainer}>
           <View style={styles.statusHeader}>
-            <Text style={styles.orderId}>{t('orders.orderNumber', { id: order.id, defaultValue: `Order #${order.id}` })}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + '20' }]}>
-              <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
-                 {t(`orders.status.${order.status}`, { defaultValue: order.status.replace('_', ' ').toUpperCase() })}
-              </Text>
+            <Text style={styles.orderId}>
+              {t('orders.orderNumberShort', {
+                short: track.order_number_short || String(track.order_id),
+                defaultValue: `Order #${track.order_number_short || track.order_id}`,
+              })}
+            </Text>
+            <View style={[styles.statusBadge, { backgroundColor: badgeBg + '22' }]}>
+              <Text style={[styles.statusText, { color: badgeBg }]}>{track.current_status}</Text>
             </View>
           </View>
-          
-          <StatusStepper tracking={order.tracking} currentStatus={order.status} />
+
+          <TrackingTimeline timeline={track.tracking?.timeline ?? []} />
         </View>
 
-        {/* Before / After Photos (horizontal sliders) */}
-        {(() => {
-          const withPhotos = order.tracking?.find((t: any) => t.photos && (t.photos.before?.length || t.photos.after?.length));
-          // Tree maintenance demo fallbacks (used if technician photos are not present)
-          const demoBefore = [
-            'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1200&q=60',
-            'https://images.unsplash.com/photo-1482192505345-5655af888cc4?auto=format&fit=crop&w=1200&q=60',
-          ];
-          const demoAfter = [
-            'https://images.unsplash.com/photo-1520975954732-35dd22f4758f?auto=format&fit=crop&w=1200&q=60',
-            'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=60',
-          ];
+        {photoUrls.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {t('home.maintenancePhotos', 'Maintenance photos')}
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.photoRow}>
+                {photoUrls.map((uri, idx) => (
+                  <Image
+                    key={`mp-${idx}`}
+                    source={{ uri }}
+                    style={[styles.photoThumb, { width: thumb, height: thumb }]}
+                    resizeMode="cover"
+                  />
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        ) : null}
 
-          const beforeList: string[] = withPhotos?.photos?.before ?? demoBefore;
-          const afterList: string[] = withPhotos?.photos?.after ?? demoAfter;
-          const count = Math.min(beforeList.length, afterList.length);
-
-          const screenWidth = Dimensions.get('window').width;
-          const horizontalPadding = SPACING.lg * 2; // approximate section padding
-          const cardWidth = Math.min(screenWidth - horizontalPadding, 320);
-
-          return (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('home.maintenancePhotos')}</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={{ flexDirection: 'row' }}>
-                  {beforeList.slice(0, count).map((bUri, idx) => (
-                    <View key={`ot-ba-${idx}`} style={{ width: cardWidth, marginRight: SPACING.md }}>
-                      <BeforeAfter
-                        beforeUri={bUri}
-                        afterUri={afterList[idx]}
-                        width={cardWidth}
-                        aspectRatio={0.6}
-                      />
-                    </View>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
-          );
-        })()}
-
-        {/* Order Details */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('booking.orderSummary')}</Text>
+          <Text style={styles.sectionTitle}>{t('booking.orderSummary', 'Order summary')}</Text>
           <View style={styles.orderCard}>
             <View style={styles.orderInfo}>
               <View style={styles.orderInfoItem}>
                 <Ionicons name="calendar-outline" size={20} color={COLORS.textSecondary} />
                 <View style={styles.orderInfoText}>
-                  <Text style={styles.orderInfoLabel}>{t('booking.date')}</Text>
-                  <Text style={styles.orderInfoValue}>
-                    {(() => {
-                      const sched = order.scheduledDate ? new Date(order.scheduledDate) : null;
-                      if (!sched || isNaN(sched.getTime())) return '-';
-                      try {
-                        const { default: i18next } = require('i18next');
-                        const lang = i18next?.language || 'en';
-                        const resolved = lang === 'ar' ? 'ar-EG' : lang === 'ur' ? 'ur-PK' : 'en-US';
-                        return `${sched.toLocaleDateString(resolved)} ${sched.toLocaleTimeString(resolved, { hour: '2-digit', minute: '2-digit' })}`;
-                      } catch {
-                        return sched.toString();
-                      }
-                    })()}
-                  </Text>
+                  <Text style={styles.orderInfoLabel}>{t('booking.date', 'Placed')}</Text>
+                  <Text style={styles.orderInfoValue}>{placedDate}</Text>
                 </View>
               </View>
-              
+
               <View style={styles.orderInfoItem}>
                 <Ionicons name="location-outline" size={20} color={COLORS.textSecondary} />
                 <View style={styles.orderInfoText}>
-                  <Text style={styles.orderInfoLabel}>{t('booking.addressSection')}</Text>
-                  <Text style={styles.orderInfoValue}>
-                    {order.address.street}, {order.address.city}, {order.address.state} {order.address.zipCode}
-                  </Text>
+                  <Text style={styles.orderInfoLabel}>{t('booking.addressSection', 'Address')}</Text>
+                  <Text style={styles.orderInfoValue}>{summary?.delivery_address ?? '—'}</Text>
                 </View>
               </View>
 
               <View style={styles.orderInfoItem}>
                 <Ionicons name="card-outline" size={20} color={COLORS.textSecondary} />
                 <View style={styles.orderInfoText}>
-                  <Text style={styles.orderInfoLabel}>{t('booking.payment')}</Text>
-                  <Text style={styles.orderInfoValue}>
-                    {t(`booking.paymentMethods.${order.paymentMethod}`, { defaultValue: order.paymentMethod })}
-                  </Text>
+                  <Text style={styles.orderInfoLabel}>{t('booking.payment', 'Payment')}</Text>
+                  <Text style={styles.orderInfoValue}>{summary?.payment_method ?? '—'}</Text>
                 </View>
               </View>
 
               <View style={styles.orderInfoItem}>
                 <Ionicons name="cash-outline" size={20} color={COLORS.textSecondary} />
                 <View style={styles.orderInfoText}>
-                  <Text style={styles.orderInfoLabel}>{t('booking.total')}</Text>
-                  <Text style={styles.orderInfoValue}>${order.totalAmount.toFixed(2)}</Text>
+                  <Text style={styles.orderInfoLabel}>{t('booking.total', 'Total')}</Text>
+                  <Text style={styles.orderInfoValue}>
+                    {summary?.currency ?? 'AED'} {Number(summary?.total ?? 0).toFixed(2)}
+                  </Text>
                 </View>
               </View>
 
-              {order.specialInstructions && (
+              {summary?.special_instructions ? (
                 <View style={styles.orderInfoItem}>
                   <Ionicons name="chatbubble-outline" size={20} color={COLORS.textSecondary} />
                   <View style={styles.orderInfoText}>
-                  <Text style={styles.orderInfoLabel}>{t('booking.special')}</Text>
-                    <Text style={styles.orderInfoValue}>{order.specialInstructions}</Text>
+                    <Text style={styles.orderInfoLabel}>{t('booking.special', 'Note')}</Text>
+                    <Text style={styles.orderInfoValue}>{summary.special_instructions}</Text>
                   </View>
                 </View>
-              )}
-            </View>
-          </View>
-        </View>
-
-        {/* Technician Info */}
-        {order.technicianId && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('tabs.orders')}</Text>
-            <View style={styles.technicianCard}>
-              <View style={styles.technicianInfo}>
-                <View style={styles.technicianAvatar}>
-                  <Text style={styles.technicianInitial}>T</Text>
-                </View>
-                <View style={styles.technicianDetails}>
-                  <Text style={styles.technicianName}>John Smith</Text>
-                 <Text style={styles.technicianRating}>⭐ 4.8 {t('orders.reviewsCount', { count: 120 })}</Text>
-                 <Text style={styles.technicianStatus}>{t('services.details.related')}</Text>
-                </View>
-              </View>
-              <TouchableOpacity style={styles.contactButton} onPress={handleContactTechnician}>
-                <Ionicons name="call" size={20} color={COLORS.background} />
-                <Text style={styles.contactButtonText}>{t('common.call', { defaultValue: 'Call' })}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Estimated Time */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('common.estimatedTime')}</Text>
-          <View style={styles.timeCard}>
-            <View style={styles.timeInfo}>
-              <Ionicons name="time-outline" size={24} color={COLORS.primary} />
-              <View style={styles.timeText}>
-                <Text style={styles.estimatedTime}>15-20 {t('booking.minutes')}</Text>
-                <Text style={styles.timeDescription}>{t('common.eta')}</Text>
-              </View>
+              ) : null}
             </View>
           </View>
         </View>
       </ScrollView>
 
-      {/* Bottom Actions */}
       <View style={styles.bottomActions}>
-        {order.status === 'completed' ? (
-            <TouchableOpacity style={styles.rateButton} onPress={handleRateService}>
+        {isDone ? (
+          <TouchableOpacity style={styles.rateButton} onPress={handleRateService}>
             <Ionicons name="star-outline" size={20} color={COLORS.background} />
-              <Text style={styles.rateButtonText}>{t('orders.rateService')}</Text>
+            <Text style={styles.rateButtonText}>{t('orders.rateService', 'Rate service')}</Text>
           </TouchableOpacity>
-        ) : (
+        ) : track.can_cancel ? (
           <TouchableOpacity style={styles.cancelButton} onPress={handleCancelOrder}>
             <Ionicons name="close-circle-outline" size={20} color={COLORS.error} />
-            <Text style={styles.cancelButtonText}>Cancel Order</Text>
+            <Text style={styles.cancelButtonText}>
+              {t('orders.cancelOrder', 'Cancel order')}
+            </Text>
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
     </View>
   );
@@ -337,31 +279,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  scrollContent: {
+    paddingBottom: SPACING.xl,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: COLORS.background,
+    padding: SPACING.lg,
   },
   loadingText: {
+    marginTop: SPACING.md,
     fontSize: FONT_SIZES.md,
     color: COLORS.textSecondary,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.lg,
-  },
-  backButton: {
-    padding: SPACING.sm,
-  },
-  headerTitle: {
+  errorTitle: {
     fontSize: FONT_SIZES.lg,
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
+    marginBottom: SPACING.sm,
+  },
+  errorBody: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: SPACING.lg,
+  },
+  retryBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  retryText: {
+    color: COLORS.background,
+    fontWeight: FONT_WEIGHTS.medium,
   },
   moreButton: {
     padding: SPACING.sm,
@@ -374,12 +327,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
   },
   orderId: {
     fontSize: FONT_SIZES.lg,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
+    flex: 1,
+    marginRight: SPACING.sm,
   },
   statusBadge: {
     paddingHorizontal: SPACING.md,
@@ -399,6 +354,14 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
     marginBottom: SPACING.md,
+  },
+  photoRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  photoThumb: {
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.surface,
   },
   orderCard: {
     backgroundColor: COLORS.surface,
@@ -425,103 +388,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
     fontWeight: FONT_WEIGHTS.medium,
-  },
-  photosRow: {
-    marginTop: SPACING.sm,
-  },
-  photoGroupTitle: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  photo: {
-    width: 100,
-    height: 100,
-    borderRadius: BORDER_RADIUS.md,
-    marginRight: SPACING.sm,
-    backgroundColor: COLORS.surface,
-  },
-  technicianCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  technicianInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  technicianAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  technicianInitial: {
-    color: COLORS.background,
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.bold,
-  },
-  technicianDetails: {
-    flex: 1,
-  },
-  technicianName: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  technicianRating: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
-  },
-  technicianStatus: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.medium,
-  },
-  contactButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  contactButtonText: {
-    color: COLORS.background,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
-    marginLeft: SPACING.xs,
-  },
-  timeCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
-  },
-  timeInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  timeText: {
-    marginLeft: SPACING.md,
-    flex: 1,
-  },
-  estimatedTime: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  timeDescription: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
   },
   bottomActions: {
     padding: SPACING.lg,

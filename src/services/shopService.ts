@@ -40,6 +40,9 @@ export interface ShopProduct {
   image_url?: string | null;
   main_image?: { id: number; image_path: string; image_url?: string } | null;
   gallery_images?: Array<{ id: number; image_path: string; image_url?: string; sort_order?: number }>;
+  /** Optional service-oriented copy from admin product (shop API). */
+  estimated_arrival?: string | null;
+  job_duration?: string | null;
   created_at?: string;
   updated_at?: string;
   category?: ShopProductCategory | null;

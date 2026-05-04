@@ -8,6 +8,8 @@ import { authService } from './src/services/authService';
 import ErrorBoundary from './src/components/common/ErrorBoundary';
 import { captureException } from './src/utils/sentry';
 import './src/i18n';
+import { StripeProvider } from '@stripe/stripe-react-native';
+import { getStripePublishableKey } from './src/config/api';
 
 function AppContent() {
   const { setUser, setAuthenticated } = useAppStore();
@@ -36,12 +38,14 @@ function AppContent() {
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <StatusBar style="auto" />
-        <AppNavigator />
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <StripeProvider publishableKey={getStripePublishableKey()}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <StatusBar style="auto" />
+          <AppNavigator />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </StripeProvider>
   );
 }
 

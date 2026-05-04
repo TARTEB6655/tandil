@@ -42,6 +42,8 @@ const AdminAddProductScreen: React.FC = () => {
   const [isFeatured, setIsFeatured] = useState(false); // 0 = no, 1 = yes → send as is_featured
   const [sku, setSku] = useState('');
   const [handle, setHandle] = useState('');
+  const [estimatedArrival, setEstimatedArrival] = useState('');
+  const [jobDuration, setJobDuration] = useState('');
   const [mainImage, setMainImage] = useState<{ uri: string } | null>(null);
   const [extraImages, setExtraImages] = useState<{ uri: string }[]>([]);
   const [loading, setLoading] = useState(false);
@@ -222,6 +224,10 @@ const AdminAddProductScreen: React.FC = () => {
     try {
       const categoryIdNum = categoryId.trim() ? parseInt(categoryId, 10) : undefined;
       const serviceIdNum = serviceId.trim() ? parseInt(serviceId, 10) : undefined;
+      const timingFields = {
+        ...(estimatedArrival.trim() ? { estimated_arrival: estimatedArrival.trim() } : {}),
+        ...(jobDuration.trim() ? { job_duration: jobDuration.trim() } : {}),
+      };
       let createdData: { image_url?: string | null; image?: string | null; primary_image?: { image_url?: string; image_path?: string }; images?: Array<{ image_url?: string; image_path?: string }> } | undefined;
 
       const hasMainFile = mainImage != null;
@@ -243,6 +249,7 @@ const AdminAddProductScreen: React.FC = () => {
             is_featured: isFeatured ? 1 : 0,
             sku: sku.trim(),
             handle: handle.trim(),
+            ...timingFields,
             mainImage: mainFile,
             extraImages: extraFiles.map((i) => ({ uri: i.uri })),
           });
@@ -262,6 +269,7 @@ const AdminAddProductScreen: React.FC = () => {
           is_featured: isFeatured ? 1 : 0,
           sku: sku.trim(),
           handle: handle.trim(),
+          ...timingFields,
         });
         createdData = res.data;
       }
@@ -299,6 +307,8 @@ const AdminAddProductScreen: React.FC = () => {
               setWeightUnit('kg');
               setSku('');
               setHandle('');
+              setEstimatedArrival('');
+              setJobDuration('');
               setMainImage(null);
               setExtraImages([]);
               setErrors({});
@@ -524,6 +534,35 @@ const AdminAddProductScreen: React.FC = () => {
           </View>
 
           <View style={styles.section}>
+            <View style={styles.serviceTimingCard}>
+              <Text style={styles.serviceTimingTitle}>
+                {t('admin.addProduct.serviceTimingTitle')}
+              </Text>
+              <Text style={styles.serviceTimingHint}>
+                {t('admin.addProduct.serviceTimingHint')}
+              </Text>
+              <View style={styles.serviceTimingRow}>
+                <View style={styles.serviceTimingField}>
+                  <Input
+                    label={t('admin.addProduct.estimatedArrivalLabel')}
+                    placeholder={t('admin.addProduct.estimatedArrivalPlaceholder')}
+                    value={estimatedArrival}
+                    onChangeText={setEstimatedArrival}
+                  />
+                </View>
+                <View style={styles.serviceTimingField}>
+                  <Input
+                    label={t('admin.addProduct.jobDurationLabel')}
+                    placeholder={t('admin.addProduct.jobDurationPlaceholder')}
+                    value={jobDuration}
+                    onChangeText={setJobDuration}
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('admin.addProduct.mainImageTitle')}</Text>
             <Text style={styles.uploadedHint}>{t('admin.addProduct.mainImageHint')}</Text>
             <TouchableOpacity
@@ -617,6 +656,34 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { padding: SPACING.lg },
   section: { marginBottom: SPACING.xl },
+  serviceTimingCard: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.background,
+    padding: SPACING.md,
+  },
+  serviceTimingTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  serviceTimingHint: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+    marginBottom: SPACING.md,
+  },
+  serviceTimingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.md,
+  },
+  serviceTimingField: {
+    flex: 1,
+    minWidth: 0,
+  },
   sectionTitle: {
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.semiBold,

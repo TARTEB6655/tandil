@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,40 +6,77 @@ import {
   ScrollView,
   TouchableOpacity,
   FlatList,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import { OrderCard } from '../../components/cards/OrderCard';
 import { useAppStore } from '../../store';
+import type { Order } from '../../types';
+import { getClientOrders, mapShopOrdersToOrders } from '../../services/orderService';
 
 const OrderHistoryScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
-  const { orders } = useAppStore();
+  const isAuthenticated = useAppStore((s) => s.isAuthenticated);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState('all');
 
-  const filteredOrders = orders.filter(order => {
+  const loadOrders = useCallback(
+    async (isRefresh: boolean) => {
+      if (!isAuthenticated) {
+        setOrders([]);
+        setLoading(false);
+        setRefreshing(false);
+        setLoadError(null);
+        return;
+      }
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setLoadError(null);
+      try {
+        const { orders: rows, message } = await getClientOrders();
+        setOrders(mapShopOrdersToOrders(rows));
+        if (!rows?.length && message) {
+          setLoadError(null);
+        }
+      } catch (e: unknown) {
+        const msg =
+          (e as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          (e as Error)?.message ||
+          t('orders.loadFailed', 'Could not load orders.');
+        setLoadError(msg);
+        setOrders([]);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [isAuthenticated, t]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      loadOrders(false);
+    }, [loadOrders])
+  );
+
+  const filteredOrders = orders.filter((order) => {
     if (selectedFilter === 'all') return true;
     return order.status === selectedFilter;
   });
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return COLORS.warning;
-      case 'confirmed': return COLORS.info;
-      case 'assigned': return COLORS.primary;
-      case 'in_progress': return COLORS.primary;
-      case 'completed': return COLORS.success;
-      case 'delivered': return COLORS.success;
-      case 'cancelled': return COLORS.error;
-      default: return COLORS.textSecondary;
-    }
-  };
-
-  const renderOrderItem = ({ item }: { item: any }) => (
+  const renderOrderItem = ({ item }: { item: Order }) => (
     <OrderCard
       order={item}
       onPress={() => navigation.navigate('OrderTracking', { orderId: item.id })}
@@ -51,28 +88,50 @@ const OrderHistoryScreen: React.FC = () => {
     <View style={styles.emptyState}>
       <Ionicons name="list-outline" size={64} color={COLORS.textSecondary} />
       <Text style={styles.emptyStateTitle}>{t('tabs.orders')}</Text>
-      <Text style={styles.emptyStateDescription}>
-        {t('home.placeServiceOrders')}
-      </Text>
+      {!isAuthenticated ? (
+        <Text style={styles.emptyStateDescription}>
+          {t('orders.loginToSee', 'Sign in to view your orders.')}
+        </Text>
+      ) : loadError ? (
+        <Text style={styles.errorText}>{loadError}</Text>
+      ) : (
+        <Text style={styles.emptyStateDescription}>
+          {t('orders.emptyShop', 'No orders yet. Browse the shop to place an order.')}
+        </Text>
+      )}
       <TouchableOpacity
         style={styles.browseButton}
-        onPress={() => navigation.navigate('Main' as never, { screen: 'Services' } as never)}
+        onPress={() =>
+          navigation.navigate('Main' as never, { screen: isAuthenticated ? 'Store' : 'Home' } as never)
+        }
       >
-        <Text style={styles.browseButtonText}>{t('tabs.services')}</Text>
+        <Text style={styles.browseButtonText}>
+          {isAuthenticated ? t('tabs.store', 'Store') : t('tabs.home', 'Home')}
+        </Text>
       </TouchableOpacity>
     </View>
   );
 
+  if (loading && !refreshing && orders.length === 0) {
+    return (
+      <View style={styles.container}>
+        <Header title={t('home.orderHistory')} showBack={true} />
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Header 
-        title={t('home.orderHistory')} 
+      <Header
+        title={t('home.orderHistory')}
         showBack={true}
         rightComponent={
           <TouchableOpacity
             style={styles.filterButton}
             onPress={() => {
-              // Cycle through filters when pressing the filter icon
               const sequence = ['all', 'pending', 'in_progress', 'completed', 'cancelled'];
               const idx = sequence.indexOf(selectedFilter);
               const next = sequence[(idx + 1) % sequence.length];
@@ -84,7 +143,6 @@ const OrderHistoryScreen: React.FC = () => {
         }
       />
 
-      {/* Filter Tabs */}
       <View style={styles.filterContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {[
@@ -96,16 +154,15 @@ const OrderHistoryScreen: React.FC = () => {
           ].map((filter) => (
             <TouchableOpacity
               key={filter.id}
-              style={[
-                styles.filterTab,
-                selectedFilter === filter.id && styles.filterTabActive
-              ]}
+              style={[styles.filterTab, selectedFilter === filter.id && styles.filterTabActive]}
               onPress={() => setSelectedFilter(filter.id)}
             >
-              <Text style={[
-                styles.filterTabText,
-                selectedFilter === filter.id && styles.filterTabTextActive
-              ]}>
+              <Text
+                style={[
+                  styles.filterTabText,
+                  selectedFilter === filter.id && styles.filterTabTextActive,
+                ]}
+              >
                 {filter.label}
               </Text>
             </TouchableOpacity>
@@ -113,18 +170,29 @@ const OrderHistoryScreen: React.FC = () => {
         </ScrollView>
       </View>
 
-      {/* Orders List */}
-      {filteredOrders.length > 0 ? (
-        <FlatList
-          data={filteredOrders}
-          renderItem={renderOrderItem}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.ordersList}
-        />
-      ) : (
-        renderEmptyState()
-      )}
+      {loadError && orders.length > 0 ? (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>{loadError}</Text>
+        </View>
+      ) : null}
+
+      <FlatList
+        data={filteredOrders}
+        renderItem={renderOrderItem}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={
+          filteredOrders.length === 0 ? styles.emptyListContent : styles.ordersList
+        }
+        ListEmptyComponent={renderEmptyState}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadOrders(true)}
+            tintColor={COLORS.primary}
+          />
+        }
+      />
     </View>
   );
 };
@@ -134,21 +202,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  loadingBox: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.lg,
-  },
-  backButton: {
-    padding: SPACING.sm,
-  },
-  headerTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.text,
   },
   filterButton: {
     padding: SPACING.sm,
@@ -179,6 +236,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.xl,
   },
+  emptyListContent: {
+    flexGrow: 1,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl,
+  },
+  banner: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
+    padding: SPACING.sm,
+    backgroundColor: COLORS.warning + '22',
+    borderRadius: BORDER_RADIUS.md,
+  },
+  bannerText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+  },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
@@ -198,6 +271,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: SPACING.xl,
   },
+  errorText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.error,
+    textAlign: 'center',
+    marginBottom: SPACING.xl,
+  },
   browseButton: {
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.lg,
@@ -212,4 +291,3 @@ const styles = StyleSheet.create({
 });
 
 export default OrderHistoryScreen;
-

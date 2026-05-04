@@ -145,6 +145,56 @@ export interface AdminSupervisorsResponse {
   search: string | null;
 }
 
+function parseNotificationsListPayload(
+  body: any,
+  perPageFallback?: number
+): {
+  success: boolean;
+  message?: string;
+  list: AdminNotificationItem[];
+  currentPage: number;
+  lastPage: number;
+  total: number;
+  perPage: number;
+} {
+  const notifications = body?.data?.notifications;
+  const nested = body?.data;
+  const pageData = notifications?.data;
+  const rawList = Array.isArray(pageData)
+    ? pageData
+    : Array.isArray(nested?.data)
+      ? nested.data
+      : Array.isArray(body?.data?.data)
+        ? body.data.data
+        : Array.isArray(body?.data)
+          ? body.data
+          : [];
+
+  const list: AdminNotificationItem[] = rawList.map((item: any) => ({
+    id: item?.id ?? String(Math.random()),
+    type: item?.type,
+    notifiable_type: item?.notifiable_type,
+    notifiable_id: item?.notifiable_id,
+    read_at: item?.read_at ?? null,
+    created_at: item?.created_at,
+    updated_at: item?.updated_at,
+    title: String(item?.data?.title ?? item?.title ?? 'Notification'),
+    message: String(item?.data?.message ?? item?.message ?? ''),
+    action: item?.data?.meta?.action ?? item?.meta?.action ?? null,
+    meta: item?.data?.meta ?? item?.meta ?? null,
+  }));
+
+  return {
+    success: body?.success === true,
+    message: body?.message,
+    list,
+    currentPage: Number(notifications?.current_page ?? nested?.current_page ?? 1),
+    lastPage: Number(notifications?.last_page ?? nested?.last_page ?? 1),
+    total: Number(notifications?.total ?? nested?.total ?? list.length),
+    perPage: Number(notifications?.per_page ?? nested?.per_page ?? perPageFallback ?? 20),
+  };
+}
+
 export const adminService = {
   getUsers: async (params?: { 
     page?: number; 
@@ -316,39 +366,139 @@ export const adminService = {
       params: params ?? {},
       timeout: 15000,
     });
+    return parseNotificationsListPayload(response?.data ?? {}, params?.per_page);
+  },
+
+  /**
+   * GET /admin/notifications — hub list with server filters (q, filter, kind, audience_role).
+   * Query matches Postman: per_page, q, filter (all|unread|read), kind, audience_role.
+   */
+  getAdminNotificationsList: async (params?: {
+    page?: number;
+    per_page?: number;
+    q?: string;
+    filter?: 'all' | 'unread' | 'read' | string;
+    kind?: string;
+    audience_role?: string;
+  }): Promise<{
+    success: boolean;
+    message?: string;
+    list: AdminNotificationItem[];
+    currentPage: number;
+    lastPage: number;
+    total: number;
+    perPage: number;
+  }> => {
+    const p = params ?? {};
+    const response = await apiClient.get('/admin/notifications', {
+      params: {
+        page: p.page ?? 1,
+        per_page: p.per_page ?? 20,
+        q: p.q ?? '',
+        filter: p.filter ?? 'all',
+        kind: p.kind ?? '',
+        audience_role: p.audience_role ?? '',
+      },
+      timeout: 20000,
+    });
+    return parseNotificationsListPayload(response?.data ?? {}, p.per_page);
+  },
+
+  /** GET /admin/notifications/delivery-stats — delivery analytics (grand total, by type, by audience, tracking). */
+  getNotificationDeliveryStats: async (params?: {
+    since?: string;
+    until?: string;
+    audience_role?: string;
+  }): Promise<{
+    success: boolean;
+    data: NotificationDeliveryStatsData | null;
+    message?: string;
+  }> => {
+    const response = await apiClient.get<{ success?: boolean; message?: string; data?: NotificationDeliveryStatsData }>(
+      '/admin/notifications/delivery-stats',
+      {
+        params: {
+          ...(params?.since ? { since: params.since } : {}),
+          ...(params?.until ? { until: params.until } : {}),
+          ...(params?.audience_role ? { audience_role: params.audience_role } : {}),
+        },
+        timeout: 25000,
+      }
+    );
     const body = response?.data ?? {};
-    const notifications = body?.data?.notifications;
-    const pageData = notifications?.data;
-    const rawList = Array.isArray(pageData)
-      ? pageData
-      : Array.isArray(body?.data?.data)
-        ? body.data.data
-        : Array.isArray(body?.data)
-          ? body.data
-          : [];
+    if (body?.success === true && body?.data) {
+      return { success: true, data: body.data, message: body.message };
+    }
+    return { success: false, data: null, message: body?.message };
+  },
 
-    const list: AdminNotificationItem[] = rawList.map((item: any) => ({
-      id: item?.id ?? String(Math.random()),
-      type: item?.type,
-      notifiable_type: item?.notifiable_type,
-      notifiable_id: item?.notifiable_id,
-      read_at: item?.read_at ?? null,
-      created_at: item?.created_at,
-      updated_at: item?.updated_at,
-      title: String(item?.data?.title ?? item?.title ?? 'Notification'),
-      message: String(item?.data?.message ?? item?.message ?? ''),
-      action: item?.data?.meta?.action ?? item?.meta?.action ?? null,
-      meta: item?.data?.meta ?? item?.meta ?? null,
-    }));
+  /**
+   * POST /admin/notifications/broadcast — form-data: title, message, type (all|role|users), role?, user_ids[]?
+   */
+  broadcastNotification: async (params: {
+    title: string;
+    message: string;
+    type: 'all' | 'role' | 'users';
+    role?: string;
+    userIds?: number[];
+  }): Promise<{ success?: boolean; message?: string; data?: unknown }> => {
+    const formData = new FormData();
+    formData.append('title', params.title.trim());
+    formData.append('message', params.message.trim());
+    formData.append('type', params.type);
+    if (params.type === 'role' && params.role) {
+      formData.append('role', params.role);
+    }
+    if (params.type === 'users' && params.userIds?.length) {
+      params.userIds.forEach((id) => {
+        formData.append('user_ids[]', String(id));
+      });
+    }
+    const response = await apiClient.post('/admin/notifications/broadcast', formData, {
+      timeout: 120000,
+    });
+    return response.data ?? {};
+  },
 
+  /** GET /admin/notifications/broadcasts — broadcast history (admin). */
+  getBroadcasts: async (params?: { page?: number; per_page?: number }): Promise<{
+    success: boolean;
+    message?: string;
+    broadcasts: AdminBroadcastLogItem[];
+    pagination: {
+      current_page: number;
+      last_page: number;
+      per_page: number;
+      total: number;
+    };
+  }> => {
+    const response = await apiClient.get<{
+      success?: boolean;
+      message?: string;
+      data?: {
+        broadcasts: AdminBroadcastLogItem[];
+        pagination: {
+          current_page: number;
+          last_page: number;
+          per_page: number;
+          total: number;
+        };
+      };
+    }>('/admin/notifications/broadcasts', { params: { per_page: 20, ...params } });
+    const body = response.data;
+    const data = body?.data;
+    const broadcasts = Array.isArray(data?.broadcasts) ? data!.broadcasts : [];
+    const p = data?.pagination;
     return {
       success: body?.success === true,
       message: body?.message,
-      list,
-      currentPage: Number(notifications?.current_page ?? body?.data?.current_page ?? 1),
-      lastPage: Number(notifications?.last_page ?? body?.data?.last_page ?? 1),
-      total: Number(notifications?.total ?? body?.data?.total ?? list.length),
-      perPage: Number(notifications?.per_page ?? body?.data?.per_page ?? params?.per_page ?? 20),
+      broadcasts,
+      pagination: {
+        current_page: Number(p?.current_page ?? 1),
+        last_page: Number(p?.last_page ?? 1),
+        per_page: Number(p?.per_page ?? params?.per_page ?? 20),
+        total: Number(p?.total ?? broadcasts.length),
+      },
     };
   },
 
@@ -376,11 +526,11 @@ export const adminService = {
     };
   },
 
-  /** DELETE /notifications/:id */
+  /** DELETE /admin/notifications/:id — hub delete one (Postman: Delete one). */
   deleteNotification: async (
     notificationId: string | number
   ): Promise<{ success: boolean; message?: string }> => {
-    const response = await apiClient.delete(`/notifications/${notificationId}`, {
+    const response = await apiClient.delete(`/admin/notifications/${notificationId}`, {
       timeout: 15000,
     });
     return {
@@ -389,9 +539,9 @@ export const adminService = {
     };
   },
 
-  /** POST /notifications/clear-all */
+  /** POST /admin/notifications/clear-all — hub clear all (Postman: Clear all). */
   clearAllNotifications: async (): Promise<{ success: boolean; message?: string }> => {
-    const response = await apiClient.post('/notifications/clear-all', null, {
+    const response = await apiClient.post('/admin/notifications/clear-all', null, {
       timeout: 15000,
     });
     return {
@@ -762,6 +912,8 @@ export const adminService = {
     handle: string;
     image_urls?: string[];
     is_featured?: number; // 0 = no, 1 = show in Featured Products
+    estimated_arrival?: string;
+    job_duration?: string;
   }): Promise<{
     status: boolean;
     message?: string;
@@ -779,11 +931,14 @@ export const adminService = {
     stock: number;
     status: string;
     category_id?: number | null;
+    service_id?: number | null;
     weight_unit?: string;
     sku: string;
     handle: string;
     image_urls?: string[];
     is_featured?: number; // 0 = no, 1 = show in Featured Products
+    estimated_arrival?: string;
+    job_duration?: string;
     mainImage: { uri: string };
     extraImages?: { uri: string }[];
   }): Promise<{ status: boolean; message?: string; data: AdminProductCreated }> => {
@@ -799,6 +954,8 @@ export const adminService = {
     if (params.weight_unit) formData.append('weight_unit', params.weight_unit);
     formData.append('sku', params.sku);
     formData.append('handle', params.handle);
+    if (params.estimated_arrival?.trim()) formData.append('estimated_arrival', params.estimated_arrival.trim());
+    if (params.job_duration?.trim()) formData.append('job_duration', params.job_duration.trim());
     if (params.image_urls?.length) {
       formData.append('image_urls', JSON.stringify(params.image_urls));
     }
@@ -835,6 +992,8 @@ export const adminService = {
       image_urls?: string[];
       image_ids_to_remove?: number[];
       is_featured?: number; // 0 = no, 1 = show in Featured Products
+      estimated_arrival?: string | null;
+      job_duration?: string | null;
     }
   ): Promise<{ status: boolean; message?: string; updated_fields?: string[]; data: AdminProductCreated }> => {
     const response = await apiClient.put(`/admin/products/${productId}`, body, { timeout: 60000 });
@@ -858,6 +1017,8 @@ export const adminService = {
       image_urls?: string[];
       image_ids_to_remove?: number[];
       is_featured?: number; // 0 = no, 1 = show in Featured Products
+      estimated_arrival?: string | null;
+      job_duration?: string | null;
       mainImage?: { uri: string };
       extraImages?: { uri: string }[];
     }
@@ -874,6 +1035,12 @@ export const adminService = {
     if (params.weight_unit) formData.append('weight_unit', params.weight_unit);
     if (params.sku !== undefined) formData.append('sku', params.sku);
     if (params.handle !== undefined) formData.append('handle', params.handle);
+    if (params.estimated_arrival !== undefined && params.estimated_arrival !== null) {
+      formData.append('estimated_arrival', params.estimated_arrival);
+    }
+    if (params.job_duration !== undefined && params.job_duration !== null) {
+      formData.append('job_duration', params.job_duration);
+    }
     if (params.image_urls?.length) {
       formData.append('image_urls', JSON.stringify(params.image_urls));
     }
@@ -1559,6 +1726,9 @@ export interface AdminProduct {
   service?: { id: number; name: string };
   primary_image?: { id?: number; image_path?: string; image_url?: string };
   images?: Array<{ id?: number; image_path?: string; image_url?: string; is_primary?: number }>;
+  service_id?: number | null;
+  estimated_arrival?: string | null;
+  job_duration?: string | null;
 }
 
 // Admin product create response (POST /admin/products – JSON or multipart)
@@ -1686,6 +1856,59 @@ export interface AdminActivity {
   related_type?: string;
 }
 
+/** Audience counts on a delivery-stats payload (snake_case keys from API). */
+export interface NotificationDeliveryByAudience {
+  client?: number;
+  technician?: number;
+  supervisor?: number;
+  area_manager?: number;
+  hr?: number;
+  admin?: number;
+  other?: number;
+  unknown?: number;
+  untracked?: number;
+}
+
+export interface NotificationDeliveryTypeRow {
+  notification_type: string;
+  notification_type_short: string;
+  total_deliveries: number;
+  by_audience?: NotificationDeliveryByAudience;
+}
+
+export interface NotificationDeliveryStatsData {
+  since: string | null;
+  until: string | null;
+  audience_role: string | null;
+  grand_total: number;
+  tracking: { tracked: number; untracked: number };
+  by_audience: NotificationDeliveryByAudience;
+  by_audience_labeled?: Record<string, number>;
+  by_notification_type: NotificationDeliveryTypeRow[];
+}
+
+export interface AdminBroadcastRecipientCounts {
+  customers: number;
+  technicians: number;
+  supervisors: number;
+  area_managers: number;
+  hr: number;
+  admins: number;
+  other: number;
+  total: number;
+}
+
+export interface AdminBroadcastLogItem {
+  id: number;
+  title: string;
+  message: string;
+  scope_type: string;
+  scope_role: string | null;
+  recipient_counts: AdminBroadcastRecipientCounts;
+  sent_by: { id: number; name: string; email: string };
+  created_at: string;
+}
+
 export interface AdminNotificationItem {
   id: string | number;
   type?: string;
@@ -1698,5 +1921,83 @@ export interface AdminNotificationItem {
   message: string;
   action?: string | null;
   meta?: Record<string, unknown> | null;
+}
+
+/** Resolved category for UI (replaces raw `App\\Notifications\\…` class strings in pills). */
+export type AdminNotificationKind = 'leave' | 'tip' | 'announcement' | 'message' | 'order' | 'user' | 'other';
+
+function inferAdminNotificationKind(
+  item: Pick<AdminNotificationItem, 'type' | 'action' | 'meta' | 'title' | 'message'>
+): AdminNotificationKind {
+  const meta = (item.meta ?? {}) as Record<string, unknown>;
+  const metaKind = String(meta.kind ?? meta.notification_kind ?? meta.type ?? '').toLowerCase();
+  if (metaKind.includes('leave')) return 'leave';
+  if (metaKind.includes('tip')) return 'tip';
+  if (metaKind.includes('announce') || metaKind === 'broadcast') return 'announcement';
+  if (metaKind.includes('ticket') || metaKind.includes('support') || metaKind === 'message') return 'message';
+  if (metaKind.includes('order')) return 'order';
+  if (metaKind.includes('user') || metaKind.includes('client')) return 'user';
+
+  const typeFull = String(item.type ?? '').trim();
+  const typeLower = typeFull.toLowerCase();
+  const action = String(item.action ?? '').toLowerCase();
+  const metaEntity = String(meta.entity ?? '').toLowerCase();
+  const titleMsg = `${item.title ?? ''} ${item.message ?? ''}`.toLowerCase();
+
+  if (typeLower.includes('leave') || action.includes('leave') || titleMsg.includes('leave')) return 'leave';
+  if (typeLower.includes('tip') || action.includes('tip')) return 'tip';
+  if (typeLower.includes('announce') || typeLower.includes('broadcast')) return 'announcement';
+  if (
+    typeLower.includes('ticket') ||
+    typeLower.includes('support') ||
+    action.includes('ticket') ||
+    metaEntity === 'support_ticket'
+  ) {
+    return 'message';
+  }
+  if (typeLower.includes('order')) return 'order';
+  if (typeLower.includes('user') || typeLower.includes('client')) return 'user';
+
+  const fqcnBase = typeFull.includes('\\') || typeFull.includes('/')
+    ? typeFull.split(/\\|\//).pop() ?? typeFull
+    : typeFull;
+  const base = fqcnBase.replace(/Notification$/i, '');
+  const baseLower = base.toLowerCase();
+  if (baseLower.includes('leave')) return 'leave';
+  if (baseLower.includes('tip')) return 'tip';
+  if (baseLower.includes('announce')) return 'announcement';
+  if (baseLower.includes('ticket') || baseLower.includes('support')) return 'message';
+  if (baseLower.includes('order')) return 'order';
+
+  // Laravel `App\Notifications\…` admin/system notifications → "Message" (matches hub reference UI).
+  if (typeFull.includes('App\\Notifications\\') || typeFull.includes('App/Notifications/')) {
+    return 'message';
+  }
+
+  if (action) return 'message';
+  return 'other';
+}
+
+/** i18n key under `admin.notificationStats.*` for the category pill. */
+export function getAdminNotificationKindI18nKey(
+  item: Pick<AdminNotificationItem, 'type' | 'action' | 'meta' | 'title' | 'message'>
+): string {
+  const k = inferAdminNotificationKind(item);
+  switch (k) {
+    case 'leave':
+      return 'admin.notificationStats.filterKindLeave';
+    case 'tip':
+      return 'admin.notificationStats.filterKindTip';
+    case 'announcement':
+      return 'admin.notificationStats.filterKindAnnouncement';
+    case 'message':
+      return 'admin.notificationStats.notifKindMessage';
+    case 'order':
+      return 'admin.notificationStats.notifKindOrder';
+    case 'user':
+      return 'admin.notificationStats.notifKindUser';
+    default:
+      return 'admin.notificationStats.filterKindOther';
+  }
 }
 

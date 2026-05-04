@@ -43,6 +43,10 @@ import AdminSupervisorTeamScreen from '../screens/admin/AdminSupervisorTeamScree
 import AdminTechniciansScreen from '../screens/admin/AdminTechniciansScreen';
 import AdminAddZoneScreen from '../screens/admin/AdminAddZoneScreen';
 import AdminNotificationsScreen from '../screens/admin/AdminNotificationsScreen';
+import AdminNotificationStatisticsScreen from '../screens/admin/AdminNotificationStatisticsScreen';
+import AdminNotificationDeliveryAnalyticsScreen from '../screens/admin/AdminNotificationDeliveryAnalyticsScreen';
+import AdminSendNotificationScreen from '../screens/admin/AdminSendNotificationScreen';
+import AdminBroadcastLogScreen from '../screens/admin/AdminBroadcastLogScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -88,6 +92,16 @@ const TabNavigator = () => {
           tabBarLabel: t('admin.tabs.reports'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bar-chart-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="NotificationStatsTab"
+        component={AdminNotificationStatisticsScreen}
+        options={{
+          tabBarLabel: t('admin.tabs.notificationStats'),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="notifications-outline" size={size} color={color} />
           ),
         }}
       />
@@ -147,6 +161,9 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminTechnicians" component={AdminTechniciansScreen} />
         <Stack.Screen name="AdminAddZone" component={AdminAddZoneScreen} />
         <Stack.Screen name="AdminNotifications" component={AdminNotificationsScreen} />
+        <Stack.Screen name="AdminNotificationDeliveryAnalytics" component={AdminNotificationDeliveryAnalyticsScreen} />
+        <Stack.Screen name="AdminSendNotification" component={AdminSendNotificationScreen} />
+        <Stack.Screen name="AdminBroadcastLog" component={AdminBroadcastLogScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

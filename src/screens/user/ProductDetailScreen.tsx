@@ -35,6 +35,8 @@ export type ProductDetailDisplay = {
   inStock: boolean;
   description?: string;
   features?: string[];
+  estimatedArrival?: string;
+  jobDuration?: string;
 };
 
 interface ProductDetailScreenProps {
@@ -367,18 +369,49 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
             </Text>
           </View>
 
-          {/* Features */}
-          {product.features && product.features.length > 0 && (
-          <View style={styles.featuresSection}>
-            <Text style={styles.sectionTitle}>{t('product.features')}</Text>
-            {product.features.map((feature: string, index: number) => (
-              <View key={index} style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
-                <Text style={styles.featureText}>{feature}</Text>
+          {(product.estimatedArrival || product.jobDuration) ? (
+            <View style={styles.serviceTimingSection}>
+              <Text style={styles.sectionTitle}>
+                {t('product.serviceTiming', { defaultValue: 'Service timing' })}
+              </Text>
+              <View style={styles.serviceTimingCard}>
+                {product.estimatedArrival ? (
+                  <View style={styles.serviceTimingRow}>
+                    <Ionicons name="navigate-outline" size={22} color={COLORS.primary} style={styles.serviceTimingIcon} />
+                    <View style={styles.serviceTimingTextCol}>
+                      <Text style={styles.serviceTimingLabel}>
+                        {t('product.estimatedArrival', { defaultValue: 'Estimated arrival' })}
+                      </Text>
+                      <Text style={styles.serviceTimingValue}>{product.estimatedArrival}</Text>
+                    </View>
+                  </View>
+                ) : null}
+                {product.jobDuration ? (
+                  <View style={[styles.serviceTimingRow, product.estimatedArrival && styles.serviceTimingRowSpaced]}>
+                    <Ionicons name="hourglass-outline" size={22} color={COLORS.primary} style={styles.serviceTimingIcon} />
+                    <View style={styles.serviceTimingTextCol}>
+                      <Text style={styles.serviceTimingLabel}>
+                        {t('product.jobDuration', { defaultValue: 'Job duration' })}
+                      </Text>
+                      <Text style={styles.serviceTimingValue}>{product.jobDuration}</Text>
+                    </View>
+                  </View>
+                ) : null}
               </View>
-            ))}
-          </View>
-          )}
+            </View>
+          ) : null}
+
+          {product.features && product.features.length > 0 ? (
+            <View style={styles.featuresSection}>
+              <Text style={styles.sectionTitle}>{t('product.features')}</Text>
+              {product.features.map((feature: string, index: number) => (
+                <View key={index} style={styles.featureItem}>
+                  <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
+                  <Text style={styles.featureText}>{feature}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -578,12 +611,44 @@ const styles = StyleSheet.create({
   descriptionSection: {
     marginBottom: SPACING.lg,
   },
-  descriptionText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    lineHeight: 22,
+  serviceTimingSection: {
+    marginBottom: SPACING.lg,
   },
-  featuresSection: {
+  serviceTimingCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  serviceTimingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  serviceTimingRowSpaced: {
+    marginTop: SPACING.md,
+    paddingTop: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  serviceTimingIcon: {
+    marginRight: SPACING.sm,
+    marginTop: 2,
+  },
+  serviceTimingTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  serviceTimingLabel: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.medium,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  serviceTimingValue: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    lineHeight: 22,
     marginBottom: SPACING.xl,
   },
   featureItem: {

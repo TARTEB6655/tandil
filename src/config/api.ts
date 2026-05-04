@@ -30,6 +30,25 @@ function getApiBaseUrl(): string {
 
 export const API_BASE_URL = getApiBaseUrl();
 
+/** Stripe publishable key (pk_test_… / pk_live_…) from app config or EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY. */
+export function getStripePublishableKey(): string {
+  try {
+    if (Constants.expoConfig?.extra?.stripePublishableKey != null && Constants.expoConfig.extra.stripePublishableKey !== '') {
+      return String(Constants.expoConfig.extra.stripePublishableKey).trim();
+    }
+    if (Constants.manifest?.extra?.stripePublishableKey != null && Constants.manifest.extra.stripePublishableKey !== '') {
+      return String(Constants.manifest.extra.stripePublishableKey).trim();
+    }
+    if (Constants.manifest2?.extra?.expoConfig?.extra?.stripePublishableKey != null) {
+      const v = Constants.manifest2.extra.expoConfig.extra.stripePublishableKey;
+      if (v !== '') return String(v).trim();
+    }
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
 // For development, you can also use:
 // export const API_BASE_URL = __DEV__ 
 //   ? Constants.expoConfig?.extra?.apiBaseUrlDev || 'http://192.168.1.100:8000/api'

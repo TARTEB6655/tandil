@@ -8,6 +8,7 @@ import {
   StatusBar,
   Alert,
   TextInput,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
@@ -16,6 +17,21 @@ import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
 import { getOrderSummary, OrderSummaryData } from '../../services/cartService';
+import {
+  createStripePaymentIntent,
+  extractPaymentIntentId,
+  confirmCheckoutAfterStripe,
+  type CreatePaymentIntentBody,
+} from '../../services/paymentService';
+import { getStripePublishableKey } from '../../config/api';
+import {
+  useStripe,
+  AddressCollectionMode,
+  CollectionMode,
+} from '@stripe/stripe-react-native';
+import { countryToStripeAlpha2 } from '../../utils/stripeBillingCountry';
+import { getStripePaymentSheetReturnURL } from '../../config/stripeLinking';
+import { captureException } from '../../utils/sentry';
 import * as Location from 'expo-location';
 
 interface CartItem {
@@ -51,6 +67,7 @@ interface PaymentMethod {
 const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const route = useRoute<any>();
   const {
     cartItems = [],
@@ -145,21 +162,197 @@ const CheckoutScreen: React.FC = () => {
     : Math.round((subtotal - discount + shippingAmount + taxAmount) * 100) / 100;
   const currency = useApiSummary ? orderSummaryApi.currency : (shopSettings?.currency ?? 'AED');
 
-  const handlePlaceOrder = () => {
-    setLoading(true);
-    
-    // Simulate order processing
-    setTimeout(() => {
-      setLoading(false);
+  const showOrderPlacedAlert = () => {
+    Alert.alert(
+      t('checkout.placedTitle'),
+      t('checkout.placedBody'),
+      [
+        { text: t('checkout.viewOrders'), onPress: () => navigation.navigate('OrderHistory') },
+        {
+          text: t('checkout.continueShopping'),
+          onPress: () => navigation.navigate('Main' as never, { screen: 'Home' } as never),
+        },
+      ]
+    );
+  };
+
+  const handlePlaceOrder = async () => {
+    if (selectedPaymentMethod === 'paypal') {
       Alert.alert(
-        t('checkout.placedTitle'),
-        t('checkout.placedBody'),
-        [
-          { text: t('checkout.viewOrders'), onPress: () => navigation.navigate('OrderHistory') },
-        { text: t('checkout.continueShopping'), onPress: () => navigation.navigate('Main' as never, { screen: 'Home' } as never) },
-        ]
+        t('common.info', 'Information'),
+        t('checkout.paypalComingSoon', 'PayPal is not set up yet. Please pay with Stripe.')
       );
-    }, 2000);
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t(
+          'checkout.stripeNativeOnly',
+          'Stripe card payments are available in the iOS or Android app, not in the browser.'
+        )
+      );
+      return;
+    }
+
+    const stripePk = getStripePublishableKey();
+    if (!stripePk) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t(
+          'checkout.stripeKeyMissing',
+          'Add your Stripe publishable key: set EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY or extra.stripePublishableKey in app config (pk_test_… or pk_live_…). Rebuild the native app after changing plugins.'
+        )
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const items: CartItem[] = (cartItems || []) as CartItem[];
+      const first = items[0];
+
+      // Same shape as Postman: cart = { is_buy_now, shipping }; buy-now adds product_id + quantity.
+      const shippingPayload = {
+        full_name: shippingAddress.fullName.trim(),
+        phone: shippingAddress.phone.trim(),
+        street: shippingAddress.street.trim(),
+        city: shippingAddress.city.trim(),
+        state: shippingAddress.state.trim(),
+        zip_code: shippingAddress.zipCode.trim(),
+        country: shippingAddress.country.trim(),
+      };
+
+      let paymentIntentBody: CreatePaymentIntentBody = {
+        is_buy_now: !!isBuyNow,
+        shipping: shippingPayload,
+      };
+      if (isBuyNow && first) {
+        const pid = Number(first.productId);
+        const qty = Number(first.quantity);
+        if (Number.isFinite(pid)) {
+          paymentIntentBody = { ...paymentIntentBody, product_id: pid };
+        }
+        if (Number.isFinite(qty)) {
+          paymentIntentBody = { ...paymentIntentBody, quantity: qty };
+        }
+      }
+
+      const { data: pi, message: piMessage } = await createStripePaymentIntent(paymentIntentBody);
+
+      if (!pi?.client_secret) {
+        let body =
+          piMessage ||
+          t(
+            'checkout.paymentIntentFailed',
+            'Could not start payment. Ensure the server exposes POST /shop/checkout/stripe/payment-intent and try again.'
+          );
+        // Text like "Stripe is not enabled…" is returned by Laravel, not the app — fix on server.
+        if (/stripe is not enabled|not configured/i.test(piMessage || '')) {
+          body +=
+            '\n\n' +
+            t(
+              'checkout.stripeDisabledOnServerHint',
+              'Ask your backend developer to enable Stripe for the shop (admin/settings), set STRIPE_SECRET_KEY in Laravel .env, and ensure AED (or your currency) is supported on the Stripe account.'
+            );
+        }
+        if (__DEV__) {
+          console.warn('[checkout] payment-intent failed:', piMessage, paymentIntentBody);
+        }
+        Alert.alert(t('common.error', 'Error'), body);
+        return;
+      }
+
+      const countryCode = countryToStripeAlpha2(shippingAddress.country);
+      const defaultBillingDetails = {
+        name: shippingAddress.fullName.trim() || undefined,
+        phone: shippingAddress.phone.trim() || undefined,
+        address: {
+          line1: shippingAddress.street.trim() || undefined,
+          city: shippingAddress.city.trim() || undefined,
+          state: shippingAddress.state.trim() || undefined,
+          postalCode: shippingAddress.zipCode.trim() || undefined,
+          country: countryCode || undefined,
+        },
+      };
+      const customerProps =
+        pi.customer && pi.ephemeral_key
+          ? { customerId: pi.customer, customerEphemeralKeySecret: pi.ephemeral_key }
+          : {};
+
+      const sheetBase = {
+        merchantDisplayName: 'Tandil',
+        paymentIntentClientSecret: pi.client_secret,
+        returnURL: getStripePaymentSheetReturnURL(),
+        allowsDelayedPaymentMethods: false,
+        defaultBillingDetails,
+        ...customerProps,
+      };
+
+      // Prefer not re-asking for address; if that fails on some SDK/OS builds, fall back to a simpler sheet.
+      let { error: initError } = await initPaymentSheet({
+        ...sheetBase,
+        billingDetailsCollectionConfiguration: {
+          name: CollectionMode.NEVER,
+          phone: CollectionMode.NEVER,
+          email: CollectionMode.AUTOMATIC,
+          address: AddressCollectionMode.NEVER,
+          attachDefaultsToPaymentMethod: true,
+        },
+      });
+      if (initError) {
+        if (__DEV__) {
+          console.warn('[checkout] initPaymentSheet (with billing rules) failed:', initError);
+        }
+        const retry = await initPaymentSheet(sheetBase);
+        initError = retry.error;
+      }
+
+      if (initError) {
+        Alert.alert(t('common.error', 'Error'), initError.message || 'Could not open payment screen.');
+        return;
+      }
+
+      const { error: presentError } = await presentPaymentSheet();
+      if (presentError) {
+        if (presentError.code === 'Canceled') {
+          return;
+        }
+        Alert.alert(t('common.error', 'Error'), presentError.message);
+        return;
+      }
+
+      const paymentIntentId = extractPaymentIntentId(pi.client_secret);
+      if (paymentIntentId) {
+        if (__DEV__) {
+          console.log('[checkout] POST /shop/checkout/confirm payment_intent_id:', paymentIntentId);
+        }
+        const confirm = await confirmCheckoutAfterStripe(paymentIntentId);
+        if (!confirm.success) {
+          Alert.alert(
+            t('checkout.paymentSucceededTitle', 'Payment received'),
+            t(
+              'checkout.orderSyncPending',
+              'Your card was charged. If the order does not appear under Order History, contact support with your receipt.'
+            ),
+            [
+              { text: t('checkout.viewOrders'), onPress: () => navigation.navigate('OrderHistory') },
+              { text: t('common.ok', 'OK'), style: 'cancel' },
+            ]
+          );
+          return;
+        }
+      }
+
+      showOrderPlacedAlert();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      captureException(err, { tags: { area: 'checkout_place_order' } });
+      Alert.alert(t('common.error', 'Error'), msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUseMyLocation = async () => {

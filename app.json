@@ -2,6 +2,7 @@
   "expo": {
     "name": "Tandil",
     "slug": "tandil",
+    "scheme": "tandil",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -39,10 +40,17 @@
       "eas": {
         "projectId": "f6aa6463-0532-4871-89b1-21d6a1c5bcf3"
       },
-      "apiBaseUrl": "https://phpstack-1180784-6050385.cloudwaysapps.com/api"
+      "apiBaseUrl": "https://phpstack-1180784-6050385.cloudwaysapps.com/api",
+      "stripePublishableKey": ""
     },
     "plugins": [
-      "sentry-expo"
+      "sentry-expo",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "enableGooglePay": false
+        }
+      ]
     ]
   }
 }

@@ -23,6 +23,8 @@ module.exports = {
     extra: {
       ...expo.extra,
       easBuildProfile,
+      stripePublishableKey:
+        process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || expo.extra?.stripePublishableKey || '',
     },
   },
 };
