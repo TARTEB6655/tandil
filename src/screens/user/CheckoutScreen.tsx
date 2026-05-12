@@ -59,14 +59,6 @@ interface ShippingAddress {
   country: string;
 }
 
-interface PaymentMethod {
-  id: string;
-  type: 'stripe' | 'paypal';
-  name: string;
-  icon: string;
-  last4?: string;
-}
-
 const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
@@ -95,27 +87,11 @@ const CheckoutScreen: React.FC = () => {
     country: '',
   });
 
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('stripe');
   const [walletApiBalance, setWalletApiBalance] = useState(0);
   const [applyWallet, setApplyWallet] = useState(false);
   const [walletSummaryLoading, setWalletSummaryLoading] = useState(false);
   const STEP_ORDER: Array<'location' | 'phone' | 'payment'> = ['location', 'phone', 'payment'];
   const activeStepIndex = STEP_ORDER.indexOf(currentStep);
-
-  const paymentMethods: PaymentMethod[] = [
-    {
-      id: 'stripe',
-      type: 'stripe',
-      name: 'Stripe',
-      icon: 'card-outline',
-    },
-    {
-      id: 'paypal',
-      type: 'paypal',
-      name: 'PayPal',
-      icon: 'logo-paypal',
-    },
-  ];
 
   const calculateSubtotal = () => {
     const items: CartItem[] = (cartItems || []) as CartItem[];
@@ -251,15 +227,6 @@ const CheckoutScreen: React.FC = () => {
   };
 
   const handlePlaceOrder = async () => {
-    if (selectedPaymentMethod === 'paypal') {
-      Alert.alert(
-        t('common.info', 'Information'),
-        t('checkout.paypalComingSoon', 'PayPal is not set up yet. Please pay with Stripe.'),
-        [{ text: t('common.ok', 'OK') }]
-      );
-      return;
-    }
-
     if (Platform.OS === 'web') {
       Alert.alert(
         t('common.error', 'Error'),
@@ -648,37 +615,19 @@ const CheckoutScreen: React.FC = () => {
   const renderPaymentMethods = () => (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{t('checkout.paymentMethod')}</Text>
-
-      {paymentMethods.map((method) => (
-        <TouchableOpacity
-          key={method.id}
-          style={[
-            styles.paymentMethod,
-            selectedPaymentMethod === method.id && styles.selectedPaymentMethod,
-          ]}
-          onPress={() => setSelectedPaymentMethod(method.id)}
-        >
-          <View style={styles.paymentMethodContent}>
-            <View style={styles.paymentMethodIcon}>
-              <Ionicons name={method.icon as any} size={24} color={COLORS.primary} />
-            </View>
-            <View style={styles.paymentMethodInfo}>
-              <Text style={styles.paymentMethodName}>{method.name}</Text>
-              {method.last4 && (
-                <Text style={styles.paymentMethodDetails}>•••• {method.last4}</Text>
-              )}
-            </View>
+      <View style={[styles.paymentMethod, styles.selectedPaymentMethod]}>
+        <View style={styles.paymentMethodContent}>
+          <View style={styles.paymentMethodIcon}>
+            <Ionicons name="card-outline" size={24} color={COLORS.primary} />
           </View>
-          <View style={[
-            styles.paymentMethodRadio,
-            selectedPaymentMethod === method.id && styles.selectedRadio,
-          ]}>
-            {selectedPaymentMethod === method.id && (
-              <View style={styles.radioDot} />
-            )}
+          <View style={styles.paymentMethodInfo}>
+            <Text style={styles.paymentMethodName}>{t('checkout.stripeLabel')}</Text>
+            <Text style={styles.paymentMethodDetails}>
+              {t('checkout.stripeSubtitle')}
+            </Text>
           </View>
-        </TouchableOpacity>
-      ))}
+        </View>
+      </View>
     </View>
   );
 
@@ -1136,7 +1085,7 @@ const styles = StyleSheet.create({
   paymentMethod: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -1173,71 +1122,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     marginTop: 2,
-  },
-  paymentMethodRadio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  selectedRadio: {
-    borderColor: COLORS.primary,
-  },
-  radioDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-  },
-  paypalSubSection: {
-    marginTop: SPACING.md,
-    paddingTop: SPACING.md,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  paypalSubTitle: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
-  },
-  paypalSubOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.md,
-    marginBottom: SPACING.sm,
-  },
-  paypalSubOptionSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '10',
-  },
-  paypalSubHint: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  paypalOrDivider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: SPACING.sm,
-  },
-  paypalOrLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: COLORS.border,
-  },
-  paypalOrText: {
-    marginHorizontal: SPACING.md,
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    fontWeight: FONT_WEIGHTS.medium,
   },
   cardFormSection: {
     marginTop: SPACING.md,

@@ -30,7 +30,7 @@ function getApiBaseUrl(): string {
 
 export const API_BASE_URL = getApiBaseUrl();
 
-/** Stripe publishable key (pk_test_… / pk_live_…) from app config or EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY. */
+/** Stripe publishable key (pk_test_… / pk_live_…) from app config, then EXPO_PUBLIC (inlined at EAS/Metro build). */
 export function getStripePublishableKey(): string {
   try {
     if (Constants.expoConfig?.extra?.stripePublishableKey != null && Constants.expoConfig.extra.stripePublishableKey !== '') {
@@ -45,6 +45,10 @@ export function getStripePublishableKey(): string {
     }
   } catch {
     // ignore
+  }
+  const fromEnv = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+  if (typeof fromEnv === 'string' && fromEnv.trim() !== '') {
+    return fromEnv.trim();
   }
   return '';
 }
@@ -70,6 +74,10 @@ export function getStripeMerchantIdentifier(): string {
     }
   } catch {
     // ignore
+  }
+  const fromEnv = process.env.EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER;
+  if (typeof fromEnv === 'string' && fromEnv.trim() !== '') {
+    return fromEnv.trim();
   }
   return '';
 }
