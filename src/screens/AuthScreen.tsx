@@ -139,11 +139,6 @@ const AuthScreen: React.FC = () => {
     }
   };
 
-  const handleSocialLogin = (provider: 'google' | 'apple') => {
-    // Handle social login
-    console.log(`${provider} login`);
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -154,11 +149,11 @@ const AuthScreen: React.FC = () => {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => {
-            if (navigation.canGoBack()) {
-              navigation.goBack();
-            } else {
-              navigation.navigate('RoleSelection');
-            }
+            // RoleSelection uses replace() to open Auth, so goBack() does not return to role selection.
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'RoleSelection' }],
+            });
           }}
         >
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
@@ -263,29 +258,6 @@ const AuthScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Social Login */}
-      <View style={styles.socialContainer}>
-        <Text style={styles.socialText}>{t('auth.orContinueWith')}</Text>
-        
-        <View style={styles.socialButtons}>
-          <TouchableOpacity
-            style={styles.socialButton}
-            onPress={() => handleSocialLogin('google')}
-          >
-            <Ionicons name="logo-google" size={24} color={COLORS.error} />
-            <Text style={styles.socialButtonText}>{t('auth.google')}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.socialButton}
-            onPress={() => handleSocialLogin('apple')}
-          >
-            <Ionicons name="logo-apple" size={24} color={COLORS.text} />
-            <Text style={styles.socialButtonText}>{t('auth.apple')}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
       {/* Switch Mode */}
       <View style={styles.switchContainer}>
         <Text style={styles.switchText}>
@@ -360,36 +332,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.primary,
     fontWeight: FONT_WEIGHTS.medium,
-  },
-  socialContainer: {
-    marginBottom: SPACING.xl,
-  },
-  socialText: {
-    textAlign: 'center',
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: SPACING.md,
-  },
-  socialButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.md,
-    gap: SPACING.xs,
-  },
-  socialButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.text,
   },
   switchContainer: {
     flexDirection: 'row',

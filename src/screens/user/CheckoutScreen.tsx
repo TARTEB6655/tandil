@@ -893,14 +893,6 @@ const CheckoutScreen: React.FC = () => {
                 </Text>
                 <Text style={styles.summaryValue}>{currency} {walletApiBalance.toFixed(2)}</Text>
               </View>
-              <TouchableOpacity
-                style={styles.walletAddMoneyBtn}
-                onPress={() => navigation.navigate('Wallet')}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="add-circle-outline" size={18} color={COLORS.primary} />
-                <Text style={styles.walletAddMoneyBtnText}>{t('checkout.addMoney', 'Add money')}</Text>
-              </TouchableOpacity>
               <View style={styles.walletToggleRow}>
                 <Text style={styles.walletToggleLabel}>
                   {t('checkout.applyWalletToOrder', 'Use wallet balance on this order')}
@@ -1415,30 +1407,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: SPACING.sm,
   },
-  walletAddMoneyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: SPACING.xs,
-    marginTop: SPACING.sm,
-    marginBottom: SPACING.md,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '0d',
-  },
-  walletAddMoneyBtnText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.primary,
-  },
   walletToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: SPACING.xs,
+    marginTop: SPACING.sm,
   },
   walletToggleLabel: {
     flex: 1,

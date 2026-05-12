@@ -14,11 +14,19 @@ import { BORDER_RADIUS, COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING } from '../../
 import { useTranslation } from 'react-i18next';
 import {
   adminService,
+  AdminDashboardOrderBucketsResponse,
   AdminDashboardOrderListItem,
   AdminDashboardOrderStatsResponse,
 } from '../../services/adminService';
 
-type OrderTabKey = 'processing' | 'cancelled' | 'completed';
+type OrderTabKey = 'all' | 'processing' | 'cancelled' | 'completed';
+
+function isTerminalOrderStatus(status: string): boolean {
+  const x = String(status || '')
+    .toLowerCase()
+    .trim();
+  return ['cancelled', 'canceled', 'completed', 'refunded', 'delivered'].includes(x);
+}
 
 const EMPTY_STATS: AdminDashboardOrderStatsResponse['data'] = {
   summary: {
@@ -50,14 +58,89 @@ const EMPTY_STATS: AdminDashboardOrderStatsResponse['data'] = {
 
 const BUCKET_LIMIT = 20;
 
+/** Buckets may live under `data` or at the top level (legacy / alternate Laravel payloads). */
+function getBucketsData(
+  bucketsRes: AdminDashboardOrderBucketsResponse | undefined
+): AdminDashboardOrderBucketsResponse['data'] | undefined {
+  if (!bucketsRes) return undefined;
+  if (bucketsRes.data && typeof bucketsRes.data === 'object') {
+    return bucketsRes.data;
+  }
+  const r = bucketsRes as unknown as Record<string, unknown>;
+  if (
+    r.pending_orders != null ||
+    r.cancelled_orders != null ||
+    r.completed_orders != null ||
+    r.total_orders != null
+  ) {
+    return r as unknown as AdminDashboardOrderBucketsResponse['data'];
+  }
+  return undefined;
+}
+
+/** Each bucket may be `{ count, orders[] }`, `{ orders }`, or a raw array. */
+function ordersFromBucketNode(node: unknown): AdminDashboardOrderListItem[] {
+  if (node == null) return [];
+  if (Array.isArray(node)) return node as AdminDashboardOrderListItem[];
+  if (typeof node === 'object') {
+    const n = node as Record<string, unknown>;
+    if (Array.isArray(n.orders)) return n.orders as AdminDashboardOrderListItem[];
+    if (Array.isArray(n.data)) return n.data as AdminDashboardOrderListItem[];
+    if (Array.isArray(n.items)) return n.items as AdminDashboardOrderListItem[];
+  }
+  return [];
+}
+
+function shopOrderToDashboardItem(o: {
+  id: number;
+  order_number?: string;
+  order_number_short?: string;
+  status?: string;
+  order_status?: string;
+  payment_status?: string;
+  total?: number | string;
+  refund_amount?: number;
+  created_at?: string;
+  updated_at?: string;
+  user?: { id?: number; name?: string; email?: string };
+  customer?: { id?: number; name?: string; email?: string };
+}): AdminDashboardOrderListItem {
+  const rawAmt = (o as { total_amount?: number | string }).total_amount;
+  const rawTotal =
+    rawAmt != null
+      ? typeof rawAmt === 'string'
+        ? parseFloat(rawAmt)
+        : Number(rawAmt)
+      : typeof o.total === 'string'
+        ? parseFloat(o.total)
+        : Number(o.total ?? 0);
+  return {
+    id: o.id,
+    order_number: String(o.order_number ?? o.id),
+    order_number_short: String(o.order_number_short ?? o.order_number ?? o.id),
+    order_status: String(o.order_status ?? o.status ?? '—'),
+    payment_status: String(o.payment_status ?? '—'),
+    total_amount: Number.isFinite(rawTotal) ? rawTotal : 0,
+    refund_amount: Number(o.refund_amount ?? 0),
+    customer: {
+      id: (o.user?.id ?? o.customer?.id ?? null) as number | null,
+      name: o.user?.name ?? o.customer?.name ?? null,
+      email: o.user?.email ?? o.customer?.email ?? null,
+    },
+    created_at: o.created_at ?? '',
+    updated_at: o.updated_at ?? o.created_at ?? '',
+  };
+}
+
 const AdminOrderStatisticsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t, i18n } = useTranslation();
   const [stats, setStats] = useState<AdminDashboardOrderStatsResponse['data']>(EMPTY_STATS);
+  const [allOrders, setAllOrders] = useState<AdminDashboardOrderListItem[]>([]);
   const [processingOrders, setProcessingOrders] = useState<AdminDashboardOrderListItem[]>([]);
   const [cancelledOrders, setCancelledOrders] = useState<AdminDashboardOrderListItem[]>([]);
   const [completedOrders, setCompletedOrders] = useState<AdminDashboardOrderListItem[]>([]);
-  const [selectedTab, setSelectedTab] = useState<OrderTabKey>('processing');
+  const [selectedTab, setSelectedTab] = useState<OrderTabKey>('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,25 +161,105 @@ const AdminOrderStatisticsScreen: React.FC = () => {
         setStats(EMPTY_STATS);
       }
 
-      const bucketData = bucketsRes?.data;
-      const pending = Array.isArray(bucketData?.pending_orders?.orders) ? bucketData.pending_orders.orders : [];
-      const assigned = Array.isArray(bucketData?.assigned_orders?.orders) ? bucketData.assigned_orders.orders : [];
-      const inProgress = Array.isArray(bucketData?.in_progress_orders?.orders)
-        ? bucketData.in_progress_orders.orders
-        : [];
-      const cancelled = Array.isArray(bucketData?.cancelled_orders?.orders) ? bucketData.cancelled_orders.orders : [];
-      const completed = Array.isArray(bucketData?.completed_orders?.orders) ? bucketData.completed_orders.orders : [];
+      const bucketData = getBucketsData(bucketsRes);
+      const bucketRecord = bucketData as Record<string, unknown> | undefined;
 
-      const processingMap = new Map<number, AdminDashboardOrderListItem>();
-      [...pending, ...assigned, ...inProgress].forEach((item) => {
-        processingMap.set(item.id, item);
-      });
+      let pending = ordersFromBucketNode(bucketData?.pending_orders);
+      let assigned = ordersFromBucketNode(bucketData?.assigned_orders);
+      let inProgress = ordersFromBucketNode(bucketData?.in_progress_orders);
+      const dedupeById = (rows: AdminDashboardOrderListItem[]) => {
+        const m = new Map(rows.map((r) => [r.id, r]));
+        return Array.from(m.values());
+      };
+
+      let cancelled = dedupeById([
+        ...ordersFromBucketNode(bucketData?.cancelled_orders),
+        ...ordersFromBucketNode(bucketRecord?.canceled_orders),
+      ]);
+      let completed = ordersFromBucketNode(bucketData?.completed_orders);
+
+      const summary = statsRes?.data?.summary ?? EMPTY_STATS.summary;
 
       const sortByLatest = (rows: AdminDashboardOrderListItem[]) =>
         [...rows].sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
 
+      if (cancelled.length === 0 && summary.cancelled_orders > 0) {
+        try {
+          const res = await adminService.getOrders({
+            per_page: Math.max(BUCKET_LIMIT, 50),
+            status: 'cancelled',
+          });
+          const list = Array.isArray(res?.data) ? res.data : [];
+          cancelled = list.map((row) => shopOrderToDashboardItem(row));
+        } catch {
+          /* keep empty */
+        }
+      }
+
+      if (completed.length === 0 && summary.completed_orders > 0) {
+        try {
+          const res = await adminService.getOrders({
+            per_page: Math.max(BUCKET_LIMIT, 50),
+            status: 'completed',
+          });
+          const list = Array.isArray(res?.data) ? res.data : [];
+          completed = list.map((row) => shopOrderToDashboardItem(row));
+        } catch {
+          /* keep empty */
+        }
+      }
+
+      const processingStatTotal =
+        summary.pending_orders + summary.assigned_orders + summary.in_progress_orders;
+      if (pending.length + assigned.length + inProgress.length === 0 && processingStatTotal > 0) {
+        try {
+          const res = await adminService.getOrders({ per_page: Math.max(BUCKET_LIMIT, 50) });
+          const list = Array.isArray(res?.data) ? res.data : [];
+          const open = list.filter((row) => {
+            const s = String(row?.order_status ?? row?.status ?? '').trim();
+            return s.length > 0 && !isTerminalOrderStatus(s);
+          });
+          if (open.length > 0) {
+            const byId = new Map<number, (typeof open)[0]>();
+            open.forEach((row) => byId.set(row.id, row));
+            const merged = Array.from(byId.values()).map((row) => shopOrderToDashboardItem(row));
+            const byStatus = (pred: (s: string) => boolean) =>
+              merged.filter((m) => pred(m.order_status.toLowerCase()));
+            pending = byStatus((s) => s.includes('pending') || s === 'new' || s === 'placed');
+            assigned = byStatus((s) => s.includes('assign'));
+            inProgress = byStatus((s) => s.includes('progress') || s.includes('process'));
+            if (pending.length + assigned.length + inProgress.length === 0) {
+              pending = merged;
+            }
+          }
+        } catch {
+          /* keep bucket-derived lists */
+        }
+      }
+
+      let totalList = dedupeById(ordersFromBucketNode(bucketData?.total_orders));
+
+      const processingMap = new Map<number, AdminDashboardOrderListItem>();
+      [...pending, ...assigned, ...inProgress].forEach((item) => {
+        processingMap.set(item.id, item);
+      });
+      totalList.forEach((item) => {
+        if (!isTerminalOrderStatus(item.order_status)) {
+          processingMap.set(item.id, item);
+        }
+      });
+
+      if (totalList.length === 0 && summary.total_orders > 0) {
+        totalList = dedupeById([
+          ...cancelled,
+          ...completed,
+          ...Array.from(processingMap.values()),
+        ]);
+      }
+
+      setAllOrders(sortByLatest(totalList));
       setProcessingOrders(sortByLatest(Array.from(processingMap.values())));
       setCancelledOrders(sortByLatest(cancelled));
       setCompletedOrders(sortByLatest(completed));
@@ -121,21 +284,41 @@ const AdminOrderStatisticsScreen: React.FC = () => {
   const tabs = useMemo(
     () => [
       {
+        key: 'all' as const,
+        label: t('admin.orderStatistics.tabs.all', { defaultValue: 'All' }),
+        count: stats.summary.total_orders,
+      },
+      {
         key: 'processing' as const,
         label: t('admin.orderStatistics.tabs.processing', { defaultValue: 'Processing' }),
         count: processingOrders.length,
       },
-      { key: 'cancelled' as const, label: t('admin.orderStatistics.tabs.cancelled', { defaultValue: 'Cancelled' }), count: cancelledOrders.length },
-      { key: 'completed' as const, label: t('admin.orderStatistics.tabs.completed', { defaultValue: 'Completed' }), count: completedOrders.length },
+      {
+        key: 'cancelled' as const,
+        label: t('admin.orderStatistics.tabs.cancelled', { defaultValue: 'Cancelled' }),
+        count: stats.summary.cancelled_orders,
+      },
+      {
+        key: 'completed' as const,
+        label: t('admin.orderStatistics.tabs.completed', { defaultValue: 'Completed' }),
+        count: stats.summary.completed_orders,
+      },
     ],
-    [processingOrders.length, cancelledOrders.length, completedOrders.length, t]
+    [
+      stats.summary.total_orders,
+      stats.summary.cancelled_orders,
+      stats.summary.completed_orders,
+      processingOrders.length,
+      t,
+    ]
   );
 
   const currentOrders = useMemo(() => {
+    if (selectedTab === 'all') return allOrders;
     if (selectedTab === 'processing') return processingOrders;
     if (selectedTab === 'cancelled') return cancelledOrders;
     return completedOrders;
-  }, [selectedTab, processingOrders, cancelledOrders, completedOrders]);
+  }, [selectedTab, allOrders, processingOrders, cancelledOrders, completedOrders]);
 
   const summaryCards = [
     { key: 'total', label: t('admin.orderStatistics.cards.totalOrders', { defaultValue: 'Total orders' }), value: stats.summary.total_orders },
@@ -155,6 +338,7 @@ const AdminOrderStatisticsScreen: React.FC = () => {
     if (s.includes('cancel')) return COLORS.error;
     if (s.includes('complete')) return COLORS.success;
     if (s.includes('progress') || s.includes('assign') || s.includes('process')) return COLORS.info;
+    if (s.includes('confirm')) return COLORS.primary;
     return COLORS.warning;
   };
 

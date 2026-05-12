@@ -10,6 +10,9 @@ export interface AdminUser {
   email_verified_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Present on some Laravel admin user payloads (shop clients). */
+  wallet_balance?: number | string | null;
+  wallet_forfeited_total?: number | string | null;
   roles?: Array<{
     id: number;
     name: string;
@@ -314,6 +317,107 @@ function parseNotificationsListPayload(
   };
 }
 
+/** GET /admin/wallet/overview — aggregate wallet stats (admin). */
+export interface AdminWalletOverviewData {
+  total_wallet_balance: number;
+  active_wallet_liability: number;
+  forfeited_total: number;
+  credits_count?: number;
+  active_credits_count?: number;
+  expiring_soon_7d_amount?: number;
+  wallet_validity_months?: number;
+  next_active_expiry_at?: string | null;
+}
+
+export interface AdminWalletOverviewResponse {
+  success?: boolean;
+  message?: string;
+  data?: AdminWalletOverviewData;
+}
+
+/** GET /admin/wallet/credits — ledger rows (admin). */
+export interface AdminWalletCreditLedgerUser {
+  id: number;
+  name: string;
+  email: string;
+  profile_picture_url?: string | null;
+}
+
+export interface AdminWalletCreditLedgerItem {
+  id: number;
+  user_id: number;
+  order_id: number | null;
+  amount: string;
+  reason: string;
+  status: string;
+  credited_at: string;
+  expires_at: string;
+  forfeited_at: string | null;
+  created_at: string;
+  updated_at: string;
+  user?: AdminWalletCreditLedgerUser;
+  order?: { id: number } | null;
+}
+
+export interface AdminWalletCreditsLedgerResponse {
+  success?: boolean;
+  message?: string;
+  data?: AdminWalletCreditLedgerItem[];
+  pagination?: {
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+}
+
+/** GET /admin/wallet/users/:id — client wallet summary + paginated shop orders. */
+export interface AdminWalletClientDetailUser {
+  id: number;
+  name: string;
+  email: string;
+  wallet_balance?: number | string | null;
+}
+
+export interface AdminWalletClientOrderRow {
+  id: number;
+  placed_at: string;
+  updated_at: string;
+  order_status: string;
+  order_status_label?: string;
+  payment_status: string;
+  payment_status_label?: string;
+  total_amount: number | string;
+}
+
+export interface AdminWalletClientDetailData {
+  user: AdminWalletClientDetailUser;
+  wallet_validity_months?: number | null;
+  first_wallet_credit_at?: string | null;
+  next_active_credit_expires_at?: string | null;
+  wallet_credit_rows?: number | null;
+  order_stats?: {
+    paid_orders_count?: number;
+    paid_orders_total_aed?: number | string;
+    cancelled_orders_count?: number;
+    cancelled_orders_total_aed?: number | string;
+  };
+  orders?: AdminWalletClientOrderRow[];
+  orders_pagination?: {
+    page_query?: string;
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+}
+
+export interface AdminWalletClientDetailResponse {
+  success?: boolean;
+  message?: string;
+  data?: AdminWalletClientDetailData;
+}
+
 export const adminService = {
   getUsers: async (params?: { 
     page?: number; 
@@ -322,6 +426,50 @@ export const adminService = {
     role?: string;
   }): Promise<UsersResponse> => {
     const response = await apiClient.get<UsersResponse>('/admin/users', { params });
+    return response.data;
+  },
+
+  /** GET /admin/wallet/overview */
+  getAdminWalletOverview: async (): Promise<AdminWalletOverviewResponse> => {
+    const response = await apiClient.get<AdminWalletOverviewResponse>('/admin/wallet/overview', {
+      timeout: 20000,
+    });
+    return response.data;
+  },
+
+  /** GET /admin/wallet/credits — paged ledger (q, status, per_page, page). */
+  getAdminWalletCredits: async (params?: {
+    status?: string;
+    q?: string;
+    per_page?: number;
+    page?: number;
+  }): Promise<AdminWalletCreditsLedgerResponse> => {
+    const response = await apiClient.get<AdminWalletCreditsLedgerResponse>('/admin/wallet/credits', {
+      params: {
+        status: params?.status?.trim() || undefined,
+        q: params?.q?.trim() || undefined,
+        per_page: params?.per_page ?? 20,
+        page: params?.page ?? 1,
+      },
+      timeout: 20000,
+    });
+    return response.data;
+  },
+
+  /** GET /admin/wallet/users/:userId — orders_page, orders_per_page (1–100, default 20). */
+  getAdminWalletUserDetail: async (
+    userId: number,
+    params?: { orders_page?: number; orders_per_page?: number }
+  ): Promise<AdminWalletClientDetailResponse> => {
+    const per = params?.orders_per_page ?? 20;
+    const clampedPer = Math.min(100, Math.max(1, per));
+    const response = await apiClient.get<AdminWalletClientDetailResponse>(`/admin/wallet/users/${userId}`, {
+      params: {
+        orders_page: params?.orders_page ?? 1,
+        orders_per_page: clampedPer,
+      },
+      timeout: 20000,
+    });
     return response.data;
   },
 

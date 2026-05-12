@@ -132,6 +132,18 @@ const AdminSettingsScreen: React.FC = () => {
       ],
     },
     {
+      titleKey: 'admin.settings.walletMonitoringSection',
+      items: [
+        {
+          icon: 'wallet-outline',
+          titleKey: 'admin.settings.walletMonitoring.title',
+          subtitleKey: 'admin.settings.walletMonitoring.subtitle',
+          type: 'navigation',
+          onPress: () => navigation.navigate('AdminWalletMonitoring'),
+        },
+      ],
+    },
+    {
       titleKey: 'admin.settings.zonesAndTeamsSection',
       items: [
         {

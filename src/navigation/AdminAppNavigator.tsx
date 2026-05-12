@@ -49,6 +49,8 @@ import AdminSendNotificationScreen from '../screens/admin/AdminSendNotificationS
 import AdminBroadcastLogScreen from '../screens/admin/AdminBroadcastLogScreen';
 import AdminOperationalAreasScreen from '../screens/admin/AdminOperationalAreasScreen';
 import AdminOrderStatisticsScreen from '../screens/admin/AdminOrderStatisticsScreen';
+import AdminWalletMonitoringScreen from '../screens/admin/AdminWalletMonitoringScreen';
+import AdminWalletClientDetailScreen from '../screens/admin/AdminWalletClientDetailScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -168,6 +170,8 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminBroadcastLog" component={AdminBroadcastLogScreen} />
         <Stack.Screen name="AdminOperationalAreas" component={AdminOperationalAreasScreen} />
         <Stack.Screen name="AdminOrderStatistics" component={AdminOrderStatisticsScreen} />
+        <Stack.Screen name="AdminWalletMonitoring" component={AdminWalletMonitoringScreen} />
+        <Stack.Screen name="AdminWalletClientDetail" component={AdminWalletClientDetailScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );
