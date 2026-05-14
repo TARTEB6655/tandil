@@ -42,10 +42,14 @@ const SupervisorLoginScreen: React.FC = () => {
       const response = await authService.login({
         email: email.trim(),
         password: password,
+        roles: 'supervisor',
       });
 
       // Verify the role is supervisor
-      const userRole = response.data?.role || response.data?.user?.role;
+      const userRole =
+        response.data?.role ||
+        response.data?.user?.role ||
+        response.data?.user?.roles?.[0]?.name;
       if (userRole !== 'supervisor') {
         Alert.alert(t('admin.supervisorLogin.accessDenied'), t('admin.supervisorLogin.accessDeniedMessage'));
         setIsLoading(false);

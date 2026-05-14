@@ -107,6 +107,8 @@ export const en = {
     apple: 'Apple',
     dontHaveAccount: "Don't have an account? ",
     alreadyHaveAccount: 'Already have an account? ',
+    wrongPortalClient:
+      'This account is not a client. Open the app from the correct role (e.g. Admin) to sign in.',
   },
   orders: {
     filters: { all: 'All', pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled' },
@@ -1786,6 +1788,7 @@ export const en = {
       isActiveLabel: 'Status',
       isActiveActive: 'Active',
       isActiveDisabled: 'Disabled (Coming Soon)',
+      inactiveStatus: 'Inactive',
       opening: 'Opening…',
       uploadFromDevice: 'Upload from device',
       replaceImage: 'Replace image',
@@ -2841,6 +2844,8 @@ export const ar = {
     apple: 'آبل',
     dontHaveAccount: 'ليس لديك حساب؟ ',
     alreadyHaveAccount: 'لديك حساب بالفعل؟ ',
+    wrongPortalClient:
+      'هذا الحساب ليس عميلاً. افتح التطبيق من الدور الصحيح (مثل المشرف) لتسجيل الدخول.',
   },
   orders: {
     filters: { all: 'الطلبات', pending: 'قيد الانتظار', in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' },
@@ -4453,6 +4458,7 @@ export const ar = {
       isActiveLabel: 'الحالة',
       isActiveActive: 'نشط',
       isActiveDisabled: 'معطل (قريباً)',
+      inactiveStatus: 'غير نشط',
       opening: 'جارٍ الفتح…',
       uploadFromDevice: 'رفع من الجهاز',
       replaceImage: 'استبدال الصورة',
@@ -5436,6 +5442,8 @@ export const ur = {
     apple: 'ایپل',
     dontHaveAccount: 'اکاؤنٹ نہیں ہے؟ ',
     alreadyHaveAccount: 'کیا پہلے سے اکاؤنٹ ہے؟ ',
+    wrongPortalClient:
+      'یہ اکاؤنٹ کلائنٹ نہیں ہے۔ لاگ اِن کے لیے صحیح رول (مثلاً ایڈمن) سے ایپ کھولیں۔',
   },
   orders: {
     filters: { all: 'تمام', pending: 'زیر التواء', in_progress: 'جاری', completed: 'مکمل', cancelled: 'منسوخ' },
@@ -7050,6 +7058,7 @@ export const ur = {
       isActiveLabel: 'حیثیت',
       isActiveActive: 'فعال',
       isActiveDisabled: 'غیر فعال (جلد آ رہا ہے)',
+      inactiveStatus: 'غیر فعال',
       opening: 'کھولا جا رہا ہے…',
       uploadFromDevice: 'ڈیوائس سے اپ لوڈ کریں',
       replaceImage: 'تصویر بدلیں',

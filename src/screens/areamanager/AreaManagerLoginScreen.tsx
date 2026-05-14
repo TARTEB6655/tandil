@@ -42,10 +42,14 @@ const AreaManagerLoginScreen: React.FC = () => {
       const response = await authService.login({
         email: email.trim(),
         password: password,
+        roles: 'area_manager',
       });
 
       // Verify the role is area_manager
-      const userRole = response.data?.role || response.data?.user?.role;
+      const userRole =
+        response.data?.role ||
+        response.data?.user?.role ||
+        response.data?.user?.roles?.[0]?.name;
       if (userRole !== 'area_manager') {
         Alert.alert(t('admin.areaManagerLogin.accessDenied'), t('admin.areaManagerLogin.accessDeniedMessage'));
         setIsLoading(false);

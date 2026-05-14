@@ -224,20 +224,6 @@ const AreaManagerProfileScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>{t('technician.settings')}</Text>
           <View style={styles.menuContainer}>{menuItems.map(renderMenuItem)}</View>
         </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('technician.accountActions')}</Text>
-          <View style={styles.accountActions}>
-            <TouchableOpacity style={styles.accountAction}>
-              <Ionicons name="download-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.accountActionText}>{t('technician.downloadData')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.accountAction}>
-              <Ionicons name="trash-outline" size={20} color={COLORS.error} />
-              <Text style={[styles.accountActionText, { color: COLORS.error }]}>{t('technician.deleteAccount')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       </ScrollView>
     </View>
   );
@@ -314,9 +300,6 @@ const styles = StyleSheet.create({
   },
   menuItemLeft: { flexDirection: 'row', alignItems: 'center' },
   menuItemText: { fontSize: FONT_SIZES.md, color: COLORS.text, marginLeft: SPACING.md },
-  accountActions: { flexDirection: 'row', gap: SPACING.md },
-  accountAction: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: BORDER_RADIUS.lg, padding: SPACING.md },
-  accountActionText: { fontSize: FONT_SIZES.md, color: COLORS.text, marginLeft: SPACING.sm, fontWeight: FONT_WEIGHTS.medium },
 });
 
 export default AreaManagerProfileScreen;

@@ -36,6 +36,7 @@ import { captureException } from '../../utils/sentry';
 import * as Location from 'expo-location';
 import { resolveVisitArea } from '../../services/visitService';
 import { getWalletSummary } from '../../services/walletService';
+import { useAppStore } from '../../store';
 
 interface CartItem {
   id: string;
@@ -62,6 +63,7 @@ interface ShippingAddress {
 const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const user = useAppStore((s) => s.user);
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const route = useRoute<any>();
   const {
@@ -86,6 +88,19 @@ const CheckoutScreen: React.FC = () => {
     zipCode: '',
     country: '',
   });
+
+  /** Default full name & phone from account (registration / profile); only when fields still empty. */
+  useEffect(() => {
+    const name = user?.name?.trim();
+    const phone = user?.phone?.trim();
+    if (!name && !phone) return;
+    setShippingAddress((prev) => {
+      const nextName = name && !prev.fullName.trim() ? name : prev.fullName;
+      const nextPhone = phone && !prev.phone.trim() ? phone : prev.phone;
+      if (nextName === prev.fullName && nextPhone === prev.phone) return prev;
+      return { ...prev, fullName: nextName, phone: nextPhone };
+    });
+  }, [user?.name, user?.phone]);
 
   const [walletApiBalance, setWalletApiBalance] = useState(0);
   const [applyWallet, setApplyWallet] = useState(false);

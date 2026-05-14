@@ -41,10 +41,14 @@ const TechnicianLoginScreen: React.FC = () => {
       const response = await authService.login({
         email: email.trim(),
         password: password,
+        roles: 'technician',
       });
 
       // Verify the role is technician
-      const userRole = response.data?.role || response.data?.user?.role;
+      const userRole =
+        response.data?.role ||
+        response.data?.user?.role ||
+        response.data?.user?.roles?.[0]?.name;
       if (userRole !== 'technician') {
         Alert.alert(t('technician.accessDenied'), t('technician.notTechnicianAccount'));
         setIsLoading(false);

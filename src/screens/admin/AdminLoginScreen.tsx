@@ -44,6 +44,7 @@ const AdminLoginScreen: React.FC = () => {
       const response = await authService.login({
         email: email.trim(),
         password: password,
+        roles: 'admin',
       });
 
       console.log('Login response:', response);
@@ -52,7 +53,10 @@ const AdminLoginScreen: React.FC = () => {
       console.log('Response user role:', response.data?.user?.role);
 
       // Verify the role is admin - check response.data.role
-      const userRole = response.data?.role || response.data?.user?.role;
+      const userRole =
+        response.data?.role ||
+        response.data?.user?.role ||
+        response.data?.user?.roles?.[0]?.name;
       
       if (userRole !== 'admin') {
         console.warn('Access denied - role is:', userRole);

@@ -208,43 +208,23 @@ const AdminEditCategoryScreen: React.FC = () => {
               numberOfLines={3}
             />
 
-            <View style={styles.dropdownWrapper}>
-              <Text style={styles.dropdownLabel}>
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>
                 {t('admin.categoryForm.isActiveLabel', 'Status')}
               </Text>
-              <TouchableOpacity
-                style={styles.dropdown}
-                onPress={() => setShowIsActiveDropdown((v) => !v)}
-              >
-                <Text style={styles.dropdownText}>
-                  {isActiveOptions.find((o) => o.value === isActive)?.label ?? isActiveOptions[0].label}
+              <View style={styles.toggleRight}>
+                <Text style={styles.toggleValue}>
+                  {isActive
+                    ? t('admin.categoryForm.isActiveActive', 'Active')
+                    : t('admin.categoryForm.inactiveStatus', 'Inactive')}
                 </Text>
-                <Ionicons name={showIsActiveDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={COLORS.textSecondary} />
-              </TouchableOpacity>
-              {showIsActiveDropdown && (
-                <Modal transparent visible animationType="fade" onRequestClose={() => setShowIsActiveDropdown(false)}>
-                  <TouchableOpacity
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setShowIsActiveDropdown(false)}
-                  >
-                    <View style={styles.dropdownModal}>
-                      {isActiveOptions.map((opt) => (
-                        <TouchableOpacity
-                          key={opt.value}
-                          style={styles.dropdownOption}
-                          onPress={() => {
-                            setIsActive(opt.value);
-                            setShowIsActiveDropdown(false);
-                          }}
-                        >
-                          <Text style={styles.dropdownOptionText}>{opt.label}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </TouchableOpacity>
-                </Modal>
-              )}
+                <Switch
+                  value={isActive}
+                  onValueChange={setIsActive}
+                  trackColor={{ false: COLORS.border, true: COLORS.primary }}
+                  thumbColor={COLORS.background}
+                />
+              </View>
             </View>
           </View>
 

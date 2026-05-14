@@ -42,10 +42,14 @@ const HRManagerLoginScreen: React.FC = () => {
       const response = await authService.login({
         email: email.trim(),
         password: password,
+        roles: 'hr',
       });
 
       // Verify the role is hr
-      const userRole = response.data?.role || response.data?.user?.role;
+      const userRole =
+        response.data?.role ||
+        response.data?.user?.role ||
+        response.data?.user?.roles?.[0]?.name;
       if (userRole !== 'hr') {
         Alert.alert(t('admin.hrManagerLogin.accessDenied'), t('admin.hrManagerLogin.accessDeniedMessage'));
         setIsLoading(false);

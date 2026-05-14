@@ -51,6 +51,8 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       try {
         await AsyncStorage.removeItem('auth_token');
+        await AsyncStorage.removeItem('auth_role');
+        await AsyncStorage.removeItem('auth_slug');
         await AsyncStorage.removeItem('user');
         // You can navigate to login screen here if needed
       } catch (e) {

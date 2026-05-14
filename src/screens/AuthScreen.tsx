@@ -89,9 +89,21 @@ const AuthScreen: React.FC = () => {
         const response = await authService.login({
           email: email.trim(),
           password: password,
+          roles: 'client',
         });
 
-        // Get the mapped user from storage (authService stores it)
+        const effectiveRole =
+          response.data?.role ||
+          response.data?.user?.role ||
+          response.data?.user?.roles?.[0]?.name;
+        if (effectiveRole && effectiveRole !== 'client') {
+          await authService.clearLocalSession();
+          const msg = t('auth.wrongPortalClient');
+          setError(msg);
+          Alert.alert(t('auth.login'), msg);
+          setLoading(false);
+          return;
+        }
         const appUser = await authService.getStoredUser();
         
         if (appUser) {
@@ -109,6 +121,19 @@ const AuthScreen: React.FC = () => {
           password_confirmation: confirmPassword,
           role: selectedRole, // Dynamic role from route params
         });
+
+        const regRole =
+          response.data?.role ||
+          response.data?.user?.role ||
+          response.data?.user?.roles?.[0]?.name;
+        if (regRole && regRole !== 'client') {
+          await authService.clearLocalSession();
+          const msg = t('auth.wrongPortalClient');
+          setError(msg);
+          Alert.alert(t('auth.login'), msg);
+          setLoading(false);
+          return;
+        }
 
         // Get the mapped user from storage
         const appUser = await authService.getStoredUser();
