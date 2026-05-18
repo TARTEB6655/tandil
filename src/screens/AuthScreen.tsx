@@ -17,7 +17,8 @@ import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
-import { authService } from '../services/authService';
+import { authService, LoginResponse } from '../services/authService';
+import ClientSocialLogin from '../components/auth/ClientSocialLogin';
 
 const AuthScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -36,6 +37,26 @@ const AuthScreen: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const finishClientSession = async (response: LoginResponse) => {
+    const effectiveRole =
+      response.data?.role ||
+      response.data?.user?.role ||
+      response.data?.user?.roles?.[0]?.name;
+    if (effectiveRole && effectiveRole !== 'client') {
+      await authService.clearLocalSession();
+      const msg = t('auth.wrongPortalClient');
+      setError(msg);
+      Alert.alert(t('auth.login'), msg);
+      return;
+    }
+    const appUser = await authService.getStoredUser();
+    if (appUser) {
+      setUser(appUser);
+      setAuthenticated(true);
+      navigation.navigate('UserApp');
+    }
+  };
 
   const validateForm = (): boolean => {
     setError(null);
@@ -92,25 +113,7 @@ const AuthScreen: React.FC = () => {
           roles: 'client',
         });
 
-        const effectiveRole =
-          response.data?.role ||
-          response.data?.user?.role ||
-          response.data?.user?.roles?.[0]?.name;
-        if (effectiveRole && effectiveRole !== 'client') {
-          await authService.clearLocalSession();
-          const msg = t('auth.wrongPortalClient');
-          setError(msg);
-          Alert.alert(t('auth.login'), msg);
-          setLoading(false);
-          return;
-        }
-        const appUser = await authService.getStoredUser();
-        
-        if (appUser) {
-          setUser(appUser);
-          setAuthenticated(true);
-          navigation.navigate('UserApp');
-        }
+        await finishClientSession(response);
       } else {
         // Register
         const response = await authService.register({
@@ -289,6 +292,17 @@ const AuthScreen: React.FC = () => {
             <Text style={styles.forgotPasswordText}>{t('auth.forgotPassword')}</Text>
           </TouchableOpacity>
         )}
+
+        {selectedRole === 'client' ? (
+          <ClientSocialLogin
+            disabled={loading}
+            onSuccess={finishClientSession}
+            onError={(msg) => {
+              setError(msg);
+              Alert.alert(isLogin ? t('auth.login') : t('auth.signup'), msg);
+            }}
+          />
+        ) : null}
       </View>
 
       {/* Switch Mode */}

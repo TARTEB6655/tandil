@@ -216,19 +216,19 @@ const SettingsScreen: React.FC = () => {
               'document-text-outline',
               t('settings.items.terms.title'),
               t('settings.items.terms.subtitle'),
-              () => {}
+              () => navigation.navigate('AppInfoContent', { pageKey: 'terms_conditions' })
             )}
             {renderSettingItem(
               'shield-checkmark-outline',
               t('settings.items.privacyPolicy.title'),
               t('settings.items.privacyPolicy.subtitle'),
-              () => {}
+              () => navigation.navigate('AppInfoContent', { pageKey: 'privacy_policy' })
             )}
             {renderSettingItem(
               'information-circle-outline',
               t('settings.items.aboutApp.title'),
               t('settings.items.aboutApp.subtitle'),
-              () => {}
+              () => navigation.navigate('AppInfoContent', { pageKey: 'who_we_are' })
             )}
           </View>
         </View>

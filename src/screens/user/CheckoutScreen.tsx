@@ -72,7 +72,7 @@ const CheckoutScreen: React.FC = () => {
     isBuyNow = false,
   } = route.params || { cartItems: [], buyNowSummary: null, isBuyNow: false };
   
-  const [currentStep, setCurrentStep] = useState<'location' | 'phone' | 'payment'>('location');
+  const [currentStep, setCurrentStep] = useState<'location' | 'payment'>('location');
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locationCoords, setLocationCoords] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -105,7 +105,7 @@ const CheckoutScreen: React.FC = () => {
   const [walletApiBalance, setWalletApiBalance] = useState(0);
   const [applyWallet, setApplyWallet] = useState(false);
   const [walletSummaryLoading, setWalletSummaryLoading] = useState(false);
-  const STEP_ORDER: Array<'location' | 'phone' | 'payment'> = ['location', 'phone', 'payment'];
+  const STEP_ORDER: Array<'location' | 'payment'> = ['location', 'payment'];
   const activeStepIndex = STEP_ORDER.indexOf(currentStep);
 
   const calculateSubtotal = () => {
@@ -524,7 +524,7 @@ const CheckoutScreen: React.FC = () => {
 
   const renderLocationStep = () => (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{t('checkout.locationStep', 'Location')}</Text>
+      <Text style={styles.sectionTitle}>{t('checkout.addressStep', 'Address')}</Text>
       <Text style={styles.helperText}>
         {t(
           'checkout.locationStepHelp',
@@ -550,6 +550,17 @@ const CheckoutScreen: React.FC = () => {
           value={shippingAddress.fullName}
           onChangeText={(text) => setShippingAddress(prev => ({ ...prev, fullName: text }))}
           placeholder={t('checkout.fullName', 'Full Name')}
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>{t('checkout.phoneNumber')}</Text>
+        <TextInput
+          style={styles.input}
+          value={shippingAddress.phone}
+          onChangeText={(text) => setShippingAddress(prev => ({ ...prev, phone: text }))}
+          placeholder={t('checkout.phoneNumber')}
+          keyboardType="phone-pad"
         />
       </View>
 
@@ -608,25 +619,6 @@ const CheckoutScreen: React.FC = () => {
     </View>
   );
 
-  const renderPhoneStep = () => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{t('checkout.phoneSectionTitle', 'Phone number')}</Text>
-      <Text style={styles.helperText}>
-        {t('checkout.phoneStepHelp', 'Please enter your phone number so we can contact you about delivery.')}
-      </Text>
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>{t('checkout.phoneNumber')}</Text>
-        <TextInput
-          style={styles.input}
-          value={shippingAddress.phone}
-          onChangeText={(text) => setShippingAddress(prev => ({ ...prev, phone: text }))}
-          placeholder={t('checkout.phoneNumber')}
-          keyboardType="phone-pad"
-        />
-      </View>
-    </View>
-  );
-
   const renderPaymentMethods = () => (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{t('checkout.paymentMethod')}</Text>
@@ -662,43 +654,24 @@ const CheckoutScreen: React.FC = () => {
         <Text style={[
           styles.stepLabel,
           activeStepIndex >= 0 && styles.activeStepLabel,
-        ]}>{t('checkout.locationStep', 'Location')}</Text>
+        ]}>{t('checkout.addressStep', 'Address')}</Text>
       </View>
-      
+
       <View style={styles.stepLine} />
-      
+
       <View style={styles.stepContainer}>
         <View style={[
           styles.stepCircle,
           activeStepIndex >= 1 && styles.activeStepCircle,
         ]}>
-          {activeStepIndex > 1 ? (
-            <Ionicons name="checkmark" size={16} color={COLORS.background} />
-          ) : (
-            <Text style={[styles.stepNumber, activeStepIndex >= 1 && styles.activeStepNumber]}>2</Text>
-          )}
+          <Text style={[
+            styles.stepNumber,
+            activeStepIndex >= 1 && styles.activeStepNumber,
+          ]}>2</Text>
         </View>
         <Text style={[
           styles.stepLabel,
           activeStepIndex >= 1 && styles.activeStepLabel,
-        ]}>{t('checkout.phoneNumberStep', 'Phone')}</Text>
-      </View>
-      
-      <View style={styles.stepLine} />
-      
-      <View style={styles.stepContainer}>
-        <View style={[
-          styles.stepCircle,
-          activeStepIndex >= 2 && styles.activeStepCircle,
-        ]}>
-          <Text style={[
-            styles.stepNumber,
-            activeStepIndex >= 2 && styles.activeStepNumber,
-          ]}>3</Text>
-        </View>
-        <Text style={[
-          styles.stepLabel,
-          activeStepIndex >= 2 && styles.activeStepLabel,
         ]}>{t('checkout.paymentStep', 'Payment')}</Text>
       </View>
     </View>
@@ -707,8 +680,6 @@ const CheckoutScreen: React.FC = () => {
   const getNextStep = () => {
     switch (currentStep) {
       case 'location':
-        return 'phone';
-      case 'phone':
         return 'payment';
       case 'payment':
         return null;
@@ -726,6 +697,14 @@ const CheckoutScreen: React.FC = () => {
             'checkout.completeLocationFirst',
             'Please use your location or complete your address before continuing.'
           ),
+          [{ text: t('common.ok', 'OK') }]
+        );
+        return;
+      }
+      if (!shippingAddress.phone.trim()) {
+        Alert.alert(
+          t('common.error', 'Error'),
+          t('checkout.enterPhoneFirst', 'Please enter your phone number before continuing.'),
           [{ text: t('common.ok', 'OK') }]
         );
         return;
@@ -761,16 +740,6 @@ const CheckoutScreen: React.FC = () => {
         setLoading(false);
       }
     }
-    if (currentStep === 'phone') {
-      if (!shippingAddress.phone.trim()) {
-        Alert.alert(
-          t('common.error', 'Error'),
-          t('checkout.enterPhoneFirst', 'Please enter your phone number before continuing.'),
-          [{ text: t('common.ok', 'OK') }]
-        );
-        return;
-      }
-    }
 
     const nextStep = getNextStep();
     if (nextStep) {
@@ -781,13 +750,8 @@ const CheckoutScreen: React.FC = () => {
   };
 
   const handleBack = () => {
-    switch (currentStep) {
-      case 'phone':
-        setCurrentStep('location');
-        break;
-      case 'payment':
-        setCurrentStep('phone');
-        break;
+    if (currentStep === 'payment') {
+      setCurrentStep('location');
     }
   };
 
@@ -810,7 +774,6 @@ const CheckoutScreen: React.FC = () => {
       >
         <View style={styles.stepCard}>
           {currentStep === 'location' && renderLocationStep()}
-          {currentStep === 'phone' && renderPhoneStep()}
           {currentStep === 'payment' && renderPaymentMethods()}
         </View>
 

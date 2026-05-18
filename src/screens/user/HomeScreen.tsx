@@ -869,7 +869,7 @@ const HomeScreen: React.FC = () => {
 
           <TouchableOpacity
             style={styles.quickAction}
-            onPress={() => navigation.navigate('OrderTracking', { orderId: recentOrders[0]?.id || '' })}
+            onPress={() => navigation.navigate('Main' as never, { screen: 'Orders' } as never)}
           >
             <View style={styles.quickActionIcon}>
               <Ionicons name="location-outline" size={24} color={COLORS.primary} />

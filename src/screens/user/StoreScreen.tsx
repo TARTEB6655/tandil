@@ -18,10 +18,11 @@ import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import { shopService, ShopProduct } from '../../services/shopService';
 import { addCartItem, getCart } from '../../services/cartService';
+import { buildFullImageUrl } from '../../config/api';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=800&q=60';
 
-type CategoryItem = { id: string; name: string; icon: string };
+type CategoryItem = { id: string; name: string; imageUri: string | null };
 
 const StoreScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -77,11 +78,18 @@ const StoreScreen: React.FC = () => {
       try {
         const list = await shopService.getProductCategories();
         if (cancelled) return;
-        const allItem: CategoryItem = { id: 'all', name: t('store.categories.all', { defaultValue: 'All' }), icon: 'grid-outline' };
-        const fromApi: CategoryItem[] = list.map(c => ({ id: String(c.id), name: c.name, icon: 'leaf-outline' }));
+        const allItem: CategoryItem = { id: 'all', name: t('store.categories.all', { defaultValue: 'All' }), imageUri: null };
+        const fromApi: CategoryItem[] = list.map((c) => {
+          const raw = c.image_url ?? c.image ?? null;
+          let uri: string | null = null;
+          if (typeof raw === 'string' && raw.trim()) {
+            uri = raw.startsWith('http') ? raw.trim() : buildFullImageUrl(raw.trim());
+          }
+          return { id: String(c.id), name: c.name, imageUri: uri };
+        });
         setCategories([allItem, ...fromApi]);
       } catch (_) {
-        if (!cancelled) setCategories([{ id: 'all', name: t('store.categories.all', { defaultValue: 'All' }), icon: 'grid-outline' }]);
+        if (!cancelled) setCategories([{ id: 'all', name: t('store.categories.all', { defaultValue: 'All' }), imageUri: null }]);
       }
     })();
     return () => { cancelled = true; };
@@ -179,15 +187,38 @@ const StoreScreen: React.FC = () => {
     }
   };
 
-  const renderCategoryItem = ({ item }: { item: CategoryItem }) => (
-    <TouchableOpacity
-      style={[styles.categoryItem, selectedCategoryId === item.id && styles.categoryItemActive]}
-      onPress={() => setSelectedCategoryId(item.id)}
-    >
-      <Ionicons name={item.icon as any} size={18} color={selectedCategoryId === item.id ? COLORS.background : COLORS.primary} />
-      <Text style={[styles.categoryText, selectedCategoryId === item.id && styles.categoryTextActive]}>{item.name}</Text>
-    </TouchableOpacity>
-  );
+  const renderCategoryItem = ({ item }: { item: CategoryItem }) => {
+    const selected = selectedCategoryId === item.id;
+    return (
+      <TouchableOpacity
+        style={styles.categoryChip}
+        onPress={() => setSelectedCategoryId(item.id)}
+        activeOpacity={0.75}
+      >
+        <View style={[styles.categoryImageRing, selected && styles.categoryImageRingSelected]}>
+          {item.imageUri ? (
+            <Image
+              source={{ uri: item.imageUri }}
+              style={styles.categoryImage}
+              contentFit="cover"
+              transition={150}
+              cachePolicy="disk"
+            />
+          ) : (
+            <View style={[styles.categoryIconFallback, selected && styles.categoryIconFallbackSelected]}>
+              <Ionicons name="grid-outline" size={26} color={selected ? COLORS.primary : COLORS.textSecondary} />
+            </View>
+          )}
+        </View>
+        <Text
+          style={[styles.categoryLabel, selected && styles.categoryLabelSelected]}
+          numberOfLines={2}
+        >
+          {item.name}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   const renderProductItem = ({ item }: { item: ShopProduct }) => {
     const detail = toDetailProduct(item);
@@ -398,28 +429,58 @@ const styles = StyleSheet.create({
   },
   categoriesList: {
     paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xs,
+    alignItems: 'flex-start',
   },
-  categoryItem: {
+  /** Circular image + label below (matches reference store UX). */
+  categoryChip: {
     alignItems: 'center',
+    width: 78,
+    marginRight: SPACING.md,
+  },
+  categoryImageRing: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    padding: 3,
+    borderWidth: 2,
+    borderColor: COLORS.border,
     backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
-    marginRight: SPACING.sm,
-    minWidth: 64,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  categoryItemActive: {
-    backgroundColor: COLORS.primary,
+  categoryImageRingSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.background,
   },
-  categoryText: {
+  categoryImage: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: COLORS.primary + '12',
+  },
+  categoryIconFallback: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: COLORS.primary + '14',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categoryIconFallbackSelected: {
+    backgroundColor: COLORS.primary + '22',
+  },
+  categoryLabel: {
+    marginTop: SPACING.xs,
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.text,
-    marginTop: 2,
+    color: COLORS.textSecondary,
     textAlign: 'center',
+    width: '100%',
   },
-  categoryTextActive: {
-    color: COLORS.background,
+  categoryLabelSelected: {
+    color: COLORS.text,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   productsContainer: {
     flex: 1,

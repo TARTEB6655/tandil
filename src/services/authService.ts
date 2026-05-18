@@ -136,6 +136,44 @@ export const authService = {
   /** Clears local token/user without calling the logout API (e.g. wrong portal after login). */
   clearLocalSession: clearAuthStorage,
 
+  /** POST /auth/google — mobile id_token from Google Sign-In (client portal). */
+  loginWithGoogle: async (idToken: string): Promise<LoginResponse> => {
+    try {
+      const response = await apiClient.post<LoginResponse>('/auth/google', {
+        id_token: idToken,
+        roles: 'client',
+      });
+      const responseData = response.data;
+      await persistAuthPayload(responseData);
+      return responseData;
+    } catch (error: unknown) {
+      console.error('Google login API Error:', error);
+      throw error;
+    }
+  },
+
+  /** POST /auth/apple — identity token from Sign in with Apple (client portal). */
+  loginWithApple: async (params: {
+    idToken: string;
+    name?: string | null;
+    email?: string | null;
+  }): Promise<LoginResponse> => {
+    try {
+      const response = await apiClient.post<LoginResponse>('/auth/apple', {
+        id_token: params.idToken,
+        roles: 'client',
+        ...(params.name?.trim() ? { name: params.name.trim() } : {}),
+        ...(params.email?.trim() ? { email: params.email.trim() } : {}),
+      });
+      const responseData = response.data;
+      await persistAuthPayload(responseData);
+      return responseData;
+    } catch (error: unknown) {
+      console.error('Apple login API Error:', error);
+      throw error;
+    }
+  },
+
   login: async (credentials: LoginCredentials): Promise<LoginResponse> => {
     try {
       const body = {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   TextInput,
   FlatList,
-  Image,
   ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
@@ -119,19 +119,55 @@ const ServicesScreen: React.FC = () => {
     );
   };
 
-  const categoryTabs = [{ id: 'all', name: t('common.all', 'All'), icon: 'grid-outline' as const }, ...services.map((s) => ({ id: String(s.id), name: s.name, icon: 'pricetag-outline' as const }))];
-
-  const renderCategoryItem = ({ item }: { item: { id: string; name: string; icon: string } }) => (
-    <TouchableOpacity
-      style={[styles.categoryItem, selectedCategory === item.id && styles.categoryItemActive]}
-      onPress={() => setSelectedCategory(item.id)}
-    >
-      <Ionicons name={item.icon as any} size={18} color={selectedCategory === item.id ? COLORS.background : COLORS.primary} />
-      <Text style={[styles.categoryText, selectedCategory === item.id && styles.categoryTextActive]} numberOfLines={1}>
-        {item.name}
-      </Text>
-    </TouchableOpacity>
+  const categoryTabs = useMemo(
+    () =>
+      [
+        { id: 'all', name: t('common.all', 'All'), imageUri: null as string | null },
+        ...services.map((s) => {
+          const raw = s.image_url ?? s.image ?? null;
+          let uri: string | null = null;
+          if (typeof raw === 'string' && raw.trim()) {
+            uri = raw.startsWith('http') ? raw.trim() : buildFullImageUrl(raw.trim());
+          }
+          return { id: String(s.id), name: s.name, imageUri: uri };
+        }),
+      ],
+    [services, t]
   );
+
+  const renderCategoryItem = ({ item }: { item: { id: string; name: string; imageUri: string | null } }) => {
+    const selected = selectedCategory === item.id;
+    return (
+      <TouchableOpacity
+        style={styles.categoryChip}
+        onPress={() => setSelectedCategory(item.id)}
+        activeOpacity={0.75}
+      >
+        <View style={[styles.categoryImageRing, selected && styles.categoryImageRingSelected]}>
+          {item.imageUri ? (
+            <Image
+              source={{ uri: item.imageUri }}
+              style={styles.categoryImage}
+              contentFit="cover"
+              transition={150}
+              cachePolicy="disk"
+            />
+          ) : (
+            <View style={[styles.categoryIconFallback, selected && styles.categoryIconFallbackSelected]}>
+              <Ionicons
+                name={item.id === 'all' ? 'grid-outline' : 'construct-outline'}
+                size={26}
+                color={selected ? COLORS.primary : COLORS.textSecondary}
+              />
+            </View>
+          )}
+        </View>
+        <Text style={[styles.categoryLabel, selected && styles.categoryLabelSelected]} numberOfLines={2}>
+          {item.name}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   const renderProductItem = ({ item }: { item: PublicServiceProduct }) => {
     const imageUri = getProductImage(item);
@@ -289,28 +325,57 @@ const styles = StyleSheet.create({
   },
   categoriesList: {
     paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xs,
+    alignItems: 'flex-start',
   },
-  categoryItem: {
+  categoryChip: {
     alignItems: 'center',
+    width: 78,
+    marginRight: SPACING.md,
+  },
+  categoryImageRing: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    padding: 3,
+    borderWidth: 2,
+    borderColor: COLORS.border,
     backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
-    marginRight: SPACING.sm,
-    minWidth: 64,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  categoryItemActive: {
-    backgroundColor: COLORS.primary,
+  categoryImageRingSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.background,
   },
-  categoryText: {
+  categoryImage: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: COLORS.primary + '12',
+  },
+  categoryIconFallback: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: COLORS.primary + '14',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categoryIconFallbackSelected: {
+    backgroundColor: COLORS.primary + '22',
+  },
+  categoryLabel: {
+    marginTop: SPACING.xs,
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.text,
-    marginTop: 2,
+    color: COLORS.textSecondary,
     textAlign: 'center',
+    width: '100%',
   },
-  categoryTextActive: {
-    color: COLORS.background,
+  categoryLabelSelected: {
+    color: COLORS.text,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   servicesContainer: {
     flex: 1,

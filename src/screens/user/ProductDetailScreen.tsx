@@ -134,8 +134,18 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         t('product.addedToCart'),
         `${product.name} (Qty: ${quantity})`,
         [
-          { text: t('product.continueShopping'), style: 'cancel' },
-          { text: t('product.viewCart'), onPress: () => navigation.navigate('Cart') }
+          {
+            text: t('product.continueShopping'),
+            style: 'cancel',
+            onPress: () => {
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('Main', { screen: 'Store' });
+              }
+            },
+          },
+          { text: t('product.viewCart'), onPress: () => navigation.navigate('Cart') },
         ]
       );
     } catch (err: any) {

@@ -237,6 +237,10 @@ export type RootStackParamList = {
   VendorLogin: undefined;
 };
 
+import type { AppInfoPageKey } from './appInfo';
+
+export type { AppInfoPageKey } from './appInfo';
+
 export type UserStackParamList = {
   Main: undefined;
   Home: undefined;
@@ -274,6 +278,12 @@ export type UserStackParamList = {
   MyTickets: undefined;
   SupportTicketChat: { ticket: { id: number; ticket_number: string; subject: string; status: string; created_at: string; updated_at: string } };
   Memberships: undefined;
+  PersonalInfo: undefined;
+  Addresses: undefined;
+  AddAddress: undefined;
+  EditAddress: { addressId: number };
+  PaymentMethods: undefined;
+  AppInfoContent: { pageKey: AppInfoPageKey };
 };
 
 export type TechnicianStackParamList = {

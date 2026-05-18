@@ -10,7 +10,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { useAppStore } from '../../store';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +21,8 @@ import {
   getProfilePictureUrl,
   getClientNotifications,
 } from '../../services/userService';
+import { shareApp, rateApp } from '../../utils/appShare';
+import type { AppInfoPageKey } from '../../types/appInfo';
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -75,43 +77,117 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
-  const menuItems = [
-    { icon: 'trophy-outline', title: t('profile.memberships'), onPress: () => {
-      try {
-        navigation.navigate('Memberships' as never);
-      } catch (error) {
-        console.error('ProfileScreen: Navigation error to Memberships:', error);
-      }
-    } },
-    { icon: 'person-outline', title: t('profile.personalInformation'), onPress: () => {
-      try { navigation.navigate('PersonalInfo'); } catch {}
-    } },
-    { icon: 'location-outline', title: t('profile.addresses'), onPress: () => {
-      try { navigation.navigate('Addresses'); } catch {}
-    } },
-    { icon: 'wallet-outline', title: t('profile.wallet', 'Wallet'), onPress: () => {
-      try { navigation.navigate('Wallet'); } catch {}
-    } },
-    { icon: 'card-outline', title: t('profile.paymentMethods'), onPress: () => {
-      try { navigation.navigate('PaymentMethods'); } catch {}
-    } },
-    { icon: 'notifications-outline', title: t('profile.notifications'), onPress: () => {
-      console.log('ProfileScreen: Navigating to Notifications');
-      try {
-        navigation.navigate('Notifications');
-      } catch (error) {
-        console.error('ProfileScreen: Navigation error to Notifications:', error);
-      }
-    } },
-    { icon: 'help-circle-outline', title: t('profile.helpSupport'), onPress: () => {
-      console.log('ProfileScreen: Navigating to HelpCenter');
-      try {
-        navigation.navigate('HelpCenter');
-      } catch (error) {
-        console.error('ProfileScreen: Navigation error to HelpCenter:', error);
-      }
-    } },
-    { icon: 'log-out-outline', title: t('profile.logout'), onPress: handleLogout, color: COLORS.error },
+  const openAppInfo = (pageKey: AppInfoPageKey) => {
+    try {
+      navigation.navigate('AppInfoContent', { pageKey });
+    } catch (error) {
+      console.error('ProfileScreen: AppInfoContent navigation error:', error);
+    }
+  };
+
+  type MenuItem = {
+    icon: string;
+    title: string;
+    onPress: () => void;
+    color?: string;
+  };
+
+  const menuItems: MenuItem[] = [
+    {
+      icon: 'trophy-outline',
+      title: t('profile.memberships'),
+      onPress: () => {
+        try {
+          navigation.navigate('Memberships' as never);
+        } catch (error) {
+          console.error('ProfileScreen: Navigation error to Memberships:', error);
+        }
+      },
+    },
+    {
+      icon: 'person-outline',
+      title: t('profile.personalInformation'),
+      onPress: () => {
+        try {
+          navigation.navigate('PersonalInfo');
+        } catch {}
+      },
+    },
+    {
+      icon: 'location-outline',
+      title: t('profile.addresses'),
+      onPress: () => {
+        try {
+          navigation.navigate('Addresses');
+        } catch {}
+      },
+    },
+    {
+      icon: 'wallet-outline',
+      title: t('profile.wallet', 'Wallet'),
+      onPress: () => {
+        try {
+          navigation.navigate('Wallet');
+        } catch {}
+      },
+    },
+    {
+      icon: 'notifications-outline',
+      title: t('profile.notifications'),
+      onPress: () => {
+        try {
+          navigation.navigate('Notifications');
+        } catch (error) {
+          console.error('ProfileScreen: Navigation error to Notifications:', error);
+        }
+      },
+    },
+    {
+      icon: 'help-circle-outline',
+      title: t('profile.helpSupport'),
+      onPress: () => {
+        try {
+          navigation.navigate('HelpCenter');
+        } catch (error) {
+          console.error('ProfileScreen: Navigation error to HelpCenter:', error);
+        }
+      },
+    },
+    {
+      icon: 'information-circle-outline',
+      title: t('profile.about.whoWeAre'),
+      onPress: () => openAppInfo('who_we_are'),
+    },
+    {
+      icon: 'share-social-outline',
+      title: t('profile.about.shareApp'),
+      onPress: () => {
+        shareApp(t).catch(() => {});
+      },
+    },
+    {
+      icon: 'star-outline',
+      title: t('profile.about.rateApp'),
+      onPress: () => {
+        rateApp(t).catch(() => {});
+      },
+    },
+    {
+      icon: 'document-text-outline',
+      title: t('profile.about.privacyPolicy'),
+      onPress: () => openAppInfo('privacy_policy'),
+    },
+    {
+      icon: 'document-text-outline',
+      title: t('profile.about.termsConditions'),
+      onPress: () => openAppInfo('terms_conditions'),
+    },
+    {
+      icon: 'log-out-outline',
+      title: t('profile.logout'),
+      onPress: handleLogout,
+      color: COLORS.error,
+    },
   ];
 
   return (
@@ -154,11 +230,10 @@ const ProfileScreen: React.FC = () => {
           ) : null}
         </View>
 
-        {/* Menu Items */}
         <View style={styles.menuContainer}>
           {menuItems.map((item, index) => (
             <TouchableOpacity
-              key={index}
+              key={`${item.title}-${index}`}
               style={styles.menuItem}
               onPress={item.onPress}
             >

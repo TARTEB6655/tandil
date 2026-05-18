@@ -109,6 +109,13 @@ export const en = {
     alreadyHaveAccount: 'Already have an account? ',
     wrongPortalClient:
       'This account is not a client. Open the app from the correct role (e.g. Admin) to sign in.',
+    socialSignInFailed: 'Social sign-in failed. Please try again.',
+    socialNoToken: 'Sign-in completed but no token was returned. Check your OAuth setup.',
+    googleNotConfigured: 'Google sign-in is not configured yet. Use email and password.',
+    socialNotReady: 'Google sign-in is still loading. Try again.',
+    appleSignInFailed:
+      'Apple sign-in failed. On a simulator, sign in to an Apple ID in Settings, or use Google sign-in with your Google account.',
+    googleSetupHint: 'Use Google for Gmail accounts. Add Google OAuth keys in .env to enable.',
   },
   orders: {
     filters: { all: 'All', pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled' },
@@ -349,6 +356,39 @@ export const en = {
     logout: 'Logout',
     userNameDefault: 'User Name',
     emailDefault: 'user@example.com',
+    about: {
+      whoWeAre: 'Who we are',
+      shareApp: 'Share the App',
+      rateApp: 'Rate the App',
+      privacyPolicy: 'Privacy and Policy',
+      termsConditions: 'Terms and Conditions',
+    },
+    shareApp: {
+      title: 'Share Tandil',
+      message: 'Check out Tandil — book services and shop in the UAE, all in one app.',
+    },
+    rateApp: {
+      title: 'Rate the App',
+      iosFallback: 'Thank you for using Tandil! You can rate us on the App Store once the listing is available.',
+      failed: 'Could not open the app store. Please try again later.',
+    },
+    appInfo: {
+      whoWeAre: {
+        title: 'Who we are',
+        body:
+          'Tandil connects you with trusted home and lifestyle services across the UAE, plus a curated shop for everyday essentials.\n\nOur mission is to make booking services and ordering products simple, transparent, and reliable — with support in your language and clear pricing at checkout.',
+      },
+      privacyPolicy: {
+        title: 'Privacy and Policy',
+        body:
+          'We respect your privacy. Tandil collects only the information needed to provide services, process orders, and improve your experience (such as name, contact details, delivery address, and payment status).\n\nWe do not sell your personal data. Data may be shared with payment providers and delivery partners only to fulfil your orders. You may request account updates or deletion by contacting support.\n\nFor the full policy, refer to updates published by Tandil or contact support@tandil.com.',
+      },
+      termsConditions: {
+        title: 'Terms and Conditions',
+        body:
+          'By using Tandil you agree to these terms. Services and products are subject to availability in your area. Prices, taxes, and fees are shown at checkout.\n\nCancellations and refunds follow the policy shown for each order type. Wallet credits may expire as stated in the app. Misuse of the platform may result in account suspension.\n\nTandil may update these terms; continued use after changes means you accept the updated terms.',
+      },
+    },
   },
   personalInfo: {
     title: 'Personal Information',
@@ -2846,6 +2886,13 @@ export const ar = {
     alreadyHaveAccount: 'لديك حساب بالفعل؟ ',
     wrongPortalClient:
       'هذا الحساب ليس عميلاً. افتح التطبيق من الدور الصحيح (مثل المشرف) لتسجيل الدخول.',
+    socialSignInFailed: 'فشل تسجيل الدخول الاجتماعي. حاول مرة أخرى.',
+    socialNoToken: 'اكتمل تسجيل الدخول لكن لم يُرجع رمزاً. تحقق من إعداد OAuth.',
+    googleNotConfigured: 'تسجيل الدخول بجوجل غير مُعدّ بعد. استخدم البريد وكلمة المرور.',
+    socialNotReady: 'تسجيل الدخول بجوجل لا يزال يُحمّل. حاول مرة أخرى.',
+    appleSignInFailed:
+      'فشل تسجيل الدخول بآبل. على المحاكي، سجّل الدخول إلى Apple ID من الإعدادات، أو استخدم جوجل.',
+    googleSetupHint: 'استخدم جوجل لحسابات Gmail. أضف مفاتيح OAuth في ملف .env.',
   },
   orders: {
     filters: { all: 'الطلبات', pending: 'قيد الانتظار', in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' },
@@ -3075,6 +3122,39 @@ export const ar = {
     logout: 'تسجيل الخروج',
     userNameDefault: 'اسم المستخدم',
     emailDefault: 'user@example.com',
+    about: {
+      whoWeAre: 'من نحن',
+      shareApp: 'مشاركة التطبيق',
+      rateApp: 'تقييم التطبيق',
+      privacyPolicy: 'الخصوصية والسياسة',
+      termsConditions: 'الشروط والأحكام',
+    },
+    shareApp: {
+      title: 'مشاركة Tandil',
+      message: 'جرّب تطبيق Tandil — احجز الخدمات وتسوق في الإمارات من تطبيق واحد.',
+    },
+    rateApp: {
+      title: 'تقييم التطبيق',
+      iosFallback: 'شكراً لاستخدامك Tandil! يمكنك تقييمنا على App Store عند توفر التطبيق.',
+      failed: 'تعذر فتح متجر التطبيقات. حاول مرة أخرى لاحقاً.',
+    },
+    appInfo: {
+      whoWeAre: {
+        title: 'من نحن',
+        body:
+          'يربطك تطبيق Tandil بخدمات منزلية ومنزلية موثوقة في الإمارات، مع متجر لمنتجاتك اليومية.\n\nهدفنا تبسيط حجز الخدمات والطلبات بأسعار واضحة ودعم بلغتك.',
+      },
+      privacyPolicy: {
+        title: 'الخصوصية والسياسة',
+        body:
+          'نحترم خصوصيتك. نجمع فقط البيانات اللازمة لتقديم الخدمات ومعالجة الطلبات (مثل الاسم والعنوان وبيانات الاتصال).\n\nلا نبيع بياناتك الشخصية. قد تُشارك مع مزودي الدفع والتوصيل لتنفيذ طلبك فقط. للتفاصيل الكاملة تواصل مع الدعم.',
+      },
+      termsConditions: {
+        title: 'الشروط والأحكام',
+        body:
+          'باستخدامك Tandil فإنك توافق على هذه الشروط. الخدمات والمنتجات حسب التوفر في منطقتك. الأسعار والضرائب تظهر عند الدفع.\n\nالإلغاء والاسترداد وفق سياسة كل طلب. قد تنتهي أرصدة المحفظة كما هو موضح في التطبيق.',
+      },
+    },
   },
   personalInfo: {
     title: 'المعلومات الشخصية',
@@ -5444,6 +5524,13 @@ export const ur = {
     alreadyHaveAccount: 'کیا پہلے سے اکاؤنٹ ہے؟ ',
     wrongPortalClient:
       'یہ اکاؤنٹ کلائنٹ نہیں ہے۔ لاگ اِن کے لیے صحیح رول (مثلاً ایڈمن) سے ایپ کھولیں۔',
+    socialSignInFailed: 'سوشل لاگ اِن ناکام۔ دوبارہ کوشش کریں۔',
+    socialNoToken: 'لاگ اِن مکمل لیکن ٹوکن نہیں ملا۔ OAuth سیٹ اپ چیک کریں۔',
+    googleNotConfigured: 'گوگل لاگ اِن ابھی کنفیگر نہیں۔ ای میل اور پاس ورڈ استعمال کریں۔',
+    socialNotReady: 'گوگل لاگ اِن ابھی لوڈ ہو رہا ہے۔ دوبارہ کوشش کریں۔',
+    appleSignInFailed:
+      'ایپل لاگ اِن ناکام۔ سیمولیٹر پر Settings میں Apple ID سے سائن اِن کریں، یا گوگل استعمال کریں۔',
+    googleSetupHint: 'Gmail اکاؤنٹس کے لیے گوگل استعمال کریں۔ .env میں OAuth keys شامل کریں۔',
   },
   orders: {
     filters: { all: 'تمام', pending: 'زیر التواء', in_progress: 'جاری', completed: 'مکمل', cancelled: 'منسوخ' },
@@ -5673,6 +5760,39 @@ export const ur = {
     logout: 'لاگ آؤٹ',
     userNameDefault: 'صارف کا نام',
     emailDefault: 'user@example.com',
+    about: {
+      whoWeAre: 'ہم کون ہیں',
+      shareApp: 'ایپ شیئر کریں',
+      rateApp: 'ایپ کو ریٹ کریں',
+      privacyPolicy: 'رازداری اور پالیسی',
+      termsConditions: 'شرائط و ضوابط',
+    },
+    shareApp: {
+      title: 'Tandil شیئر کریں',
+      message: 'Tandil آزمائیں — UAE میں خدمات اور شاپنگ ایک ایپ میں۔',
+    },
+    rateApp: {
+      title: 'ایپ کو ریٹ کریں',
+      iosFallback: 'Tandil استعمال کرنے کا شکریہ! App Store پر دستیاب ہونے پر آپ ریٹ کر سکتے ہیں۔',
+      failed: 'ایپ اسٹور نہیں کھل سکا۔ بعد میں دوبارہ کوشش کریں۔',
+    },
+    appInfo: {
+      whoWeAre: {
+        title: 'ہم کون ہیں',
+        body:
+          'Tandil آپ کو UAE میں قابل اعتماد گھریلو خدمات اور شاپ سے جوڑتا ہے۔\n\nہمارا مقصد بکنگ اور آرڈر آسان، شفاف اور قابل اعتماد بنانا ہے۔',
+      },
+      privacyPolicy: {
+        title: 'رازداری اور پالیسی',
+        body:
+          'ہم آپ کی رازداری کا احترام کرتے ہیں۔ صرف وہی ڈیٹا جمع ہوتا ہے جو خدمات اور آرڈرز کے لیے ضروری ہے۔\n\nآپ کا ڈیٹا فروخت نہیں ہوتا۔ ادائیگی اور ڈیلیوری پارٹنرز کے ساتھ صرف آرڈر مکمل کرنے کے لیے شیئر ہو سکتا ہے۔',
+      },
+      termsConditions: {
+        title: 'شرائط و ضوابط',
+        body:
+          'Tandil استعمال کرتے ہوئے آپ ان شرائط سے متفق ہیں۔ قیمتیں چیک آؤٹ پر دکھائی جاتی ہیں۔\n\nمنسوخی اور ریفنڈ ہر آرڈر کی پالیسی کے مطابق ہیں۔ والیٹ کریڈٹ کی میعاد ایپ میں بیان کی گئی ہے۔',
+      },
+    },
   },
   personalInfo: {
     title: 'ذاتی معلومات',
