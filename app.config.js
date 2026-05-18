@@ -47,11 +47,14 @@ module.exports = {
       stripePublishableKey:
         process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || expo.extra?.stripePublishableKey || '',
       stripeMerchantIdentifier,
-      googleClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '',
-      googleExpoClientId: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID || '',
-      googleIosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
-      googleAndroidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || '',
-      googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
+      googleClientId:
+        process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || expo.extra?.googleClientId || expo.extra?.googleIosClientId || '',
+      googleExpoClientId: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID || expo.extra?.googleExpoClientId || '',
+      googleIosClientId:
+        process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || expo.extra?.googleIosClientId || '',
+      googleAndroidClientId:
+        process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || expo.extra?.googleAndroidClientId || '',
+      googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || expo.extra?.googleWebClientId || '',
       iosAppStoreId: process.env.EXPO_PUBLIC_IOS_APP_STORE_ID || expo.extra?.iosAppStoreId || '',
       shareAppUrl: process.env.EXPO_PUBLIC_SHARE_APP_URL || expo.extra?.shareAppUrl || '',
     },

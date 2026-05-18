@@ -267,7 +267,7 @@ const ClientSocialLogin: React.FC<ClientSocialLoginProps> = ({ onSuccess, onErro
       {!googleConfigured ? (
         <Text style={styles.hintText}>
           {t('auth.googleSetupHint', {
-            defaultValue: 'Use Google for Gmail accounts. Add Google OAuth keys in .env to enable.',
+            defaultValue: 'Google sign-in is unavailable in this build. Install the latest app update.',
           })}
         </Text>
       ) : null}

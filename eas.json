@@ -7,18 +7,27 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com"
+      },
       "android": {
         "gradleCommand": ":app:assembleDebug"
       }
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com"
+      },
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleDebug"
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com"
+      },
       "ios": {
         "simulator": false,
         "distribution": "store",
