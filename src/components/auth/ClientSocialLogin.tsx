@@ -64,6 +64,7 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
   });
 
   const extractApiMessage = (err: unknown): string => {
+    if (err instanceof Error && err.message.trim()) return err.message;
     const e = err as { response?: { data?: { message?: string } }; message?: string };
     return (
       e?.response?.data?.message ||

@@ -1,76 +1,23 @@
 import apiClient from './api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../types';
+import { loginWithDedicatedOrFallback } from './socialAuthBridge';
+import type {
+  LoginApiRole,
+  LoginCredentials,
+  LoginResponse,
+  LoginResponseUser,
+  RegisterData,
+} from './authTypes';
 
-/** Role sent with POST /auth/login (must match backend). */
-export type LoginApiRole =
-  | 'client'
-  | 'admin'
-  | 'hr'
-  | 'area_manager'
-  | 'supervisor'
-  | 'technician';
-
-export interface LoginCredentials {
-  email: string;
-  password: string;
-  /** Sent as JSON key `roles` on POST /auth/login (portal context: client, admin, …). */
-  roles: LoginApiRole;
-}
-
-export interface RegisterData {
-  name: string;
-  email: string;
-  phone: string;
-  password: string;
-  password_confirmation: string;
-  role: string;
-}
-
-export interface LoginResponseRole {
-  id: number;
-  name: string;
-  description?: string;
-  guard_name?: string;
-  created_at?: string;
-  updated_at?: string;
-  pivot?: {
-    model_type: string;
-    model_id: number;
-    role_id: number;
-  };
-}
-
-export interface LoginResponseUser {
-  id: number;
-  name: string;
-  email: string;
-  extra_emails?: string | null;
-  phone?: string | null;
-  extra_phones?: string | null;
-  profile_picture?: string | null;
-  role: string;
-  preferred_locale?: string;
-  status: string;
-  wallet_balance?: string | number | null;
-  wallet_forfeited_total?: string | number | null;
-  email_verified_at: string | null;
-  created_at: string;
-  updated_at: string;
-  profile_picture_url?: string | null;
-  roles?: LoginResponseRole[];
-}
-
-export interface LoginResponse {
-  success: boolean;
-  message: string;
-  data: {
-    token: string;
-    role: string;
-    slug?: string;
-    user: LoginResponseUser;
-  };
-}
+export type {
+  LoginApiRole,
+  LoginCredentials,
+  LoginResponse,
+  LoginResponseRole,
+  LoginResponseUser,
+  RegisterData,
+} from './authTypes';
 
 async function clearAuthStorage(): Promise<void> {
   await AsyncStorage.multiRemove(['auth_token', 'auth_role', 'auth_slug', 'user']);
@@ -136,14 +83,20 @@ export const authService = {
   /** Clears local token/user without calling the logout API (e.g. wrong portal after login). */
   clearLocalSession: clearAuthStorage,
 
-  /** POST /auth/google — mobile id_token from Google Sign-In (client portal). */
+  /** Google sign-in: tries POST /auth/google, then register/login fallback if route missing. */
   loginWithGoogle: async (idToken: string): Promise<LoginResponse> => {
     try {
-      const response = await apiClient.post<LoginResponse>('/auth/google', {
-        id_token: idToken,
-        roles: 'client',
-      });
-      const responseData = response.data;
+      const responseData = await loginWithDedicatedOrFallback(
+        'google',
+        async () => {
+          const response = await apiClient.post<LoginResponse>('/auth/google', {
+            id_token: idToken,
+            roles: 'client',
+          });
+          return response.data;
+        },
+        { idToken }
+      );
       await persistAuthPayload(responseData);
       return responseData;
     } catch (error: unknown) {
@@ -152,20 +105,30 @@ export const authService = {
     }
   },
 
-  /** POST /auth/apple — identity token from Sign in with Apple (client portal). */
+  /** Apple sign-in: tries POST /auth/apple, then register/login fallback if route missing. */
   loginWithApple: async (params: {
     idToken: string;
     name?: string | null;
     email?: string | null;
   }): Promise<LoginResponse> => {
     try {
-      const response = await apiClient.post<LoginResponse>('/auth/apple', {
-        id_token: params.idToken,
-        roles: 'client',
-        ...(params.name?.trim() ? { name: params.name.trim() } : {}),
-        ...(params.email?.trim() ? { email: params.email.trim() } : {}),
-      });
-      const responseData = response.data;
+      const responseData = await loginWithDedicatedOrFallback(
+        'apple',
+        async () => {
+          const response = await apiClient.post<LoginResponse>('/auth/apple', {
+            id_token: params.idToken,
+            roles: 'client',
+            ...(params.name?.trim() ? { name: params.name.trim() } : {}),
+            ...(params.email?.trim() ? { email: params.email.trim() } : {}),
+          });
+          return response.data;
+        },
+        {
+          idToken: params.idToken,
+          email: params.email,
+          name: params.name,
+        }
+      );
       await persistAuthPayload(responseData);
       return responseData;
     } catch (error: unknown) {
