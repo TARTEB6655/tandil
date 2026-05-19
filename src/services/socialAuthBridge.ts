@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
-import apiClient from './api';
+import { publicApiClient } from './api';
 import type { LoginResponse, LoginCredentials, RegisterData } from './authTypes';
 import { decodeJwtPayload, readJwtString } from '../utils/jwtPayload';
 
@@ -21,6 +21,36 @@ async function getOrCreateSocialPassword(provider: SocialProvider, subjectId: st
     `${SOCIAL_PASSWORD_SALT}:${provider}:${subjectId}`
   );
   return `Td1!${digest.slice(0, 20)}Aa`;
+}
+
+/** UAE-style mobile unique per social account (backend rejects duplicate phones). */
+function deriveSocialPhone(provider: SocialProvider, subjectId: string): string {
+  let hash = 0;
+  const seed = `${provider}:${subjectId}`;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  const eightDigits = String(hash % 100000000).padStart(8, '0');
+  return `05${eightDigits}`;
+}
+
+function formatApiError(error: unknown, fallback: string): string {
+  const e = error as {
+    response?: {
+      data?: {
+        message?: string;
+        errors?: Record<string, string[]>;
+      };
+    };
+  };
+  const errors = e?.response?.data?.errors;
+  if (errors && typeof errors === 'object') {
+    const parts = Object.entries(errors).flatMap(([field, msgs]) =>
+      (msgs || []).map((m) => `${field}: ${m}`)
+    );
+    if (parts.length > 0) return parts.join('\n');
+  }
+  return e?.response?.data?.message || fallback;
 }
 
 async function rememberSocialEmail(provider: SocialProvider, subjectId: string, email: string): Promise<void> {
@@ -67,7 +97,7 @@ export async function resolveSocialIdentity(params: {
 }
 
 async function postLogin(credentials: LoginCredentials): Promise<LoginResponse> {
-  const response = await apiClient.post<LoginResponse>('/auth/login', {
+  const response = await publicApiClient.post<LoginResponse>('/auth/login', {
     email: credentials.email.trim(),
     password: credentials.password,
     roles: credentials.roles,
@@ -76,7 +106,7 @@ async function postLogin(credentials: LoginCredentials): Promise<LoginResponse> 
 }
 
 async function postRegister(data: RegisterData): Promise<LoginResponse> {
-  const response = await apiClient.post<LoginResponse>('/auth/register', data);
+  const response = await publicApiClient.post<LoginResponse>('/auth/register', data);
   return response.data;
 }
 
@@ -108,7 +138,7 @@ export async function loginWithSocialViaStandardAuth(params: {
     const registerPayload: RegisterData = {
       name,
       email,
-      phone: '0500000000',
+      phone: deriveSocialPhone(params.provider, subjectId),
       password,
       password_confirmation: password,
       role: 'client',
@@ -121,15 +151,17 @@ export async function loginWithSocialViaStandardAuth(params: {
         try {
           return await postLogin(credentials);
         } catch (retryErr: unknown) {
-          const e = retryErr as { response?: { data?: { message?: string } } };
           throw new Error(
-            e?.response?.data?.message ||
+            formatApiError(
+              retryErr,
               'This email is already registered with a password. Please sign in with email and password.'
+            )
           );
         }
       }
-      const e = registerErr as { response?: { data?: { message?: string } } };
-      throw new Error(e?.response?.data?.message || 'Could not create account for social sign-in.');
+      throw new Error(
+        formatApiError(registerErr, 'Could not create account for social sign-in.')
+      );
     }
   }
 }

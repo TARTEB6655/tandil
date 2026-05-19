@@ -1,4 +1,4 @@
-import apiClient from './api';
+import apiClient, { publicApiClient } from './api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../types';
 import { loginWithDedicatedOrFallback } from './socialAuthBridge';
@@ -19,11 +19,24 @@ export type {
   RegisterData,
 } from './authTypes';
 
+/** POST /auth/google — matches backend Postman collection */
+export interface GoogleSignInRequest {
+  id_token: string;
+  roles: 'client';
+}
+
+/** POST /auth/apple — matches backend Postman collection */
+export interface AppleSignInRequest {
+  id_token: string;
+  roles: 'client';
+  name?: string;
+  email?: string;
+}
+
 async function clearAuthStorage(): Promise<void> {
   await AsyncStorage.multiRemove(['auth_token', 'auth_role', 'auth_slug', 'user']);
 }
 
-// Map Laravel user response to app User type
 const mapLaravelUserToAppUser = (laravelUser: LoginResponseUser): User => {
   const phone = laravelUser.phone != null ? String(laravelUser.phone) : '';
   const avatar =
@@ -55,46 +68,71 @@ const mapLaravelUserToAppUser = (laravelUser: LoginResponseUser): User => {
   };
 };
 
-async function persistAuthPayload(responseData: LoginResponse): Promise<void> {
-  const token = responseData.data?.token;
-  const role = responseData.data?.role;
-  const slug = responseData.data?.slug;
-  const userData = responseData.data?.user;
-  if (token) {
-    await AsyncStorage.setItem('auth_token', token);
-    if (role) {
-      await AsyncStorage.setItem('auth_role', role);
-    } else {
-      await AsyncStorage.removeItem('auth_role');
-    }
-    if (slug != null && String(slug).trim() !== '') {
-      await AsyncStorage.setItem('auth_slug', String(slug));
-    } else {
-      await AsyncStorage.removeItem('auth_slug');
-    }
-    if (userData) {
-      const appUser = mapLaravelUserToAppUser(userData);
-      await AsyncStorage.setItem('user', JSON.stringify(appUser));
-    }
+function assertLoginSuccess(responseData: LoginResponse): void {
+  if (!responseData?.success) {
+    throw new Error(responseData?.message || 'Sign-in failed.');
+  }
+  if (!responseData.data?.token) {
+    throw new Error(responseData?.message || 'Sign-in succeeded but no token was returned.');
   }
 }
 
+async function persistAuthPayload(responseData: LoginResponse): Promise<void> {
+  assertLoginSuccess(responseData);
+  const token = responseData.data.token;
+  const role = responseData.data?.role;
+  const slug = responseData.data?.slug;
+  const userData = responseData.data?.user;
+  await AsyncStorage.setItem('auth_token', token);
+  if (role) {
+    await AsyncStorage.setItem('auth_role', role);
+  } else {
+    await AsyncStorage.removeItem('auth_role');
+  }
+  if (slug != null && String(slug).trim() !== '') {
+    await AsyncStorage.setItem('auth_slug', String(slug));
+  } else {
+    await AsyncStorage.removeItem('auth_slug');
+  }
+  if (userData) {
+    const appUser = mapLaravelUserToAppUser(userData);
+    await AsyncStorage.setItem('user', JSON.stringify(appUser));
+  }
+}
+
+async function postGoogleSignIn(idToken: string): Promise<LoginResponse> {
+  const body: GoogleSignInRequest = {
+    id_token: idToken,
+    roles: 'client',
+  };
+  const response = await publicApiClient.post<LoginResponse>('/auth/google', body);
+  return response.data;
+}
+
+async function postAppleSignIn(params: {
+  idToken: string;
+  name?: string | null;
+  email?: string | null;
+}): Promise<LoginResponse> {
+  const body: AppleSignInRequest = {
+    id_token: params.idToken,
+    roles: 'client',
+  };
+  if (params.name?.trim()) body.name = params.name.trim();
+  if (params.email?.trim()) body.email = params.email.trim();
+  const response = await publicApiClient.post<LoginResponse>('/auth/apple', body);
+  return response.data;
+}
+
 export const authService = {
-  /** Clears local token/user without calling the logout API (e.g. wrong portal after login). */
   clearLocalSession: clearAuthStorage,
 
-  /** Google sign-in: tries POST /auth/google, then register/login fallback if route missing. */
+  /** Google: POST /auth/google { id_token, roles: "client" } */
   loginWithGoogle: async (idToken: string): Promise<LoginResponse> => {
     try {
       const responseData = await loginWithDedicatedOrFallback(
         'google',
-        async () => {
-          const response = await apiClient.post<LoginResponse>('/auth/google', {
-            id_token: idToken,
-            roles: 'client',
-          });
-          return response.data;
-        },
+        () => postGoogleSignIn(idToken),
         { idToken }
       );
       await persistAuthPayload(responseData);
@@ -105,7 +143,7 @@ export const authService = {
     }
   },
 
-  /** Apple sign-in: tries POST /auth/apple, then register/login fallback if route missing. */
+  /** Apple: POST /auth/apple { id_token, roles, name?, email? } */
   loginWithApple: async (params: {
     idToken: string;
     name?: string | null;
@@ -114,15 +152,7 @@ export const authService = {
     try {
       const responseData = await loginWithDedicatedOrFallback(
         'apple',
-        async () => {
-          const response = await apiClient.post<LoginResponse>('/auth/apple', {
-            id_token: params.idToken,
-            roles: 'client',
-            ...(params.name?.trim() ? { name: params.name.trim() } : {}),
-            ...(params.email?.trim() ? { email: params.email.trim() } : {}),
-          });
-          return response.data;
-        },
+        () => postAppleSignIn(params),
         {
           idToken: params.idToken,
           email: params.email,
@@ -146,16 +176,10 @@ export const authService = {
       };
       const response = await apiClient.post<LoginResponse>('/auth/login', body);
       const responseData = response.data;
-
-      console.log('Login API Response:', responseData);
-
       await persistAuthPayload(responseData);
-
       return responseData;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Login API Error:', error);
-      console.error('Error Response:', error.response?.data);
-      console.error('Error Status:', error.response?.status);
       throw error;
     }
   },
@@ -164,16 +188,10 @@ export const authService = {
     try {
       const response = await apiClient.post<LoginResponse>('/auth/register', data);
       const responseData = response.data;
-
-      console.log('Register API Response:', responseData);
-
       await persistAuthPayload(responseData);
-
       return responseData;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Register API Error:', error);
-      console.error('Error Response:', error.response?.data);
-      console.error('Error Status:', error.response?.status);
       throw error;
     }
   },
@@ -228,4 +246,3 @@ export const authService = {
     }
   },
 };
-
