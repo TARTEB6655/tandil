@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -38,25 +38,31 @@ const AuthScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const finishClientSession = async (response: LoginResponse) => {
-    const effectiveRole =
-      response.data?.role ||
-      response.data?.user?.role ||
-      response.data?.user?.roles?.[0]?.name;
-    if (effectiveRole && effectiveRole !== 'client') {
-      await authService.clearLocalSession();
-      const msg = t('auth.wrongPortalClient');
-      setError(msg);
-      Alert.alert(t('auth.login'), msg);
-      return;
-    }
-    const appUser = await authService.getStoredUser();
-    if (appUser) {
-      setUser(appUser);
-      setAuthenticated(true);
-      navigation.navigate('UserApp');
-    }
-  };
+  const finishClientSession = useCallback(
+    async (response: LoginResponse) => {
+      const effectiveRole =
+        response.data?.role ||
+        response.data?.user?.role ||
+        response.data?.user?.roles?.[0]?.name;
+      if (effectiveRole && effectiveRole !== 'client') {
+        await authService.clearLocalSession();
+        const msg = t('auth.wrongPortalClient');
+        setError(msg);
+        Alert.alert(t('auth.login'), msg);
+        return;
+      }
+      const appUser = await authService.getStoredUser();
+      if (appUser) {
+        setUser(appUser);
+        setAuthenticated(true);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'UserApp' }],
+        });
+      }
+    },
+    [navigation, setAuthenticated, setUser, t]
+  );
 
   const validateForm = (): boolean => {
     setError(null);

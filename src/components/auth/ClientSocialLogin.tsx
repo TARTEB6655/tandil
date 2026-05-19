@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { authService, LoginResponse } from '../../services/authService';
@@ -57,6 +58,9 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
   setLoadingProvider,
 }) => {
   const { t } = useTranslation();
+  /** Only accept OAuth response after the user taps Google (ignores stale session from before logout). */
+  const pendingGoogleSignInRef = useRef(false);
+  const lastProcessedIdTokenRef = useRef<string | null>(null);
 
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     ...config,
@@ -75,21 +79,26 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
 
   const handleGoogleToken = useCallback(
     async (idToken: string) => {
+      if (lastProcessedIdTokenRef.current === idToken) return;
+      lastProcessedIdTokenRef.current = idToken;
       setLoadingProvider('google');
       try {
         const res = await authService.loginWithGoogle(idToken);
         await onSuccess(res);
       } catch (err: unknown) {
+        lastProcessedIdTokenRef.current = null;
         onError(extractApiMessage(err));
       } finally {
+        pendingGoogleSignInRef.current = false;
         setLoadingProvider(null);
       }
     },
-    [onSuccess, onError, setLoadingProvider, t]
+    [onSuccess, onError, setLoadingProvider]
   );
 
   useEffect(() => {
-    if (!response) return;
+    if (!response || !pendingGoogleSignInRef.current) return;
+
     if (response.type === 'success') {
       const idToken =
         response.authentication?.idToken ||
@@ -97,6 +106,8 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
       if (idToken) {
         void handleGoogleToken(idToken);
       } else {
+        pendingGoogleSignInRef.current = false;
+        setLoadingProvider(null);
         onError(
           t('auth.socialNoToken', {
             defaultValue: 'Sign-in completed but no token was returned. Check Google OAuth client setup.',
@@ -104,10 +115,13 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
         );
       }
     } else if (response.type === 'error') {
+      pendingGoogleSignInRef.current = false;
+      setLoadingProvider(null);
       const msg = response.error?.message || '';
       if (/cancel/i.test(msg)) return;
       onError(msg || t('auth.socialSignInFailed', { defaultValue: 'Social sign-in failed. Please try again.' }));
-    } else if (response.type === 'dismiss') {
+    } else if (response.type === 'dismiss' || response.type === 'cancel') {
+      pendingGoogleSignInRef.current = false;
       setLoadingProvider(null);
     }
   }, [response, handleGoogleToken, onError, setLoadingProvider, t]);
@@ -117,15 +131,15 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
       onError(t('auth.socialNotReady', { defaultValue: 'Google sign-in is still loading. Try again.' }));
       return;
     }
+    pendingGoogleSignInRef.current = true;
+    lastProcessedIdTokenRef.current = null;
     setLoadingProvider('google');
     try {
       await promptAsync({ showInRecents: true });
     } catch (err: unknown) {
+      pendingGoogleSignInRef.current = false;
+      setLoadingProvider(null);
       onError(extractApiMessage(err));
-    } finally {
-      if (response?.type !== 'success') {
-        setLoadingProvider(null);
-      }
     }
   };
 
@@ -148,9 +162,18 @@ const ClientSocialLogin: React.FC<ClientSocialLoginProps> = ({ onSuccess, onErro
   const { t } = useTranslation();
   const [loadingProvider, setLoadingProvider] = useState<SocialProvider | null>(null);
   const [appleAvailable, setAppleAvailable] = useState(Platform.OS === 'ios');
+  /** Remount Google OAuth hook when auth screen opens (clears stale response after logout). */
+  const [googleSessionKey, setGoogleSessionKey] = useState(0);
 
   const googleRequestConfig = buildGoogleAuthRequestConfig();
   const googleConfigured = isGoogleAuthConfigured();
+
+  useFocusEffect(
+    useCallback(() => {
+      setGoogleSessionKey((k) => k + 1);
+      setLoadingProvider(null);
+    }, [])
+  );
 
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
@@ -236,6 +259,7 @@ const ClientSocialLogin: React.FC<ClientSocialLoginProps> = ({ onSuccess, onErro
       <View style={styles.buttonsRow}>
         {googleRequestConfig ? (
           <GoogleSignInButton
+            key={`google-oauth-${googleSessionKey}`}
             config={googleRequestConfig}
             onSuccess={onSuccess}
             onError={onError}

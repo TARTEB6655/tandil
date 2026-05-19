@@ -294,24 +294,6 @@ const HomeScreen: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  // Fetch public services for "Place Service Orders" (GET /services?per_page=12, no auth)
-  useEffect(() => {
-    let cancelled = false;
-    setServicesLoading(true);
-    publicServiceService
-      .getServices({ per_page: 12 })
-      .then((list) => {
-        if (!cancelled) setDashboardServices(list);
-      })
-      .catch(() => {
-        if (!cancelled) setDashboardServices([]);
-      })
-      .finally(() => {
-        if (!cancelled) setServicesLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
   // Promotional slider: API banners (priority order) or fallback static slides
   const promotionalSlides = (() => {
     if (banners.length > 0) {
@@ -349,34 +331,6 @@ const HomeScreen: React.FC = () => {
 
   const goPrev = () => scrollToSlide(currentSlide - 1);
   const goNext = () => scrollToSlide(currentSlide + 1);
-
-  // Cached image components (expo-image uses disk cache for fast repeat loads)
-  const CategoryImage = ({ uri }: { uri: string }) => (
-    <Image
-      source={{ uri: uri || categoryPlaceholderImage }}
-      style={styles.categoryImage}
-      contentFit="cover"
-      transition={200}
-      cachePolicy="disk"
-    />
-  );
-
-  const OfferImage = ({ uri, style }: { uri: string; style: any }) => (
-    <Image
-      source={{ uri }}
-      style={style}
-      contentFit="cover"
-      transition={200}
-      cachePolicy="disk"
-    />
-  );
-
-  const OfferCardBackground = ({ uri, style }: { uri: string | null; style: any }) =>
-    uri ? (
-      <Image source={{ uri }} style={style} contentFit="cover" transition={200} cachePolicy="disk" />
-    ) : (
-      <View style={[style, styles.offerPlaceholder]} />
-    );
 
   const getOfferImageUrl = (offer: PublicExclusiveOffer): string | null => {
     const raw = offer.image_url ?? (offer as any).image ?? (offer as any).image_path;
@@ -638,7 +592,7 @@ const HomeScreen: React.FC = () => {
         ) : exclusiveOffers.length >= 1 ? (
           <>
             <TouchableOpacity style={styles.offerBannerFull} onPress={() => navigation.navigate('ExclusiveOfferProducts', { offer: exclusiveOffers[0] })}>
-              <OfferCardBackground uri={getOfferImageUrl(exclusiveOffers[0])} style={styles.offerImageFull} />
+              <HomeOfferCardBackground uri={getOfferImageUrl(exclusiveOffers[0])} style={styles.offerImageFull} />
               <View style={styles.offerOverlay} />
               <View style={styles.offerContentFull}>
                 <Text style={styles.offerTitle} numberOfLines={1} ellipsizeMode="tail">{offerTitle(exclusiveOffers[0])}</Text>
@@ -648,7 +602,7 @@ const HomeScreen: React.FC = () => {
             {exclusiveOffers.length >= 2 && (
               <View style={styles.offerRow}>
                 <TouchableOpacity style={styles.offerHalf} onPress={() => navigation.navigate('ExclusiveOfferProducts', { offer: exclusiveOffers[1] })}>
-                  <OfferCardBackground uri={getOfferImageUrl(exclusiveOffers[1])} style={styles.offerImageHalf} />
+                  <HomeOfferCardBackground uri={getOfferImageUrl(exclusiveOffers[1])} style={styles.offerImageHalf} />
                   <View style={styles.offerOverlay} />
                   <View style={styles.offerContentHalf}>
                     <Text style={styles.offerTitleSm} numberOfLines={1} ellipsizeMode="tail">{offerTitle(exclusiveOffers[1])}</Text>
@@ -657,7 +611,7 @@ const HomeScreen: React.FC = () => {
                 </TouchableOpacity>
                 {exclusiveOffers.length >= 3 ? (
                   <TouchableOpacity style={styles.offerHalf} onPress={() => navigation.navigate('ExclusiveOfferProducts', { offer: exclusiveOffers[2] })}>
-                    <OfferCardBackground uri={getOfferImageUrl(exclusiveOffers[2])} style={styles.offerImageHalf} />
+                    <HomeOfferCardBackground uri={getOfferImageUrl(exclusiveOffers[2])} style={styles.offerImageHalf} />
                     <View style={styles.offerOverlay} />
                     <View style={styles.offerContentHalf}>
                       <Text style={styles.offerTitleSm} numberOfLines={1} ellipsizeMode="tail">{offerTitle(exclusiveOffers[2])}</Text>
@@ -793,7 +747,7 @@ const HomeScreen: React.FC = () => {
                   onPress={() => navigation.navigate('ProductDetail', { product: detail })}
                 >
                   <View style={styles.featuredServiceImageContainer}>
-                    <OfferImage uri={imageUri} style={styles.featuredServiceImage} />
+                    <HomeOfferImage uri={imageUri} style={styles.featuredServiceImage} />
                     <View style={styles.featuredServiceBadge}>
                       <Text style={styles.featuredServiceBadgeText}>{featuredBadges[index] ?? t('home.badges.popular')}</Text>
                     </View>
@@ -845,7 +799,7 @@ const HomeScreen: React.FC = () => {
               }}
             >
               <View style={styles.categoryImageContainer}>
-                <CategoryImage uri={category.image} />
+                <HomeCategoryImage uri={category.image} placeholder={categoryPlaceholderImage} />
               </View>
               <Text style={styles.categoryName}>{category.name}</Text>
             </TouchableOpacity>
@@ -1721,5 +1675,44 @@ const styles = StyleSheet.create({
   offerTitleSm: { color: COLORS.background, fontWeight: FONT_WEIGHTS.semiBold },
   offerSubtitleSm: { color: COLORS.background, opacity: 0.9, fontSize: FONT_SIZES.xs },
 });
+
+const HomeCategoryImage = React.memo(function HomeCategoryImage({
+  uri,
+  placeholder,
+}: {
+  uri: string;
+  placeholder: string;
+}) {
+  return (
+    <Image
+      source={{ uri: uri || placeholder }}
+      style={homeStyles.categoryImage}
+      contentFit="cover"
+      transition={0}
+      cachePolicy="disk"
+    />
+  );
+});
+
+const HomeOfferImage = React.memo(function HomeOfferImage({ uri, style }: { uri: string; style: object }) {
+  return (
+    <Image source={{ uri }} style={style} contentFit="cover" transition={0} cachePolicy="disk" />
+  );
+});
+
+const HomeOfferCardBackground = React.memo(function HomeOfferCardBackground({
+  uri,
+  style,
+}: {
+  uri: string | null;
+  style: object;
+}) {
+  if (uri) {
+    return <Image source={{ uri }} style={style} contentFit="cover" transition={0} cachePolicy="disk" />;
+  }
+  return <View style={[style, homeStyles.offerPlaceholder]} />;
+});
+
+const homeStyles = styles;
 
 export default HomeScreen; 
