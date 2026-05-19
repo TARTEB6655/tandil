@@ -31,6 +31,12 @@ module.exports = {
     ios: {
       ...expo.ios,
       usesAppleSignIn: true,
+      entitlements: {
+        ...(expo.ios?.entitlements || {}),
+        ...(stripeMerchantIdentifier
+          ? { 'com.apple.developer.in-app-payments': [stripeMerchantIdentifier] }
+          : {}),
+      },
       infoPlist: {
         ...expo.ios?.infoPlist,
         NSLocationWhenInUseUsageDescription: 'We use your location to show local weather on your dashboard.',

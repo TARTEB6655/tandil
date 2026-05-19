@@ -372,7 +372,8 @@ const CheckoutScreen: React.FC = () => {
         pi.customer && pi.ephemeral_key
           ? { customerId: pi.customer, customerEphemeralKeySecret: pi.ephemeral_key }
           : {};
-      const merchantCountryCode = (countryCode || 'AE').toUpperCase();
+      // Merchant country is where Tandil is registered (UAE), not the customer's shipping country.
+      const merchantCountryCode = 'AE';
       const currencyCode = String(currency || 'AED').toUpperCase();
       const isStripeTestMode = /pk_test_/i.test(String(stripePk));
 
@@ -450,7 +451,26 @@ const CheckoutScreen: React.FC = () => {
         if (presentError.code === 'Canceled') {
           return;
         }
-        Alert.alert(t('common.error', 'Error'), presentError.message, [{ text: t('common.ok', 'OK') }]);
+        const applePayLiveHint =
+          Platform.OS === 'ios' &&
+          !isStripeTestMode &&
+          stripeMerchantIdentifier &&
+          /apple pay|platform pay|not available|incomplete|merchant/i.test(
+            `${presentError.message} ${presentError.code}`
+          )
+            ? '\n\n' +
+              t(
+                'checkout.applePayLiveSetupHint',
+                'For live Apple Pay: in Stripe Dashboard (live mode) go to Settings → Payment methods → Apple Pay, upload the Apple Pay certificate for merchant {{merchantId}}, and ensure Laravel uses the matching sk_live_ secret key.',
+                { merchantId: stripeMerchantIdentifier }
+              )
+            : '';
+        Alert.alert(
+          t('common.error', 'Error'),
+          (presentError.message || t('checkout.paymentOpenFailed', 'Payment could not be completed.')) +
+            applePayLiveHint,
+          [{ text: t('common.ok', 'OK') }]
+        );
         return;
       }
 

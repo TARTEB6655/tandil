@@ -10,6 +10,7 @@ import { captureException } from './src/utils/sentry';
 import './src/i18n';
 import { StripeProvider } from '@stripe/stripe-react-native';
 import { getStripeMerchantIdentifier, getStripePublishableKey } from './src/config/api';
+import { getStripeUrlScheme } from './src/config/stripeLinking';
 
 function AppContent() {
   const { setUser, setAuthenticated } = useAppStore();
@@ -43,6 +44,7 @@ function AppContent() {
     <StripeProvider
       publishableKey={stripePublishableKey}
       merchantIdentifier={stripeMerchantIdentifier || undefined}
+      urlScheme={getStripeUrlScheme()}
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
