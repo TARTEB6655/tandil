@@ -51,6 +51,7 @@
       [
         "@stripe/stripe-react-native",
         {
+          "merchantIdentifier": "merchant.com.tandilapp.uae",
           "enableGooglePay": true
         }
       ]

@@ -29,6 +29,7 @@ import {
   useStripe,
   AddressCollectionMode,
   CollectionMode,
+  isPlatformPaySupported,
 } from '@stripe/stripe-react-native';
 import { countryToStripeAlpha2 } from '../../utils/stripeBillingCountry';
 import { getStripePaymentSheetReturnURL } from '../../config/stripeLinking';
@@ -373,6 +374,23 @@ const CheckoutScreen: React.FC = () => {
           : {};
       const merchantCountryCode = (countryCode || 'AE').toUpperCase();
       const currencyCode = String(currency || 'AED').toUpperCase();
+      const isStripeTestMode = /pk_test_/i.test(String(stripePk));
+
+      if (Platform.OS === 'ios' && stripeMerchantIdentifier) {
+        const applePayAvailable = await isPlatformPaySupported();
+        if (__DEV__) {
+          console.log('[checkout] Apple Pay platform support:', applePayAvailable, {
+            merchantId: stripeMerchantIdentifier,
+            stripeMode: isStripeTestMode ? 'test' : 'live',
+          });
+        }
+        if (!applePayAvailable && !isStripeTestMode) {
+          console.warn(
+            '[checkout] Apple Pay not available with live key. Upload the live Apple Pay certificate in Stripe Dashboard → Settings → Payment methods → Apple Pay for merchant',
+            stripeMerchantIdentifier
+          );
+        }
+      }
 
       const sheetBase = {
         merchantDisplayName: 'Tandil',
@@ -380,19 +398,22 @@ const CheckoutScreen: React.FC = () => {
         returnURL: getStripePaymentSheetReturnURL(),
         allowsDelayedPaymentMethods: false,
         defaultBillingDetails,
-        ...(stripeMerchantIdentifier
+        ...(Platform.OS === 'ios' && stripeMerchantIdentifier
           ? {
               applePay: {
                 merchantCountryCode,
               },
             }
           : {}),
-        googlePay: {
-          merchantCountryCode,
-          currencyCode,
-          // Use test mode whenever app points to Stripe test keys.
-          testEnv: /pk_test_/i.test(String(stripePk)),
-        },
+        ...(Platform.OS === 'android'
+          ? {
+              googlePay: {
+                merchantCountryCode,
+                currencyCode,
+                testEnv: isStripeTestMode,
+              },
+            }
+          : {}),
         ...customerProps,
       };
 
