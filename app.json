@@ -42,7 +42,7 @@
         "projectId": "f6aa6463-0532-4871-89b1-21d6a1c5bcf3"
       },
       "apiBaseUrl": "https://phpstack-1180784-6050385.cloudwaysapps.com/api",
-      "stripePublishableKey": "pk_test_51TSVvUP3hJZSveSoC6j7aN98lUeEiBcVH1YP0rhoAYYktKMi4P2cARXftPw4zCkQUxfuT4tKnjd1TI5B9Zyb553o00r9bdyECz",
+      "stripePublishableKey": "pk_live_51TObSk0dvmhfzUoqeXMFztTOzAQ366Y0ZaNvM6us9fvjswiUh80L13EtFAwgjwkH1klyZcagiYZ6MGcFYK7HrYAT00lH8Jrade",
       "stripeMerchantIdentifier": "merchant.com.tandilapp.uae",
       "googleIosClientId": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com"
     },

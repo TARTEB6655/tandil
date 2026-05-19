@@ -26,7 +26,8 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com"
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_51TObSk0dvmhfzUoqeXMFztTOzAQ366Y0ZaNvM6us9fvjswiUh80L13EtFAwgjwkH1klyZcagiYZ6MGcFYK7HrYAT00lH8Jrade"
       },
       "ios": {
         "simulator": false,
