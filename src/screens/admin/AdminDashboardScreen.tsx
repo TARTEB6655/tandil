@@ -723,6 +723,13 @@ const AdminDashboardScreen: React.FC = () => {
               <Text style={styles.adminActionText}>{t('admin.dashboard.exclusiveOffers')}</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity style={styles.adminAction} onPress={() => navigation.navigate('AdminCoupons' as never)}>
+              <View style={styles.adminActionIcon}>
+                <Ionicons name="ticket-outline" size={24} color={COLORS.primary} />
+              </View>
+              <Text style={styles.adminActionText}>{t('admin.dashboard.coupons', 'Coupons')}</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.adminAction} onPress={() => navigation.navigate('AdminServices' as never)}>
               <View style={styles.adminActionIcon}>
                 <Ionicons name="construct-outline" size={24} color={COLORS.primary} />

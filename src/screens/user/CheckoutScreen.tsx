@@ -38,6 +38,8 @@ import * as Location from 'expo-location';
 import { resolveVisitArea } from '../../services/visitService';
 import { getWalletSummary } from '../../services/walletService';
 import { useAppStore } from '../../store';
+import { useCouponStore } from '../../store/couponStore';
+import CouponInput from '../../components/checkout/CouponInput';
 
 interface CartItem {
   id: string;
@@ -198,19 +200,28 @@ const CheckoutScreen: React.FC = () => {
     }
   }, [applyWallet, currentStep, refreshSummaryForWallet]);
 
+  const appliedCoupon = useCouponStore((s) => s.applied);
+  const clearCoupon = useCouponStore((s) => s.clear);
   const useApiSummary = orderSummaryApi != null;
   const subtotal = useApiSummary ? orderSummaryApi.subtotal : calculateSubtotal();
   const discount = useApiSummary ? orderSummaryApi.discount : calculateDiscount();
-  const shippingAmount = useApiSummary ? orderSummaryApi.shipping : (shopSettings?.shipping_amount ?? 0);
+  const shippingBase = useApiSummary ? orderSummaryApi.shipping : (shopSettings?.shipping_amount ?? 0);
   const taxPercent = useApiSummary ? (orderSummaryApi.tax_percent ?? 0) : (shopSettings?.tax_percent ?? 0);
-  // For API summaries, prefer backend tax/total values to avoid mismatches.
-  const derivedTaxAmount = Math.round((subtotal - discount) * (taxPercent / 100) * 100) / 100;
-  const taxAmount = useApiSummary
-    ? (orderSummaryApi.tax ?? Math.max(0, (orderSummaryApi.total ?? 0) - (subtotal - discount + shippingAmount)))
-    : derivedTaxAmount;
-  const total = useApiSummary
-    ? orderSummaryApi.total
-    : Math.round((subtotal - discount + shippingAmount + taxAmount) * 100) / 100;
+  const couponDiscount = appliedCoupon?.coupon_discount ?? 0;
+  const shippingAmount = appliedCoupon?.free_shipping ? 0 : shippingBase;
+  const taxableBase = Math.max(0, subtotal - discount - couponDiscount);
+  const derivedTaxAmount = Math.round(taxableBase * (taxPercent / 100) * 100) / 100;
+  const hasCouponOverride = appliedCoupon != null;
+  const taxAmount = hasCouponOverride
+    ? derivedTaxAmount
+    : useApiSummary
+      ? (orderSummaryApi.tax ?? Math.max(0, (orderSummaryApi.total ?? 0) - (subtotal - discount + shippingBase)))
+      : Math.round((subtotal - discount) * (taxPercent / 100) * 100) / 100;
+  const total = hasCouponOverride
+    ? Math.round((taxableBase + shippingAmount + taxAmount) * 100) / 100
+    : useApiSummary
+      ? orderSummaryApi.total
+      : Math.round((subtotal - discount + shippingAmount + taxAmount) * 100) / 100;
   const currency = useApiSummary ? orderSummaryApi.currency : (shopSettings?.currency ?? 'AED');
 
   const { walletApplied, payableTotal } = useMemo(() => {
@@ -229,6 +240,7 @@ const CheckoutScreen: React.FC = () => {
   }, [currentStep, applyWallet, walletApiBalance, total, orderSummaryApi]);
 
   const showOrderPlacedAlert = () => {
+    clearCoupon();
     Alert.alert(
       t('checkout.placedTitle'),
       t('checkout.placedBody'),
@@ -821,7 +833,13 @@ const CheckoutScreen: React.FC = () => {
         {/* Order Summary */}
         <View style={styles.orderSummary}>
           <Text style={styles.summaryTitle}>{t('cart.orderSummary')}</Text>
-          
+          <CouponInput
+            subtotal={subtotal}
+            catalogDiscount={discount}
+            currency={currency}
+            cartContext={{ cartCatalog: 'products' }}
+          />
+
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>{t('cart.subtotal')}</Text>
             <Text style={styles.summaryValue}>{currency} {subtotal.toFixed(2)}</Text>
@@ -835,11 +853,22 @@ const CheckoutScreen: React.FC = () => {
               </Text>
             </View>
           )}
+
+          {couponDiscount > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>{t('coupon.lineLabel', 'Coupon')}</Text>
+              <Text style={[styles.summaryValue, styles.discountText]}>
+                -{currency} {couponDiscount.toFixed(2)}
+              </Text>
+            </View>
+          )}
           
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>{t('cart.shipping')}</Text>
             <Text style={styles.summaryValue}>
-              {shippingAmount === 0 ? t('cart.free', 'Free') : `${currency} ${shippingAmount.toFixed(2)}`}
+              {appliedCoupon?.free_shipping || shippingAmount === 0
+                ? t('cart.free', 'Free')
+                : `${currency} ${shippingAmount.toFixed(2)}`}
             </Text>
           </View>
           

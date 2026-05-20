@@ -23,6 +23,7 @@ export interface CartApiItem {
   name: string;
   image_url: string | null;
   category: string | null;
+  category_id?: number | null;
   brand: string | null;
   current_price: number;
   original_price: number | null;
@@ -70,6 +71,7 @@ export interface BuyNowSummaryItem {
   name: string;
   image_url: string | null;
   category: string | null;
+  category_id?: number | null;
   brand: string | null;
   current_price: number;
   original_price: number | null;

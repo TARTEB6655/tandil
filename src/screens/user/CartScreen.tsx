@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,9 @@ import { useTranslation } from 'react-i18next';
 import { getCart, removeCartItem, updateCartItemQuantity, getOrderSummary, CartApiItem, CartOrderSummary, OrderSummaryData } from '../../services/cartService';
 import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
 import { useIsAuthenticated } from '../../store';
+import { useCouponStore } from '../../store/couponStore';
+import CouponInput from '../../components/checkout/CouponInput';
+import type { CouponApplyContext } from '../../types/coupon';
 
 interface CartItemDisplay {
   id: string;
@@ -27,6 +30,7 @@ interface CartItemDisplay {
   originalPrice?: number;
   image: string;
   category?: string;
+  categoryId?: number;
   brand?: string;
   quantity: number;
 }
@@ -40,6 +44,7 @@ function mapApiItemToDisplay(item: CartApiItem): CartItemDisplay {
     originalPrice: item.original_price ?? undefined,
     image: item.image_url || 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=400&q=60',
     category: item.category ?? undefined,
+    categoryId: item.category_id ?? undefined,
     brand: item.brand ?? undefined,
     quantity: item.quantity,
   };
@@ -171,14 +176,31 @@ const CartScreen: React.FC = () => {
     );
   };
 
+  const couponCartContext = useMemo<CouponApplyContext>(
+    () => ({
+      cartCatalog: 'products',
+      cartCategoryIds: [
+        ...new Set(
+          cartItems
+            .map((i) => i.categoryId)
+            .filter((id): id is number => typeof id === 'number' && id > 0)
+        ),
+      ],
+    }),
+    [cartItems]
+  );
+
+  const appliedCoupon = useCouponStore((s) => s.applied);
   const useApiSummary = orderSummaryApi != null;
   const subtotal = useApiSummary ? orderSummaryApi.subtotal : (orderSummary?.subtotal ?? cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0));
   const discount = useApiSummary ? orderSummaryApi.discount : (orderSummary?.discount ?? 0);
-  const shipping = useApiSummary ? orderSummaryApi.shipping : (orderSummary?.shipping ?? shopSettings?.shipping_amount ?? 0);
+  const shippingBase = useApiSummary ? orderSummaryApi.shipping : (orderSummary?.shipping ?? shopSettings?.shipping_amount ?? 0);
   const taxPercent = useApiSummary ? (orderSummaryApi.tax_percent ?? 0) : (shopSettings?.tax_percent ?? 0);
-  // Tax = (subtotal - discount) × tax_percent% so e.g. 100 + 5% = 105
-  const taxAmount = Math.round((subtotal - discount) * (taxPercent / 100) * 100) / 100;
-  const total = Math.round((subtotal - discount + shipping + taxAmount) * 100) / 100;
+  const couponDiscount = appliedCoupon?.coupon_discount ?? 0;
+  const shipping = appliedCoupon?.free_shipping ? 0 : shippingBase;
+  const taxableBase = Math.max(0, subtotal - discount - couponDiscount);
+  const taxAmount = Math.round(taxableBase * (taxPercent / 100) * 100) / 100;
+  const total = Math.round((taxableBase + shipping + taxAmount) * 100) / 100;
   const currency = useApiSummary ? orderSummaryApi.currency : (orderSummary?.currency || shopSettings?.currency || t('orders.currency', { defaultValue: 'AED' }));
 
   const handleCheckout = () => {
@@ -304,6 +326,12 @@ const CartScreen: React.FC = () => {
 
           <View style={styles.orderSummary}>
             <Text style={styles.summaryTitle}>{t('cart.orderSummary')}</Text>
+            <CouponInput
+              subtotal={subtotal}
+              catalogDiscount={discount}
+              currency={currency}
+              cartContext={couponCartContext}
+            />
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>{t('cart.subtotal')}</Text>
               <Text style={styles.summaryValue}>{currency} {subtotal.toFixed(2)}</Text>
@@ -314,9 +342,19 @@ const CartScreen: React.FC = () => {
                 <Text style={[styles.summaryValue, styles.discountText]}>-{currency} {discount.toFixed(2)}</Text>
               </View>
             )}
+            {couponDiscount > 0 && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>{t('coupon.lineLabel', 'Coupon')}</Text>
+                <Text style={[styles.summaryValue, styles.discountText]}>-{currency} {couponDiscount.toFixed(2)}</Text>
+              </View>
+            )}
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>{t('cart.shipping')}</Text>
-              <Text style={styles.summaryValue}>{shipping > 0 ? `${currency} ${shipping.toFixed(2)}` : t('cart.free')}</Text>
+              <Text style={styles.summaryValue}>
+                {appliedCoupon?.free_shipping || shipping <= 0
+                  ? t('cart.free')
+                  : `${currency} ${shipping.toFixed(2)}`}
+              </Text>
             </View>
             {(taxAmount > 0 || taxPercent > 0) && (
               <View style={styles.summaryRow}>

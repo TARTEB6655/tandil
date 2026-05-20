@@ -34,6 +34,9 @@ import AdminSupportTicketsScreen from '../screens/admin/AdminSupportTicketsScree
 import AdminSupportTicketChatScreen from '../screens/admin/AdminSupportTicketChatScreen';
 import AdminOrdersScreen from '../screens/admin/AdminOrdersScreen';
 import AdminExclusiveOffersScreen from '../screens/admin/AdminExclusiveOffersScreen';
+import AdminCouponsScreen from '../screens/admin/AdminCouponsScreen';
+import AdminAddCouponScreen from '../screens/admin/AdminAddCouponScreen';
+import AdminEditCouponScreen from '../screens/admin/AdminEditCouponScreen';
 import AdminAddExclusiveOfferScreen from '../screens/admin/AdminAddExclusiveOfferScreen';
 import AdminEditExclusiveOfferScreen from '../screens/admin/AdminEditExclusiveOfferScreen';
 import AdminZonesScreen from '../screens/admin/AdminZonesScreen';
@@ -156,6 +159,9 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="SupportTicketChat" component={AdminSupportTicketChatScreen} />
         <Stack.Screen name="AdminOrders" component={AdminOrdersScreen} />
         <Stack.Screen name="AdminExclusiveOffers" component={AdminExclusiveOffersScreen} />
+        <Stack.Screen name="AdminCoupons" component={AdminCouponsScreen} />
+        <Stack.Screen name="AdminAddCoupon" component={AdminAddCouponScreen} />
+        <Stack.Screen name="AdminEditCoupon" component={AdminEditCouponScreen} />
         <Stack.Screen name="AdminAddExclusiveOffer" component={AdminAddExclusiveOfferScreen} />
         <Stack.Screen name="AdminEditExclusiveOffer" component={AdminEditExclusiveOfferScreen} />
         <Stack.Screen name="AdminZones" component={AdminZonesScreen} />
