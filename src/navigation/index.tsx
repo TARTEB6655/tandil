@@ -1,8 +1,12 @@
-import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
+import {
+  NavigationContainer,
+  type NavigationState,
+} from '@react-navigation/native';
 import '../i18n';
 import { createStackNavigator } from '@react-navigation/stack';
 import { RootStackParamList } from '../types';
+import { ActiveRoleNotificationSound } from '../components/common/ActiveRoleNotificationSound';
 
 // Screens
 import SplashScreen from '../screens/SplashScreen';
@@ -21,8 +25,15 @@ import VendorLoginScreen from '../screens/vendor/VendorLoginScreen';
 const Stack = createStackNavigator<RootStackParamList>();
 
 export const AppNavigator: React.FC = () => {
+  const [navState, setNavState] = useState<NavigationState | undefined>();
+
+  const onNavStateChange = useCallback((state: NavigationState | undefined) => {
+    setNavState(state);
+  }, []);
+
   return (
-    <NavigationContainer>
+    <NavigationContainer onStateChange={onNavStateChange}>
+      <ActiveRoleNotificationSound navigationState={navState} />
       <Stack.Navigator
         screenOptions={{
           headerShown: false,

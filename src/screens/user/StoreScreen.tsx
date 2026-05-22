@@ -17,7 +17,8 @@ import { useIsAuthenticated } from '../../store';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import { shopService, ShopProduct } from '../../services/shopService';
-import { addCartItem, getCart } from '../../services/cartService';
+import { addCartItem } from '../../services/cartService';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { buildFullImageUrl } from '../../config/api';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=800&q=60';
@@ -35,22 +36,7 @@ const StoreScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [addedToCart, setAddedToCart] = useState<string | null>(null);
   const [addingProductId, setAddingProductId] = useState<string | null>(null);
-  const [cartItemCount, setCartItemCount] = useState(0);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!isAuthenticated) {
-        setCartItemCount(0);
-        return;
-      }
-      getCart()
-        .then((res) => {
-          const items = res.data?.items ?? [];
-          setCartItemCount(items.length);
-        })
-        .catch(() => setCartItemCount(0));
-    }, [isAuthenticated])
-  );
+  const { count: cartItemCount, refresh: refreshCartBadge } = useCartBadgeCount();
 
   const getProductImage = useCallback((p: ShopProduct) => {
     return p.image_url ?? (p.main_image as any)?.image_url ?? p.image ?? FALLBACK_IMAGE;
@@ -166,9 +152,7 @@ const StoreScreen: React.FC = () => {
     try {
       await addCartItem(productId, 1);
       setAddedToCart(String(productId));
-      // Refresh from API so badge shows actual cart line-items count.
-      const cartRes = await getCart();
-      setCartItemCount((cartRes.data?.items ?? []).length);
+      refreshCartBadge();
       setTimeout(() => setAddedToCart(null), 1000);
     } catch (err: any) {
       const status = err.response?.status;
@@ -300,13 +284,7 @@ const StoreScreen: React.FC = () => {
         title={t('tabs.store')} 
         showBack={false}
         showCart={true}
-        rightComponent={
-          cartItemCount > 0 && (
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{cartItemCount}</Text>
-            </View>
-          )
-        }
+        cartItemCount={cartItemCount}
       />
 
       {/* Search Bar */}
@@ -385,26 +363,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xxl,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
-  },
-  cartButton: {
-    position: 'relative',
-    padding: SPACING.sm,
-  },
-  cartBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: COLORS.error,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cartBadgeText: {
-    color: COLORS.background,
-    fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.bold,
   },
   searchContainer: {
     paddingHorizontal: SPACING.lg,

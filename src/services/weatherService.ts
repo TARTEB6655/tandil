@@ -109,3 +109,30 @@ async function fetchLocationName(latitude: number, longitude: number): Promise<s
     return null;
   }
 }
+
+/**
+ * Geocode a city/place name (Open-Meteo) and return current weather — fallback when GPS is off.
+ */
+export async function fetchWeatherByPlaceName(
+  city: string,
+  country?: string | null
+): Promise<WeatherData | null> {
+  const query = [city?.trim(), country?.trim()].filter(Boolean).join(', ');
+  if (!query) return null;
+  try {
+    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
+    const geoRes = await fetch(geoUrl, { method: 'GET' });
+    const geoData = await geoRes.json();
+    const hit = geoData?.results?.[0];
+    if (!hit?.latitude || !hit?.longitude) return null;
+
+    const weather = await fetchWeather(Number(hit.latitude), Number(hit.longitude));
+    if (!weather) return null;
+
+    const label =
+      hit.name && hit.country ? `${hit.name}, ${hit.country}` : hit.name || query;
+    return { ...weather, locationName: label };
+  } catch {
+    return null;
+  }
+}

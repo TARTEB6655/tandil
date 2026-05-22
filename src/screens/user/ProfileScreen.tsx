@@ -19,10 +19,11 @@ import {
   UserProfileData,
   getProfilePhone,
   getProfilePictureUrl,
-  getClientNotifications,
 } from '../../services/userService';
+import { getClientNotifications } from '../../services/clientNotificationService';
 import { shareApp, rateApp } from '../../utils/appShare';
 import type { AppInfoPageKey } from '../../types/appInfo';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -31,6 +32,7 @@ const ProfileScreen: React.FC = () => {
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const { count: cartItemCount } = useCartBadgeCount();
 
   useFocusEffect(
     useCallback(() => {
@@ -199,6 +201,7 @@ const ProfileScreen: React.FC = () => {
         notificationCount={unreadNotificationCount}
         onNotificationPress={() => navigation.navigate('Notifications')}
         showCart={true}
+        cartItemCount={cartItemCount}
       />
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Header */}

@@ -15,6 +15,7 @@ import { Button } from '../../components/common/Button';
 import { useAppStore } from '../../store';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 
 const ServiceDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -22,6 +23,7 @@ const ServiceDetailScreen: React.FC = () => {
   const { t } = useTranslation();
   const { service } = route.params;
   const { addToCart } = useAppStore();
+  const { count: cartItemCount } = useCartBadgeCount();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   const nameKey = `services.items.${service.id}.name`;
@@ -117,6 +119,7 @@ const ServiceDetailScreen: React.FC = () => {
         title={t('services.details.title')} 
         showBack={true}
         showCart={true}
+        cartItemCount={cartItemCount}
         rightComponent={
           <TouchableOpacity style={styles.shareButton}>
             <Ionicons name="share-outline" size={24} color={COLORS.text} />

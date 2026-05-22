@@ -18,6 +18,7 @@ import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import { shopService, ShopProduct } from '../../services/shopService';
 import { buildFullImageUrl } from '../../config/api';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 
 const { width: screenWidth } = Dimensions.get('window');
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=60';
@@ -25,6 +26,7 @@ const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1469474968028-56623f02
 const FeaturedProductsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const { count: cartItemCount } = useCartBadgeCount();
 
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,6 +133,7 @@ const FeaturedProductsScreen: React.FC = () => {
         title={t('home.featured')}
         showBack={true}
         showCart={true}
+        cartItemCount={cartItemCount}
       />
 
       <ScrollView showsVerticalScrollIndicator={false}>

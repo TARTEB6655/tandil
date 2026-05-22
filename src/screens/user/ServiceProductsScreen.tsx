@@ -18,6 +18,7 @@ import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import { publicServiceService, PublicServiceProduct } from '../../services/publicServiceService';
 import { buildFullImageUrl } from '../../config/api';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 
 /** Shape expected by ProductDetail screen */
 interface ProductDetailDisplay {
@@ -43,6 +44,7 @@ const ServiceProductsScreen: React.FC = () => {
   const route = useRoute<any>();
   const serviceId = route.params?.serviceId ?? 0;
   const serviceName = route.params?.serviceName ?? t('services.title', 'Service');
+  const { count: cartItemCount } = useCartBadgeCount();
 
   const [products, setProducts] = useState<PublicServiceProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,7 +140,7 @@ const ServiceProductsScreen: React.FC = () => {
   if (!serviceId) {
     return (
       <SafeAreaView style={styles.container}>
-        <Header title={serviceName} showBack showCart />
+        <Header title={serviceName} showBack showCart cartItemCount={cartItemCount} />
         <View style={styles.centerWrap}>
           <Text style={styles.errorText}>{t('serviceProducts.invalidService', 'Invalid service')}</Text>
         </View>
@@ -148,7 +150,7 @@ const ServiceProductsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <Header title={serviceName} showBack showCart />
+      <Header title={serviceName} showBack showCart cartItemCount={cartItemCount} />
 
       {loading ? (
         <View style={styles.centerWrap}>

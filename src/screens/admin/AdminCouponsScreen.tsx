@@ -145,8 +145,8 @@ const AdminCouponsScreen: React.FC = () => {
   const renderItem = ({ item }: { item: AdminCoupon }) => {
     const isActive = item.is_active === true || item.is_active === 1;
     const isDeleting = deletingId === item.id;
-    const badge = getCouponDiscountBadge(item);
-    const scope = formatCouponScopeLabel(item, categoryNameById, serviceNameById);
+    const badge = getCouponDiscountBadge(item, t);
+    const scope = formatCouponScopeLabel(item, categoryNameById, serviceNameById, t);
 
     return (
       <TouchableOpacity
@@ -193,7 +193,11 @@ const AdminCouponsScreen: React.FC = () => {
             {item.min_order_amount > 0 ? (
               <View style={styles.tag}>
                 <Ionicons name="cart-outline" size={14} color={COLORS.textSecondary} />
-                <Text style={styles.tagTextMuted}>Min {item.min_order_amount} AED</Text>
+                <Text style={styles.tagTextMuted}>
+                  {t('admin.coupons.minOrder', 'Min {{amount}} AED', {
+                    amount: String(item.min_order_amount),
+                  })}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -204,7 +208,10 @@ const AdminCouponsScreen: React.FC = () => {
                 <View style={styles.metaItem}>
                   <Ionicons name="calendar-outline" size={13} color={COLORS.textSecondary} />
                   <Text style={styles.metaText}>
-                    {item.starts_at?.slice(0, 10) ?? '—'} → {item.ends_at?.slice(0, 10) ?? '—'}
+                    {t('admin.coupons.dateRange', '{{start}} → {{end}}', {
+                      start: item.starts_at?.slice(0, 10) ?? '—',
+                      end: item.ends_at?.slice(0, 10) ?? '—',
+                    })}
                   </Text>
                 </View>
               )}
@@ -212,7 +219,9 @@ const AdminCouponsScreen: React.FC = () => {
                 <View style={styles.metaItem}>
                   <Ionicons name="person-outline" size={13} color={COLORS.textSecondary} />
                   <Text style={styles.metaText}>
-                    {item.usage_limit_per_user}x {t('admin.coupons.perUser', 'per user')}
+                    {t('admin.coupons.usagePerUserShort', '{{count}}× per user', {
+                      count: item.usage_limit_per_user,
+                    })}
                   </Text>
                 </View>
               ) : null}

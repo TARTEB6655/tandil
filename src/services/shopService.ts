@@ -1,4 +1,9 @@
 import { publicApiClient } from './api';
+import {
+  isShopProductInStock,
+  resolveShopProductStock,
+  type ShopProductStockSource,
+} from '../utils/shopProductStock';
 
 export interface ShopProductCategory {
   id: number;
@@ -34,6 +39,10 @@ export interface ShopProduct {
   weight?: string;
   weight_unit?: string;
   stock: number;
+  stock_quantity?: number | null;
+  in_stock?: boolean | number | null;
+  track_quantity?: boolean | number | null;
+  allow_backorder?: boolean | number | null;
   status: string;
   is_featured?: boolean | number;
   image?: string | null;
@@ -75,13 +84,35 @@ export interface ShopProductDetailResponse {
   data: ShopProduct;
 }
 
+function normalizeShopProduct(raw: unknown): ShopProduct {
+  const item = (raw && typeof raw === 'object' ? raw : {}) as ShopProduct &
+    ShopProductStockSource;
+  const stock = resolveShopProductStock(item);
+  return {
+    ...item,
+    stock,
+    in_stock: isShopProductInStock(item),
+  };
+}
+
+function normalizeShopProductList(list: unknown): ShopProduct[] {
+  if (!Array.isArray(list)) return [];
+  return list.map(normalizeShopProduct);
+}
+
+export { isShopProductInStock, resolveShopProductStock } from '../utils/shopProductStock';
+
 export const shopService = {
   getProducts: async (params?: { per_page?: number; page?: number; search?: string }): Promise<ShopProductsResponse> => {
     const { search, ...rest } = params ?? {};
     const sendParams = { ...rest } as { per_page?: number; page?: number; search?: string };
     if (search != null && search.trim() !== '') sendParams.search = search.trim();
     const response = await publicApiClient.get<ShopProductsResponse>('/shop/products', { params: sendParams });
-    return response.data;
+    const body = response.data;
+    if (body?.data) {
+      body.data = normalizeShopProductList(body.data);
+    }
+    return body;
   },
 
   /** GET /shop/products/categories – public, no auth. Returns categories for Shop by Category. */
@@ -105,7 +136,7 @@ export const shopService = {
         timeout: 15000,
       });
       const data = (response?.data as any)?.data ?? null;
-      return data;
+      return data ? normalizeShopProduct(data) : null;
     } catch (_) {
       return null;
     }
@@ -122,6 +153,9 @@ export const shopService = {
         { params: params ?? {}, timeout: 15000 }
       );
       const data = (response?.data as any)?.data ?? null;
+      if (data?.products) {
+        data.products = normalizeShopProductList(data.products);
+      }
       return data;
     } catch (_) {
       return null;
@@ -137,7 +171,7 @@ export const shopService = {
       });
       const body = response?.data ?? response;
       const list = Array.isArray((body as any)?.data) ? (body as any).data : Array.isArray(body) ? body : [];
-      return list;
+      return normalizeShopProductList(list);
     } catch (_) {
       return [];
     }

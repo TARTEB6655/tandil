@@ -16,7 +16,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
-import { shopService, ShopProduct } from '../../services/shopService';
+import { shopService, ShopProduct, isShopProductInStock } from '../../services/shopService';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 
 const { width: screenWidth } = Dimensions.get('window');
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=60';
@@ -37,6 +38,7 @@ const CategoryProductsScreen: React.FC<CategoryProductsScreenProps> = ({ route }
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const { category } = route.params;
+  const { count: cartItemCount } = useCartBadgeCount();
 
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [productCount, setProductCount] = useState(0);
@@ -83,7 +85,7 @@ const CategoryProductsScreen: React.FC<CategoryProductsScreenProps> = ({ route }
     reviews: 0,
     image: getProductImage(p),
     badge: '',
-    inStock: (p.stock ?? 0) > 0,
+    inStock: isShopProductInStock(p),
     description: p.description,
     features: [],
   }), [getProductImage]);
@@ -113,7 +115,7 @@ const CategoryProductsScreen: React.FC<CategoryProductsScreenProps> = ({ route }
         <ProductImage uri={imageUri} />
         {!inStock && (
           <View style={styles.outOfStockOverlay}>
-            <Text style={styles.outOfStockText}>Out of Stock</Text>
+            <Text style={styles.outOfStockText}>{t('category.outOfStock')}</Text>
           </View>
         )}
       </View>
@@ -141,6 +143,7 @@ const CategoryProductsScreen: React.FC<CategoryProductsScreenProps> = ({ route }
         title={category.name}
         showBack={true}
         showCart={true}
+        cartItemCount={cartItemCount}
       />
       
       <ScrollView showsVerticalScrollIndicator={false}>

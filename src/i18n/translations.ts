@@ -1,3 +1,5 @@
+import { couponI18nEn, couponI18nAr, couponI18nUr } from './couponTranslations';
+
 export const en = {
   common: {
     language: 'Language',
@@ -80,6 +82,7 @@ export const en = {
   },
   tabs: { home: 'Home', services: 'Services', orders: 'Orders', store: 'Store', profile: 'Profile' },
   category: { allProducts: 'All Products', filter: 'Filter', products: 'Products', outOfStock: 'Out of Stock' },
+  coupon: couponI18nEn.coupon,
   serviceProducts: {
     comingSoonTitle: 'Coming Soon',
     comingSoonMessage: 'Products for this service are not available yet. Check back later!',
@@ -206,6 +209,10 @@ export const en = {
     removeBody: 'Are you sure you want to remove this item from your cart?',
     cancel: 'Cancel',
     remove: 'Remove',
+    minOrderTitle: 'Minimum order required',
+    minOrderMessage:
+      'Your order total must be {{amount}} {{currency}} or more to complete your purchase. Please add more items to your cart.',
+    minOrderHint: 'Minimum order is {{amount}} {{currency}}. Add more items to checkout.',
   },
   checkout: {
     title: 'Checkout',
@@ -702,8 +709,11 @@ export const en = {
       category: 'Category',
       exclusiveOffers: 'Exclusive Offers',
       services: 'Services',
+      coupons: couponI18nEn.adminCouponDashboard.coupons,
       selectTimeRange: 'Select Time Range',
     },
+    coupons: couponI18nEn.adminCoupons,
+    couponForm: couponI18nEn.adminCouponForm,
     orders: {
       title: 'Orders',
       noOrders: 'No orders yet',
@@ -2863,6 +2873,7 @@ export const ar = {
   },
   tabs: { home: 'الرئيسية', services: 'الخدمات', orders: 'الطلبات', store: 'المتجر', profile: 'الملف' },
   category: { allProducts: 'كل المنتجات', filter: 'تصفية', products: 'منتجات', outOfStock: 'غير متوفر' },
+  coupon: couponI18nAr.coupon,
   auth: {
     welcome: 'أهلاً بك في Tandil',
     createAccount: 'أنشئ حسابك',
@@ -2983,6 +2994,10 @@ export const ar = {
     removeBody: 'هل أنت متأكد أنك تريد إزالة هذا المنتج من السلة؟',
     cancel: 'إلغاء',
     remove: 'إزالة',
+    minOrderTitle: 'الحد الأدنى للطلب',
+    minOrderMessage:
+      'يجب أن يكون إجمالي طلبك {{amount}} {{currency}} أو أكثر لإتمام الشراء. يرجى إضافة المزيد من المنتجات إلى السلة.',
+    minOrderHint: 'الحد الأدنى للطلب {{amount}} {{currency}}. أضف المزيد من المنتجات للدفع.',
   },
   checkout: {
     title: 'الدفع',
@@ -3469,8 +3484,11 @@ export const ar = {
       category: 'التصنيفات',
       exclusiveOffers: 'العروض الحصرية',
       services: 'الخدمات',
+      coupons: couponI18nAr.adminCouponDashboard.coupons,
       selectTimeRange: 'اختر الفترة الزمنية',
     },
+    coupons: couponI18nAr.adminCoupons,
+    couponForm: couponI18nAr.adminCouponForm,
     orders: {
       title: 'الطلبات',
       noOrders: 'لا توجد طلبات بعد',
@@ -5501,6 +5519,7 @@ export const ur = {
   },
   tabs: { home: 'ہوم', services: 'سروسز', orders: 'آرڈرز', store: 'اسٹور', profile: 'پروفائل' },
   category: { allProducts: 'تمام مصنوعات', filter: 'فلٹر', products: 'مصنوعات', outOfStock: 'اسٹاک ختم' },
+  coupon: couponI18nUr.coupon,
   auth: {
     welcome: 'Tandil میں خوش آمدید',
     createAccount: 'اپنا اکاؤنٹ بنائیں',
@@ -5621,6 +5640,10 @@ export const ur = {
     removeBody: 'کیا آپ واقعی اس آئٹم کو کارٹ سے ہٹانا چاہتے ہیں؟',
     cancel: 'منسوخ',
     remove: 'ہٹائیں',
+    minOrderTitle: 'کم از کم آرڈر',
+    minOrderMessage:
+      'خریداری مکمل کرنے کے لیے آپ کے آرڈر کا کل {{amount}} {{currency}} یا زیادہ ہونا ضروری ہے۔ براہ کرم کارٹ میں مزید آئٹمز شامل کریں۔',
+    minOrderHint: 'کم از کم آرڈر {{amount}} {{currency}} ہے۔ چیک آؤٹ کے لیے مزید آئٹمز شامل کریں۔',
   },
   checkout: {
     title: 'چیک آؤٹ',
@@ -6111,8 +6134,11 @@ export const ur = {
       category: 'کیٹیگریز',
       exclusiveOffers: 'خصوصی پیشکشیں',
       services: 'سروسز',
+      coupons: couponI18nUr.adminCouponDashboard.coupons,
       selectTimeRange: 'وقت کی حد منتخب کریں',
     },
+    coupons: couponI18nUr.adminCoupons,
+    couponForm: couponI18nUr.adminCouponForm,
     orders: {
       title: 'آرڈرز',
       noOrders: 'ابھی تک کوئی آرڈر نہیں',

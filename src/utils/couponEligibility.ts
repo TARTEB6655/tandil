@@ -1,5 +1,16 @@
 import type { Coupon, CouponApplyContext } from '../types/coupon';
 
+function normalizeIds(ids: number[] | undefined): number[] {
+  return (ids ?? [])
+    .map((x) => Number(x))
+    .filter((n) => !Number.isNaN(n) && n > 0);
+}
+
+function hasIdOverlap(allowed: number[], cartIds: number[]): boolean {
+  const a = new Set(normalizeIds(allowed));
+  return normalizeIds(cartIds).some((id) => a.has(id));
+}
+
 function todayYmd(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -38,9 +49,9 @@ export function validateCouponCatalog(
     }
     const cartIds = context?.cartServiceIds ?? [];
     if (cartIds.length === 0) {
-      return null;
+      return 'This offer applies to specific services only.';
     }
-    if (!cartIds.some((id) => allowed.includes(id))) {
+    if (!hasIdOverlap(allowed, cartIds)) {
       return 'This coupon does not apply to the selected service.';
     }
     return null;
@@ -53,10 +64,10 @@ export function validateCouponCatalog(
 
   const cartIds = context?.cartCategoryIds ?? [];
   if (cartIds.length === 0) {
-    return null;
+    return 'This offer applies to specific categories. Your cart does not include eligible category items.';
   }
 
-  if (!cartIds.some((id) => allowed.includes(id))) {
+  if (!hasIdOverlap(allowed, cartIds)) {
     return 'This coupon does not apply to items in your cart.';
   }
   return null;

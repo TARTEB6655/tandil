@@ -14,12 +14,14 @@ import Header from '../../components/common/Header';
 import { ServiceCard } from '../../components/cards/ServiceCard';
 import { useTranslation } from 'react-i18next';
 import { mockServices, mockServiceCategories } from '../../data/mockData';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 
 const ServiceCategoryScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const route = useRoute<any>();
   const { category } = route.params;
+  const { count: cartItemCount } = useCartBadgeCount();
   
   const [selectedSort, setSelectedSort] = useState('popular');
 
@@ -148,6 +150,7 @@ const ServiceCategoryScreen: React.FC = () => {
         title={category.name}
         showBack={true}
         showCart={true}
+        cartItemCount={cartItemCount}
         rightComponent={
           <TouchableOpacity style={styles.filterButton}>
             <Ionicons name="filter" size={24} color={COLORS.text} />

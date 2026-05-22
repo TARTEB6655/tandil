@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,9 +18,13 @@ import { useTranslation } from 'react-i18next';
 import { getCart, removeCartItem, updateCartItemQuantity, getOrderSummary, CartApiItem, CartOrderSummary, OrderSummaryData } from '../../services/cartService';
 import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
 import { useIsAuthenticated } from '../../store';
-import { useCouponStore } from '../../store/couponStore';
-import CouponInput from '../../components/checkout/CouponInput';
-import type { CouponApplyContext } from '../../types/coupon';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
+import {
+  meetsMinimumOrderAmount,
+  MIN_ORDER_AMOUNT_AED,
+  MIN_ORDER_BUTTON_DISABLED_STYLE,
+  showMinimumOrderAlert,
+} from '../../utils/shopOrderMinimum';
 
 interface CartItemDisplay {
   id: string;
@@ -31,6 +35,7 @@ interface CartItemDisplay {
   image: string;
   category?: string;
   categoryId?: number;
+  serviceId?: number;
   brand?: string;
   quantity: number;
 }
@@ -45,6 +50,7 @@ function mapApiItemToDisplay(item: CartApiItem): CartItemDisplay {
     image: item.image_url || 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=400&q=60',
     category: item.category ?? undefined,
     categoryId: item.category_id ?? undefined,
+    serviceId: item.service_id ?? undefined,
     brand: item.brand ?? undefined,
     quantity: item.quantity,
   };
@@ -54,6 +60,7 @@ const CartScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const isAuthenticated = useIsAuthenticated();
+  const { count: cartItemCount } = useCartBadgeCount();
 
   const [cartItems, setCartItems] = useState<CartItemDisplay[]>([]);
   const [orderSummary, setOrderSummary] = useState<CartOrderSummary | null>(null);
@@ -176,36 +183,25 @@ const CartScreen: React.FC = () => {
     );
   };
 
-  const couponCartContext = useMemo<CouponApplyContext>(
-    () => ({
-      cartCatalog: 'products',
-      cartCategoryIds: [
-        ...new Set(
-          cartItems
-            .map((i) => i.categoryId)
-            .filter((id): id is number => typeof id === 'number' && id > 0)
-        ),
-      ],
-    }),
-    [cartItems]
-  );
-
-  const appliedCoupon = useCouponStore((s) => s.applied);
   const useApiSummary = orderSummaryApi != null;
   const subtotal = useApiSummary ? orderSummaryApi.subtotal : (orderSummary?.subtotal ?? cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0));
   const discount = useApiSummary ? orderSummaryApi.discount : (orderSummary?.discount ?? 0);
   const shippingBase = useApiSummary ? orderSummaryApi.shipping : (orderSummary?.shipping ?? shopSettings?.shipping_amount ?? 0);
   const taxPercent = useApiSummary ? (orderSummaryApi.tax_percent ?? 0) : (shopSettings?.tax_percent ?? 0);
-  const couponDiscount = appliedCoupon?.coupon_discount ?? 0;
-  const shipping = appliedCoupon?.free_shipping ? 0 : shippingBase;
-  const taxableBase = Math.max(0, subtotal - discount - couponDiscount);
+  const shipping = shippingBase;
+  const taxableBase = Math.max(0, subtotal - discount);
   const taxAmount = Math.round(taxableBase * (taxPercent / 100) * 100) / 100;
   const total = Math.round((taxableBase + shipping + taxAmount) * 100) / 100;
   const currency = useApiSummary ? orderSummaryApi.currency : (orderSummary?.currency || shopSettings?.currency || t('orders.currency', { defaultValue: 'AED' }));
+  const canProceedToCheckout = cartItems.length > 0 && meetsMinimumOrderAmount(total);
 
   const handleCheckout = () => {
     if (cartItems.length === 0) {
       Alert.alert(t('cart.emptyCartTitle'), t('cart.emptyCartBody'));
+      return;
+    }
+    if (!canProceedToCheckout) {
+      showMinimumOrderAlert(currency, t);
       return;
     }
     navigation.navigate('Checkout', { cartItems, total });
@@ -272,6 +268,7 @@ const CartScreen: React.FC = () => {
         title={t('cart.title')}
         showBack
         showCart
+        cartItemCount={cartItemCount}
       />
 
       {!isAuthenticated ? (
@@ -326,12 +323,6 @@ const CartScreen: React.FC = () => {
 
           <View style={styles.orderSummary}>
             <Text style={styles.summaryTitle}>{t('cart.orderSummary')}</Text>
-            <CouponInput
-              subtotal={subtotal}
-              catalogDiscount={discount}
-              currency={currency}
-              cartContext={couponCartContext}
-            />
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>{t('cart.subtotal')}</Text>
               <Text style={styles.summaryValue}>{currency} {subtotal.toFixed(2)}</Text>
@@ -342,16 +333,10 @@ const CartScreen: React.FC = () => {
                 <Text style={[styles.summaryValue, styles.discountText]}>-{currency} {discount.toFixed(2)}</Text>
               </View>
             )}
-            {couponDiscount > 0 && (
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>{t('coupon.lineLabel', 'Coupon')}</Text>
-                <Text style={[styles.summaryValue, styles.discountText]}>-{currency} {couponDiscount.toFixed(2)}</Text>
-              </View>
-            )}
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>{t('cart.shipping')}</Text>
               <Text style={styles.summaryValue}>
-                {appliedCoupon?.free_shipping || shipping <= 0
+                {shipping <= 0
                   ? t('cart.free')
                   : `${currency} ${shipping.toFixed(2)}`}
               </Text>
@@ -372,9 +357,38 @@ const CartScreen: React.FC = () => {
           </View>
 
           <View style={styles.checkoutContainer}>
-            <TouchableOpacity style={styles.checkoutButton} onPress={handleCheckout}>
-              <Text style={styles.checkoutButtonText}>{t('cart.proceed', { amount: `${currency} ${total.toFixed(2)}` })}</Text>
-              <Ionicons name="arrow-forward" size={20} color={COLORS.background} />
+            {!canProceedToCheckout ? (
+              <Text style={styles.minOrderHint}>
+                {t('cart.minOrderHint', {
+                  defaultValue: 'Minimum order is {{amount}} {{currency}}. Add more items to checkout.',
+                  amount: MIN_ORDER_AMOUNT_AED,
+                  currency,
+                })}
+              </Text>
+            ) : null}
+            <TouchableOpacity
+              style={[
+                styles.checkoutButton,
+                !canProceedToCheckout && styles.checkoutButtonDisabled,
+                !canProceedToCheckout && MIN_ORDER_BUTTON_DISABLED_STYLE,
+              ]}
+              onPress={handleCheckout}
+              disabled={!canProceedToCheckout}
+              activeOpacity={canProceedToCheckout ? 0.85 : 1}
+            >
+              <Text
+                style={[
+                  styles.checkoutButtonText,
+                  !canProceedToCheckout && styles.checkoutButtonTextDisabled,
+                ]}
+              >
+                {t('cart.proceed', { amount: `${currency} ${total.toFixed(2)}` })}
+              </Text>
+              <Ionicons
+                name="arrow-forward"
+                size={20}
+                color={canProceedToCheckout ? COLORS.background : 'rgba(255,255,255,0.6)'}
+              />
             </TouchableOpacity>
           </View>
         </>
@@ -593,6 +607,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
+  minOrderHint: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.error,
+    textAlign: 'center',
+    marginBottom: SPACING.sm,
+    lineHeight: 20,
+  },
   checkoutButton: {
     backgroundColor: COLORS.primary,
     flexDirection: 'row',
@@ -606,6 +627,12 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.background,
+  },
+  checkoutButtonDisabled: {
+    backgroundColor: COLORS.textSecondary,
+  },
+  checkoutButtonTextDisabled: {
+    color: 'rgba(255,255,255,0.75)',
   },
 });
 

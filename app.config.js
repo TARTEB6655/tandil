@@ -45,7 +45,12 @@ module.exports = {
     },
     android: {
       ...expo.android,
-      permissions: [...(expo.android?.permissions || []), 'ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION'],
+      permissions: [
+        ...(expo.android?.permissions || []),
+        'ACCESS_COARSE_LOCATION',
+        'ACCESS_FINE_LOCATION',
+        'POST_NOTIFICATIONS',
+      ],
     },
     extra: {
       ...expo.extra,
@@ -64,6 +69,25 @@ module.exports = {
       iosAppStoreId: process.env.EXPO_PUBLIC_IOS_APP_STORE_ID || expo.extra?.iosAppStoreId || '',
       shareAppUrl: process.env.EXPO_PUBLIC_SHARE_APP_URL || expo.extra?.shareAppUrl || '',
     },
-    plugins: [...pluginsWithoutStripe, stripePlugin, 'expo-web-browser', 'expo-apple-authentication'],
+    plugins: [
+      ...pluginsWithoutStripe,
+      stripePlugin,
+      [
+        'expo-location',
+        {
+          locationWhenInUsePermission:
+            'We use your location to show local weather and delivery options on your dashboard.',
+        },
+      ],
+      'expo-web-browser',
+      'expo-apple-authentication',
+      [
+        'expo-notifications',
+        {
+          icon: './assets/icon.png',
+          color: '#EEEADE',
+        },
+      ],
+    ],
   },
 };

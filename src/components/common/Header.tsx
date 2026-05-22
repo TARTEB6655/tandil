@@ -19,6 +19,8 @@ interface HeaderProps {
   title: string;
   showBack?: boolean;
   showCart?: boolean;
+  /** Total cart quantity; shows a badge on the cart icon when > 0. */
+  cartItemCount?: number;
   showNotifications?: boolean;
   notificationCount?: number;
   showLanguage?: boolean;
@@ -32,6 +34,7 @@ const Header: React.FC<HeaderProps> = ({
   title,
   showBack = true,
   showCart = false,
+  cartItemCount = 0,
   showNotifications = false,
   notificationCount = 0,
   showLanguage = false,
@@ -108,8 +111,15 @@ const Header: React.FC<HeaderProps> = ({
             </TouchableOpacity>
           )}
           {showCart && (
-            <TouchableOpacity style={styles.iconButton} onPress={handleCartPress}>
+            <TouchableOpacity style={[styles.iconButton, styles.cartIconWrap]} onPress={handleCartPress}>
               <Ionicons name="cart-outline" size={24} color={COLORS.text} />
+              {cartItemCount > 0 ? (
+                <View style={styles.cartBadge}>
+                  <Text style={styles.cartBadgeText} numberOfLines={1}>
+                    {cartItemCount > 99 ? '99+' : cartItemCount}
+                  </Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
           )}
         </View>
@@ -198,6 +208,26 @@ const styles = StyleSheet.create({
   },
   notificationIconWrap: {
     position: 'relative',
+  },
+  cartIconWrap: {
+    position: 'relative',
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  cartBadgeText: {
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.background,
   },
   notificationBadge: {
     position: 'absolute',

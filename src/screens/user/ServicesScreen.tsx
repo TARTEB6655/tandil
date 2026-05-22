@@ -16,6 +16,7 @@ import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import { publicServiceService, PublicService, PublicServiceProduct } from '../../services/publicServiceService';
 import { buildFullImageUrl } from '../../config/api';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1461354464878-ad92f492a5a0?w=800&q=60&auto=format&fit=crop';
 
@@ -25,6 +26,7 @@ let cachedAllProducts: PublicServiceProduct[] | null = null;
 const ServicesScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const { count: cartItemCount } = useCartBadgeCount();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [services, setServices] = useState<PublicService[]>([]);
@@ -204,6 +206,7 @@ const ServicesScreen: React.FC = () => {
         title={t('tabs.services')} 
         showBack={false}
         showCart={true}
+        cartItemCount={cartItemCount}
       />
 
       {/* Search Bar */}

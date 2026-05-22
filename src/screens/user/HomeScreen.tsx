@@ -31,15 +31,18 @@ import { shopService, ShopProductCategory, ShopProduct } from '../../services/sh
 import { publicServiceService, PublicService } from '../../services/publicServiceService';
 import { getExclusiveOffers, PublicExclusiveOffer } from '../../services/exclusiveOffersService';
 import { buildFullImageUrl } from '../../config/api';
-import * as Location from 'expo-location';
-import { fetchWeather, WeatherData } from '../../services/weatherService';
-import { getClientNotifications } from '../../services/userService';
+import { WeatherData } from '../../services/weatherService';
+import { getClientNotifications } from '../../services/clientNotificationService';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
+import { useIsAuthenticated } from '../../store';
+import { loadDashboardWeather } from '../../utils/dashboardWeather';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user, orders } = useAppStore();
+  const isAuthenticated = useIsAuthenticated();
   const { t } = useTranslation();
   const [currentSlide, setCurrentSlide] = useState(0);
   const flatListRef = useRef<FlatList>(null);
@@ -57,6 +60,7 @@ const HomeScreen: React.FC = () => {
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const { count: cartItemCount } = useCartBadgeCount();
 
   useFocusEffect(
     useCallback(() => {
@@ -193,30 +197,31 @@ const HomeScreen: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  // Location + weather: request permission, get position, fetch weather and place name
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (cancelled) return;
-        setLocationPermission(status === 'granted');
-        if (status !== 'granted') {
-          setWeatherLoading(false);
-          return;
-        }
-        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        if (cancelled) return;
-        const data = await fetchWeather(position.coords.latitude, position.coords.longitude);
-        if (!cancelled) setWeather(data);
-      } catch {
-        if (!cancelled) setWeather(null);
-      } finally {
-        if (!cancelled) setWeatherLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  const refreshDashboardWeather = useCallback(async () => {
+    setWeatherLoading(true);
+    try {
+      const { weather: data, permissionGranted } = await loadDashboardWeather(isAuthenticated);
+      setLocationPermission(permissionGranted);
+      setWeather(data);
+    } catch {
+      setWeather(null);
+      setLocationPermission(false);
+    } finally {
+      setWeatherLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshDashboardWeather();
+    }, [refreshDashboardWeather])
+  );
+
+  const handleWeatherCardPress = useCallback(async () => {
+    if (weatherLoading) return;
+    if (weather) return;
+    await refreshDashboardWeather();
+  }, [weather, weatherLoading, refreshDashboardWeather]);
 
   // Fetch public services for Place Service Orders (GET /services?per_page=12, no auth)
   useEffect(() => {
@@ -385,21 +390,34 @@ const HomeScreen: React.FC = () => {
         notificationCount={unreadNotificationCount}
         onNotificationPress={() => navigation.navigate('Notifications')}
         showCart={true}
+        cartItemCount={cartItemCount}
       />
       <ScrollView showsVerticalScrollIndicator={false}>
       {/* Weather widget – premium card with location, temperature, condition */}
-      <View style={styles.weatherCard}>
+      <TouchableOpacity
+        style={styles.weatherCard}
+        activeOpacity={weather || weatherLoading ? 1 : 0.85}
+        onPress={handleWeatherCardPress}
+        disabled={weatherLoading || !!weather}
+      >
         {weatherLoading ? (
           <View style={styles.weatherContent}>
             <ActivityIndicator size="small" color="#fff" />
             <Text style={styles.weatherCardSubtext}>{t('home.weather.loading', 'Getting weather…')}</Text>
           </View>
-        ) : locationPermission === false ? (
+        ) : !weather && locationPermission === false ? (
           <View style={styles.weatherContent}>
             <View style={styles.weatherIconCircle}>
               <Ionicons name="location-outline" size={28} color="#fff" />
             </View>
-            <Text style={styles.weatherCardSubtext}>{t('home.weather.enableLocation', 'Enable location for local weather')}</Text>
+            <Text style={styles.weatherCardSubtext}>
+              {t('home.weather.enableLocation', 'Tap to enable location for local weather')}
+            </Text>
+            {isAuthenticated ? (
+              <Text style={styles.weatherCardHint}>
+                {t('home.weather.savedAddressHint', 'Or add a default address in your profile for your area.')}
+              </Text>
+            ) : null}
           </View>
         ) : weather ? (
           <>
@@ -430,10 +448,10 @@ const HomeScreen: React.FC = () => {
           </>
         ) : (
           <View style={styles.weatherContent}>
-            <Text style={styles.weatherCardSubtext}>{t('home.weather.unavailable', 'Weather unavailable')}</Text>
+            <Text style={styles.weatherCardSubtext}>{t('home.weather.unavailable', 'Tap to refresh weather')}</Text>
           </View>
         )}
-      </View>
+      </TouchableOpacity>
 
       {/* Promotional Slider */}
       <View style={styles.sliderContainer}>
@@ -1293,6 +1311,14 @@ const styles = StyleSheet.create({
   weatherCardSubtext: {
     fontSize: FONT_SIZES.md,
     color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+  },
+  weatherCardHint: {
+    fontSize: FONT_SIZES.sm,
+    color: 'rgba(255,255,255,0.75)',
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+    paddingHorizontal: SPACING.md,
   },
   weatherLocationRow: {
     flexDirection: 'row',

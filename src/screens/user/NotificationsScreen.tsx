@@ -22,7 +22,7 @@ import {
   deleteClientNotification,
   clearAllClientNotifications,
   type ClientNotificationItem,
-} from '../../services/userService';
+} from '../../services/clientNotificationService';
 
 function notificationKind(item: ClientNotificationItem): string {
   const d = item.data as { type?: string } | undefined;

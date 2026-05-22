@@ -24,6 +24,7 @@ export interface CartApiItem {
   image_url: string | null;
   category: string | null;
   category_id?: number | null;
+  service_id?: number | null;
   brand: string | null;
   current_price: number;
   original_price: number | null;
@@ -72,6 +73,7 @@ export interface BuyNowSummaryItem {
   image_url: string | null;
   category: string | null;
   category_id?: number | null;
+  service_id?: number | null;
   brand: string | null;
   current_price: number;
   original_price: number | null;
@@ -96,7 +98,11 @@ interface GetBuyNowSummaryResponse {
  * GET /shop/order-summary. Returns subtotal, discount, shipping, tax, total, currency.
  */
 export async function getOrderSummary(
-  options?: { use_wallet?: boolean; wallet_amount?: number }
+  options?: {
+    use_wallet?: boolean;
+    wallet_amount?: number;
+    coupon_code?: string;
+  }
 ): Promise<OrderSummaryData | null> {
   const params: Record<string, string | number> = {};
   if (typeof options?.use_wallet === 'boolean') {
@@ -104,6 +110,10 @@ export async function getOrderSummary(
   }
   if (typeof options?.wallet_amount === 'number') {
     params.wallet_amount = options.wallet_amount;
+  }
+  const couponCode = options?.coupon_code?.trim().toUpperCase();
+  if (couponCode) {
+    params.coupon_code = couponCode;
   }
   const response = await apiClient.get<GetOrderSummaryResponse>('/shop/order-summary', {
     timeout: 15000,

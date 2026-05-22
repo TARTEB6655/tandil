@@ -22,11 +22,13 @@ import {
   getClientCancelledOrders,
   mapShopOrdersToOrders,
 } from '../../services/orderService';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 
 const OrdersScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const isAuthenticated = useAppStore((s) => s.isAuthenticated);
+  const { count: cartItemCount } = useCartBadgeCount();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -198,6 +200,7 @@ const OrdersScreen: React.FC = () => {
         title={t('tabs.orders')}
         showBack={false}
         showCart={true}
+        cartItemCount={cartItemCount}
         rightComponent={
           <TouchableOpacity
             style={styles.historyButton}

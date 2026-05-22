@@ -17,7 +17,13 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
-import { getOrderSummary, getBuyNowSummary, OrderSummaryData } from '../../services/cartService';
+import {
+  getCart,
+  getOrderSummary,
+  getBuyNowSummary,
+  OrderSummaryData,
+} from '../../services/cartService';
+import type { CartLineForCoupons } from '../../services/shopCouponService';
 import {
   createStripePaymentIntent,
   extractPaymentIntentId,
@@ -40,6 +46,7 @@ import { getWalletSummary } from '../../services/walletService';
 import { useAppStore } from '../../store';
 import { useCouponStore } from '../../store/couponStore';
 import CouponInput from '../../components/checkout/CouponInput';
+import { buildCouponApplyContext } from '../../services/shopCouponService';
 
 interface CartItem {
   id: string;
@@ -51,6 +58,9 @@ interface CartItem {
   color: string;
   size: string;
   quantity: number;
+  categoryId?: number;
+  serviceId?: number;
+  category?: string;
 }
 
 interface ShippingAddress {
@@ -108,6 +118,7 @@ const CheckoutScreen: React.FC = () => {
   const [walletApiBalance, setWalletApiBalance] = useState(0);
   const [applyWallet, setApplyWallet] = useState(false);
   const [walletSummaryLoading, setWalletSummaryLoading] = useState(false);
+  const [couponCartLines, setCouponCartLines] = useState<CartLineForCoupons[]>([]);
   const STEP_ORDER: Array<'location' | 'payment'> = ['location', 'payment'];
   const activeStepIndex = STEP_ORDER.indexOf(currentStep);
 
@@ -200,18 +211,56 @@ const CheckoutScreen: React.FC = () => {
     }
   }, [applyWallet, currentStep, refreshSummaryForWallet]);
 
+  useEffect(() => {
+    const fromRoute = ((cartItems || []) as CartItem[]).map((i) => ({
+      categoryId: i.categoryId,
+      serviceId: i.serviceId,
+    }));
+    if (currentStep !== 'payment') {
+      setCouponCartLines(fromRoute);
+      return;
+    }
+    if (isBuyNow) {
+      setCouponCartLines(fromRoute);
+      return;
+    }
+    getCart()
+      .then((res) => {
+        const apiItems = res.data?.items ?? [];
+        if (apiItems.length > 0) {
+          setCouponCartLines(
+            apiItems.map((item) => ({
+              categoryId: item.category_id ?? undefined,
+              serviceId: item.service_id ?? undefined,
+            }))
+          );
+        } else {
+          setCouponCartLines(fromRoute);
+        }
+      })
+      .catch(() => setCouponCartLines(fromRoute));
+  }, [currentStep, isBuyNow, cartItems]);
+
   const appliedCoupon = useCouponStore((s) => s.applied);
   const clearCoupon = useCouponStore((s) => s.clear);
+  const couponOnPaymentStep = currentStep === 'payment';
+
+  const couponCartContext = useMemo(
+    () => buildCouponApplyContext(couponCartLines),
+    [couponCartLines]
+  );
+
   const useApiSummary = orderSummaryApi != null;
   const subtotal = useApiSummary ? orderSummaryApi.subtotal : calculateSubtotal();
   const discount = useApiSummary ? orderSummaryApi.discount : calculateDiscount();
   const shippingBase = useApiSummary ? orderSummaryApi.shipping : (shopSettings?.shipping_amount ?? 0);
   const taxPercent = useApiSummary ? (orderSummaryApi.tax_percent ?? 0) : (shopSettings?.tax_percent ?? 0);
-  const couponDiscount = appliedCoupon?.coupon_discount ?? 0;
-  const shippingAmount = appliedCoupon?.free_shipping ? 0 : shippingBase;
+  const couponDiscount = couponOnPaymentStep ? (appliedCoupon?.coupon_discount ?? 0) : 0;
+  const shippingAmount =
+    couponOnPaymentStep && appliedCoupon?.free_shipping ? 0 : shippingBase;
   const taxableBase = Math.max(0, subtotal - discount - couponDiscount);
   const derivedTaxAmount = Math.round(taxableBase * (taxPercent / 100) * 100) / 100;
-  const hasCouponOverride = appliedCoupon != null;
+  const hasCouponOverride = couponOnPaymentStep && appliedCoupon != null;
   const taxAmount = hasCouponOverride
     ? derivedTaxAmount
     : useApiSummary
@@ -830,15 +879,42 @@ const CheckoutScreen: React.FC = () => {
           {currentStep === 'payment' && renderPaymentMethods()}
         </View>
 
-        {/* Order Summary */}
-        <View style={styles.orderSummary}>
-          <Text style={styles.summaryTitle}>{t('cart.orderSummary')}</Text>
+        {couponOnPaymentStep ? (
           <CouponInput
+            variant="checkout"
             subtotal={subtotal}
             catalogDiscount={discount}
             currency={currency}
-            cartContext={{ cartCatalog: 'products' }}
+            cartContext={couponCartContext}
+            showDemoHint={false}
+            onApplied={async (summary) => {
+              if (summary) {
+                setOrderSummaryApi(summary);
+                return;
+              }
+              const code = useCouponStore.getState().appliedCode;
+              if (!code || isBuyNow) return;
+              const refreshed = await getOrderSummary({
+                use_wallet: applyWallet,
+                wallet_amount: 0,
+                coupon_code: code,
+              });
+              if (refreshed) setOrderSummaryApi(refreshed);
+            }}
+            onCleared={async () => {
+              if (isBuyNow) return;
+              const refreshed = await getOrderSummary({
+                use_wallet: applyWallet,
+                wallet_amount: 0,
+              });
+              if (refreshed) setOrderSummaryApi(refreshed);
+            }}
           />
+        ) : null}
+
+        {/* Order Summary */}
+        <View style={styles.orderSummary}>
+          <Text style={styles.summaryTitle}>{t('cart.orderSummary')}</Text>
 
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>{t('cart.subtotal')}</Text>
@@ -854,7 +930,7 @@ const CheckoutScreen: React.FC = () => {
             </View>
           )}
 
-          {couponDiscount > 0 && (
+          {couponOnPaymentStep && couponDiscount > 0 && (
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>{t('coupon.lineLabel', 'Coupon')}</Text>
               <Text style={[styles.summaryValue, styles.discountText]}>
@@ -866,9 +942,11 @@ const CheckoutScreen: React.FC = () => {
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>{t('cart.shipping')}</Text>
             <Text style={styles.summaryValue}>
-              {appliedCoupon?.free_shipping || shippingAmount === 0
+              {couponOnPaymentStep && appliedCoupon?.free_shipping
                 ? t('cart.free', 'Free')
-                : `${currency} ${shippingAmount.toFixed(2)}`}
+                : shippingAmount === 0
+                  ? t('cart.free', 'Free')
+                  : `${currency} ${shippingAmount.toFixed(2)}`}
             </Text>
           </View>
           

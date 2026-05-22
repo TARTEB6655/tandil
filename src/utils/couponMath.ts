@@ -1,5 +1,5 @@
 import type { AppliedCouponResult, Coupon, CouponApplyContext } from '../types/coupon';
-import { getCustomerCouponCatalogSync } from '../services/adminCouponService';
+import { getCustomerCouponCatalogSync } from '../services/customerCouponCatalog';
 import { validateCouponCatalog, validateCouponDates } from './couponEligibility';
 
 export function findCouponByCode(code: string): Coupon | undefined {

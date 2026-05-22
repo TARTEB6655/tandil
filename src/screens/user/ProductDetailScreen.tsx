@@ -16,9 +16,12 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
-import { shopService, ShopProduct } from '../../services/shopService';
+import { shopService, ShopProduct, isShopProductInStock } from '../../services/shopService';
 import { addCartItem, getBuyNowSummary } from '../../services/cartService';
+import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
 import { useIsAuthenticated } from '../../store';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
+import { ensureMinimumOrderAmount } from '../../utils/shopOrderMinimum';
 
 const { width: screenWidth } = Dimensions.get('window');
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=1200&q=60';
@@ -62,7 +65,7 @@ function shopProductToDisplay(p: ShopProduct | null): ProductDetailDisplay | nul
     reviews: 0,
     image,
     badge: '',
-    inStock: (p.stock ?? 0) > 0,
+    inStock: isShopProductInStock(p),
     description: p.description ?? undefined,
     features: [],
     estimatedArrival: p.estimated_arrival ?? undefined,
@@ -79,7 +82,10 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   const [loading, setLoading] = useState(true);
   const [addingToCart, setAddingToCart] = useState(false);
   const [buyingNow, setBuyingNow] = useState(false);
+  const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null);
+  const [buyNowOrderTotal, setBuyNowOrderTotal] = useState<number | null>(null);
   const isAuthenticated = useIsAuthenticated();
+  const { count: cartItemCount, refresh: refreshCartBadge } = useCartBadgeCount();
 
   useEffect(() => {
     const id = initialProduct?.id;
@@ -106,6 +112,52 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     return initialProduct;
   }, [apiProduct, initialProduct]);
 
+  useEffect(() => {
+    getShopSettings().then(setShopSettings).catch(() => setShopSettings(null));
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || !product.inStock) {
+      setBuyNowOrderTotal(null);
+      return;
+    }
+    const productId = Number(product.id);
+    if (!Number.isFinite(productId)) {
+      setBuyNowOrderTotal(null);
+      return;
+    }
+    let cancelled = false;
+    getBuyNowSummary(productId, quantity)
+      .then((res) => {
+        if (!cancelled) {
+          setBuyNowOrderTotal(
+            res?.order_summary?.total != null ? Number(res.order_summary.total) : null
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setBuyNowOrderTotal(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, product.id, product.inStock, quantity]);
+
+  const currency = t('orders.currency', { defaultValue: 'AED' });
+  const estimatedBuyNowTotal = useMemo(() => {
+    const subtotal = product.price * quantity;
+    const shipping = shopSettings?.shipping_amount ?? 10;
+    const taxPercent = shopSettings?.tax_percent ?? 5;
+    const tax = Math.round(subtotal * (taxPercent / 100) * 100) / 100;
+    return Math.round((subtotal + shipping + tax) * 100) / 100;
+  }, [product.price, quantity, shopSettings]);
+
+  const buyNowTotalForMinCheck =
+    buyNowOrderTotal != null && Number.isFinite(buyNowOrderTotal)
+      ? buyNowOrderTotal
+      : estimatedBuyNowTotal;
+  const buyNowButtonLabel = t('product.buyNow', { defaultValue: 'Buy Now' });
+
   const handleAddToCart = async () => {
     if (!product.inStock) {
       Alert.alert(t('category.outOfStock'), t('category.outOfStock'));
@@ -130,6 +182,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         return;
       }
       await addCartItem(productId, quantity);
+      refreshCartBadge();
       Alert.alert(
         t('product.addedToCart'),
         `${product.name} (Qty: ${quantity})`,
@@ -171,6 +224,10 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
       return;
     }
 
+    if (!ensureMinimumOrderAmount(buyNowTotalForMinCheck, currency, t)) {
+      return;
+    }
+
     if (!isAuthenticated) {
       Alert.alert(
         t('product.loginRequired', { defaultValue: 'Login required' }),
@@ -193,6 +250,11 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     try {
       const res = await getBuyNowSummary(productId, quantity);
       if (res?.item && res?.order_summary) {
+        const buyNowTotal = Number(res.order_summary.total) || 0;
+        const buyNowCurrency = res.order_summary.currency || t('orders.currency', { defaultValue: 'AED' });
+        if (!ensureMinimumOrderAmount(buyNowTotal, buyNowCurrency, t)) {
+          return;
+        }
         navigation.navigate('Checkout', {
           cartItems: [
             {
@@ -205,6 +267,8 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
               color: '',
               size: '',
               quantity: res.item.quantity,
+              categoryId: res.item.category_id ?? undefined,
+              serviceId: (res.item as { service_id?: number }).service_id ?? undefined,
             },
           ],
           total: res.order_summary.total,
@@ -214,6 +278,11 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         return;
       }
 
+      const estimatedTotal = product.price * quantity;
+      const fallbackCurrency = t('orders.currency', { defaultValue: 'AED' });
+      if (!ensureMinimumOrderAmount(estimatedTotal, fallbackCurrency, t)) {
+        return;
+      }
       navigation.navigate('Checkout', {
         cartItems: [
           {
@@ -265,7 +334,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   if (!product) {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        <Header title={t('product.details')} showBack={true} showCart={true} />
+        <Header title={t('product.details')} showBack={true} showCart={true} cartItemCount={cartItemCount} />
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>{t('product.loading', { defaultValue: 'Loading…' })}</Text>
@@ -280,6 +349,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         title={t('product.details')}
         showBack={true}
         showCart={true}
+        cartItemCount={cartItemCount}
       />
       {loading && (
         <View style={styles.loadingBar}>
@@ -441,7 +511,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
           )}
           <Text style={styles.addToCartText}>{addingToCart ? t('common.loading', 'Loading…') : t('product.addToCart')}</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           style={[styles.buyNowButton, (!product.inStock || buyingNow) && styles.disabledButton]}
           onPress={handleBuyNow}
@@ -450,7 +520,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
           {buyingNow ? (
             <ActivityIndicator size="small" color={COLORS.background} />
           ) : (
-            <Text style={styles.buyNowText}>{t('product.buyNow')}</Text>
+            <Text style={styles.buyNowText}>{buyNowButtonLabel}</Text>
           )}
         </TouchableOpacity>
       </View>

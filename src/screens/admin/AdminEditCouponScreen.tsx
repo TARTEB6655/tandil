@@ -182,10 +182,10 @@ const AdminEditCouponScreen: React.FC = () => {
     }
   };
 
-  const badge = coupon ? getCouponDiscountBadge(coupon) : null;
+  const badge = coupon ? getCouponDiscountBadge(coupon, t) : null;
   const isActive = coupon?.is_active === true || coupon?.is_active === 1;
   const scopeLabel = coupon
-    ? formatCouponScopeLabel(coupon, categoryNameById, serviceNameById)
+    ? formatCouponScopeLabel(coupon, categoryNameById, serviceNameById, t)
     : '';
 
   if (loadingCoupon) {
@@ -267,8 +267,10 @@ const AdminEditCouponScreen: React.FC = () => {
                     <View style={styles.metaChip}>
                       <Ionicons name="calendar-outline" size={12} color={COLORS.textSecondary} />
                       <Text style={styles.metaChipText}>
-                        {coupon.starts_at?.slice(0, 10) ?? '—'} →{' '}
-                        {coupon.ends_at?.slice(0, 10) ?? '—'}
+                        {t('admin.couponForm.previewDateRange', '{{start}} → {{end}}', {
+                          start: coupon.starts_at?.slice(0, 10) ?? '—',
+                          end: coupon.ends_at?.slice(0, 10) ?? '—',
+                        })}
                       </Text>
                     </View>
                   )}
@@ -276,7 +278,9 @@ const AdminEditCouponScreen: React.FC = () => {
                     <View style={styles.metaChip}>
                       <Ionicons name="person-outline" size={12} color={COLORS.textSecondary} />
                       <Text style={styles.metaChipText}>
-                        {coupon.usage_limit_per_user}x / user
+                        {t('admin.couponForm.previewUsagePerUser', '{{count}}× per user', {
+                          count: coupon.usage_limit_per_user,
+                        })}
                       </Text>
                     </View>
                   ) : null}

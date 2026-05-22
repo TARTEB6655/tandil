@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { shopService, ShopProduct } from '../../services/shopService';
 import { buildFullImageUrl } from '../../config/api';
 import type { PublicExclusiveOffer } from '../../services/exclusiveOffersService';
+import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 
 const { width: screenWidth } = Dimensions.get('window');
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=60';
@@ -28,6 +29,7 @@ const ExclusiveOfferProductsScreen: React.FC = () => {
   const route = useRoute();
   const { t } = useTranslation();
   const offer = (route.params as { offer?: PublicExclusiveOffer })?.offer;
+  const { count: cartItemCount } = useCartBadgeCount();
 
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,6 +139,7 @@ const ExclusiveOfferProductsScreen: React.FC = () => {
         showBack
         onBackPress={() => navigation.goBack()}
         showCart
+        cartItemCount={cartItemCount}
       />
 
       {offer?.description ? (
