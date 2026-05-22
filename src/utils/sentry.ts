@@ -53,12 +53,30 @@ export function initSentry() {
         enableInExpoDevelopment: false,
         debug: false,
         environment: getSentryEnvironment(),
-        tracesSampleRate: 1.0,
+        tracesSampleRate: 0.2,
         enableAutoSessionTracking: true,
+        enableNative: false,
       });
     }
   } catch (e) {
     console.warn('Sentry init failed:', e);
+  }
+}
+
+/** Run after first paint so a broken sentry-expo load cannot block app registration. */
+export function initSentryDeferred(): void {
+  if (__DEV__) return;
+  const run = () => {
+    try {
+      initSentry();
+    } catch (e) {
+      console.warn('Sentry deferred init failed:', e);
+    }
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(run);
+  } else {
+    setTimeout(run, 0);
   }
 }
 

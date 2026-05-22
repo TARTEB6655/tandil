@@ -50,7 +50,9 @@ export function getStripePublishableKey(): string {
   if (typeof fromEnv === 'string' && fromEnv.trim() !== '') {
     return fromEnv.trim();
   }
-  return '';
+  // Last resort for release builds if Constants.extra was not embedded (avoids Stripe white screen).
+  const fromAppJson = 'pk_live_51TObSk0dvmhfzUoqeXMFztTOzAQ366Y0ZaNvM6us9fvjswiUh80L13EtFAwgjwkH1klyZcagiYZ6MGcFYK7HrYAT00lH8Jrade';
+  return fromAppJson;
 }
 
 /** Stripe Apple Pay merchant identifier (merchant.com.example.app). */

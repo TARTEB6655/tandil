@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -6,16 +7,18 @@ import { AppNavigator } from './src/navigation';
 import { useAppStore } from './src/store';
 import { authService } from './src/services/authService';
 import ErrorBoundary from './src/components/common/ErrorBoundary';
-import { captureException } from './src/utils/sentry';
+import { StripeAppShell } from './src/components/common/StripeAppShell';
+import { captureException, initSentryDeferred } from './src/utils/sentry';
+import { COLORS } from './src/constants';
 import './src/i18n';
-import { StripeProvider } from '@stripe/stripe-react-native';
-import { getStripeMerchantIdentifier, getStripePublishableKey } from './src/config/api';
-import { getStripeUrlScheme } from './src/config/stripeLinking';
 
 function AppContent() {
   const { setUser, setAuthenticated } = useAppStore();
-  const stripePublishableKey = getStripePublishableKey();
-  const stripeMerchantIdentifier = getStripeMerchantIdentifier();
+  const [ready, setReady] = React.useState(false);
+
+  useEffect(() => {
+    initSentryDeferred();
+  }, []);
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -36,25 +39,40 @@ function AppContent() {
       }
     };
 
-    initializeAuth();
+    const boot = initializeAuth();
+    const timeout = new Promise<void>((resolve) => setTimeout(resolve, 1200));
+    Promise.race([boot, timeout]).finally(() => setReady(true));
     console.log('Tandil App Initialized');
-  }, []);
+  }, [setUser, setAuthenticated]);
+
+  if (!ready) {
+    return (
+      <View style={styles.boot}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
 
   return (
-    <StripeProvider
-      publishableKey={stripePublishableKey}
-      merchantIdentifier={stripeMerchantIdentifier || undefined}
-      urlScheme={getStripeUrlScheme()}
-    >
+    <StripeAppShell>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <StatusBar style="auto" />
           <AppNavigator />
         </SafeAreaProvider>
       </GestureHandlerRootView>
-    </StripeProvider>
+    </StripeAppShell>
   );
 }
+
+const styles = StyleSheet.create({
+  boot: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+  },
+});
 
 function RootApp() {
   return (
