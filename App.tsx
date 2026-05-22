@@ -1,7 +1,5 @@
 import React, { useEffect } from 'react';
-import { LogBox } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { isExpoGo } from './src/utils/expoRuntime';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppNavigator } from './src/navigation';
@@ -13,29 +11,6 @@ import './src/i18n';
 import { StripeProvider } from '@stripe/stripe-react-native';
 import { getStripeMerchantIdentifier, getStripePublishableKey } from './src/config/api';
 import { getStripeUrlScheme } from './src/config/stripeLinking';
-
-/** SDK 53+: expo-notifications is limited in Expo Go; polling + vibration fallback instead. */
-if (isExpoGo()) {
-  LogBox.ignoreLogs([
-    'expo-notifications',
-    'Android Push notifications',
-    'not fully supported in Expo Go',
-    'development build',
-  ]);
-  const originalWarn = console.warn;
-  console.warn = (...args: unknown[]) => {
-    const text = args.map(String).join(' ');
-    if (
-      text.includes('expo-notifications') &&
-      (text.includes('Expo Go') ||
-        text.includes('development build') ||
-        text.includes('Android Push'))
-    ) {
-      return;
-    }
-    originalWarn(...args);
-  };
-}
 
 function AppContent() {
   const { setUser, setAuthenticated } = useAppStore();

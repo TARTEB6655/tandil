@@ -49,7 +49,6 @@ module.exports = {
         ...(expo.android?.permissions || []),
         'ACCESS_COARSE_LOCATION',
         'ACCESS_FINE_LOCATION',
-        'POST_NOTIFICATIONS',
       ],
     },
     extra: {
@@ -81,13 +80,6 @@ module.exports = {
       ],
       'expo-web-browser',
       'expo-apple-authentication',
-      [
-        'expo-notifications',
-        {
-          icon: './assets/icon.png',
-          color: '#EEEADE',
-        },
-      ],
     ],
   },
 };
