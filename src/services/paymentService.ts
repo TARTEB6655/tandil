@@ -2,7 +2,7 @@
  * Shop checkout payments (Stripe). Backend must create PaymentIntents and optionally finalize orders.
  *
  * Matches mobile Postman: POST /api/shop/checkout/stripe/payment-intent
- * Body: { is_buy_now, shipping, optional product_id + quantity for buy-now }
+ * Body: { is_buy_now, coupon_code, shipping, optional product_id + quantity for buy-now, use_wallet, wallet_amount }
  * Response: { data: { client_secret } } for card flow; wallet-only may return success + order without `client_secret`.
  *
  * - POST /shop/checkout/confirm — body: { payment_intent_id } — after Payment Sheet success (Postman: "8. POST Checkout confirm")
@@ -26,6 +26,8 @@ export interface CreatePaymentIntentBody {
   quantity?: number;
   use_wallet?: boolean;
   wallet_amount?: number;
+  /** Applied coupon code, or empty string when none (POST /shop/checkout/stripe/payment-intent). */
+  coupon_code?: string;
   shipping: ShippingPayload;
 }
 

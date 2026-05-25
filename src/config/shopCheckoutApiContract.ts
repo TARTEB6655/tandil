@@ -85,6 +85,8 @@ export interface ShopStripePaymentIntentRequestContract {
   is_buy_now?: boolean;
   product_id?: number;
   quantity?: number;
+  /** Applied coupon code, or "" when none. */
+  coupon_code?: string;
   shipping: {
     full_name: string;
     phone: string;

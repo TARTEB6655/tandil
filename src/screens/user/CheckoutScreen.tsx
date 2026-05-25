@@ -354,8 +354,12 @@ const CheckoutScreen: React.FC = () => {
         country: shippingAddress.country.trim(),
       };
 
+      const couponCode =
+        useCouponStore.getState().appliedCode?.trim().toUpperCase() ?? '';
+
       let paymentIntentBody: CreatePaymentIntentBody = {
         is_buy_now: !!isBuyNow,
+        coupon_code: couponCode,
         use_wallet: applyWallet,
         wallet_amount: Math.max(0, Math.round(appliedPreview * 100) / 100),
         shipping: shippingPayload,
