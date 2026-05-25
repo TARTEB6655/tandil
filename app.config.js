@@ -13,9 +13,10 @@ const stripeMerchantIdentifier =
   process.env.EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER || expo.extra?.stripeMerchantIdentifier || '';
 
 const basePlugins = Array.isArray(expo.plugins) ? expo.plugins : [];
-const pluginsWithoutStripe = basePlugins.filter((p) =>
-  Array.isArray(p) ? p[0] !== '@stripe/stripe-react-native' : p !== '@stripe/stripe-react-native'
-);
+const pluginsWithoutStripe = basePlugins.filter((p) => {
+  const name = Array.isArray(p) ? p[0] : p;
+  return name !== '@stripe/stripe-react-native' && name !== 'sentry-expo';
+});
 const stripePlugin = [
   '@stripe/stripe-react-native',
   {
@@ -80,6 +81,7 @@ module.exports = {
       ],
       'expo-web-browser',
       'expo-apple-authentication',
+      'expo-font',
     ],
   },
 };

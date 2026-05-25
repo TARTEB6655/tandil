@@ -47,7 +47,6 @@
       "googleIosClientId": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com"
     },
     "plugins": [
-      "sentry-expo",
       [
         "@stripe/stripe-react-native",
         {
