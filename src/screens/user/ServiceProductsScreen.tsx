@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { publicServiceService, PublicServiceProduct } from '../../services/publicServiceService';
 import { buildFullImageUrl } from '../../config/api';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
+import { isShopProductInStock } from '../../utils/shopProductStock';
 
 /** Shape expected by ProductDetail screen */
 interface ProductDetailDisplay {
@@ -103,7 +104,7 @@ const ServiceProductsScreen: React.FC = () => {
       reviews: 0,
       image: getProductImage(p),
       badge: '',
-      inStock: (p.stock ?? 0) > 0,
+      inStock: isShopProductInStock(p),
       description: p.description ?? undefined,
       features: [],
     };
@@ -113,7 +114,7 @@ const ServiceProductsScreen: React.FC = () => {
     const detail = toDetailProduct(item);
     const imageUri = getProductImage(item);
     const priceNum = typeof item.price === 'string' ? parseFloat(item.price) || 0 : (item.price ?? 0);
-    const inStock = (item.stock ?? 0) > 0;
+    const inStock = isShopProductInStock(item);
     return (
       <TouchableOpacity
         style={styles.productCard}

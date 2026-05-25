@@ -105,7 +105,7 @@ const CategoryProductsScreen: React.FC<CategoryProductsScreenProps> = ({ route }
     const imageUri = getProductImage(item);
     const priceNum = typeof item.price === 'string' ? parseFloat(item.price) || 0 : item.price;
     const originalNum = typeof item.compare_at_price === 'string' ? parseFloat(item.compare_at_price) || 0 : (item.compare_at_price ?? 0);
-    const inStock = (item.stock ?? 0) > 0;
+    const inStock = isShopProductInStock(item);
     return (
     <TouchableOpacity
       style={styles.productCard}

@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { publicServiceService, PublicService, PublicServiceProduct } from '../../services/publicServiceService';
 import { buildFullImageUrl } from '../../config/api';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
+import { isShopProductInStock } from '../../utils/shopProductStock';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1461354464878-ad92f492a5a0?w=800&q=60&auto=format&fit=crop';
 
@@ -105,7 +106,7 @@ const ServicesScreen: React.FC = () => {
     reviews: 0,
     image: getProductImage(p),
     badge: '',
-    inStock: (p.stock ?? 0) > 0,
+    inStock: isShopProductInStock(p),
     description: p.description ?? undefined,
     features: [] as string[],
   });

@@ -40,7 +40,12 @@ export interface PublicServiceProduct {
   main_image?: { image_url?: string } | null;
   sku?: string;
   status?: string;
-  stock?: number;
+  stock?: number | string | null;
+  stock_quantity?: number | string | null;
+  in_stock?: boolean | number | string | null;
+  is_in_stock?: boolean | number | string | null;
+  track_quantity?: boolean | number | string | null;
+  allow_backorder?: boolean | number | string | null;
   service_names?: string[];
   category?: unknown;
 }
