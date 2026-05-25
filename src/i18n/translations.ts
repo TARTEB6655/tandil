@@ -2517,7 +2517,7 @@ export const en = {
     admin: { title: 'Admin (Executive Management)', description: 'Full control panel - manage users, subscriptions, tips, products, reports, and analytics' },
   },
   splash: {
-    subtitle: 'Shoes Care',
+    subtitle: 'TANDIL',
     loading: 'Loading...',
     skip: 'Skip to Role Selection',
   },
@@ -5173,7 +5173,7 @@ export const ar = {
     admin: { title: 'المسؤول (الإدارة التنفيذية)', description: 'لوحة تحكم كاملة - إدارة المستخدمين والاشتراكات والنصائح والمنتجات والتقارير والتحليلات' },
   },
   splash: {
-    subtitle: 'عناية الأحذية',
+    subtitle: 'تنديل',
     loading: 'جارٍ التحميل...',
     skip: 'التخطي إلى اختيار الدور',
   },
@@ -7823,7 +7823,7 @@ export const ur = {
     admin: { title: 'ایڈمن (ایگزیکٹو مینجمنٹ)', description: 'مکمل کنٹرول پینل - صارفین، سبسکرپشنز، نکات، مصنوعات، رپورٹس اور تجزیات مینیج کریں' },
   },
   splash: {
-    subtitle: 'شوز کیئر',
+    subtitle: 'ٹنڈیل',
     loading: 'لوڈ ہو رہا ہے...',
     skip: 'رول سلیکشن پر جائیں',
   },
