@@ -22,6 +22,7 @@ import { getShopSettings, ShopSettings } from '../../services/shopSettingsServic
 import { useIsAuthenticated } from '../../store';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { ensureMinimumOrderAmount } from '../../utils/shopOrderMinimum';
+import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 
 const { width: screenWidth } = Dimensions.get('window');
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=1200&q=60';
@@ -169,7 +170,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         t('product.loginToAddToCart', { defaultValue: 'Please log in to add items to your cart.' }),
         [
           { text: t('common.cancel', 'Cancel'), style: 'cancel' },
-          { text: t('auth.login', 'Log in'), onPress: () => navigation.navigate('Main', { screen: 'Profile' }) }
+          { text: t('auth.login', 'Log in'), onPress: () => navigateToClientAuth(navigation) }
         ]
       );
       return;
@@ -234,7 +235,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         t('product.loginToBuyNow', { defaultValue: 'Please log in to continue with Buy Now.' }),
         [
           { text: t('common.cancel', 'Cancel'), style: 'cancel' },
-          { text: t('auth.login', 'Log in'), onPress: () => navigation.navigate('Main', { screen: 'Profile' }) },
+          { text: t('auth.login', 'Log in'), onPress: () => navigateToClientAuth(navigation) },
         ]
       );
       return;

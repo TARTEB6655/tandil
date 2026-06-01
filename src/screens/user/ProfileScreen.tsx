@@ -11,7 +11,8 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
-import { useAppStore } from '../../store';
+import { useAppStore, useIsAuthenticated } from '../../store';
+import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import {
@@ -29,6 +30,7 @@ const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const { user, logout } = useAppStore();
+  const isAuthenticated = useIsAuthenticated();
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
@@ -36,6 +38,11 @@ const ProfileScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
+      if (!isAuthenticated) {
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
       let cancelled = false;
       setLoading(true);
       getUserProfile()
@@ -43,15 +50,19 @@ const ProfileScreen: React.FC = () => {
         .catch(() => { if (!cancelled) setProfile(null); })
         .finally(() => { if (!cancelled) setLoading(false); });
       return () => { cancelled = true; };
-    }, [])
+    }, [isAuthenticated])
   );
 
   useFocusEffect(
     useCallback(() => {
+      if (!isAuthenticated) {
+        setUnreadNotificationCount(0);
+        return;
+      }
       getClientNotifications({ per_page: 1, page: 1 })
         .then((res) => setUnreadNotificationCount(res.unreadCount ?? 0))
         .catch(() => setUnreadNotificationCount(0));
-    }, [])
+    }, [isAuthenticated])
   );
 
   const displayName = profile?.name ?? user?.name ?? t('profile.userNameDefault');
@@ -94,56 +105,67 @@ const ProfileScreen: React.FC = () => {
     color?: string;
   };
 
-  const menuItems: MenuItem[] = [
+  const requiresAccount = (onPress: () => void) => () => {
+    if (!isAuthenticated) {
+      navigateToClientAuth(navigation);
+      return;
+    }
+    onPress();
+  };
+
+  const accountMenuItems: MenuItem[] = [
     {
       icon: 'trophy-outline',
       title: t('profile.memberships'),
-      onPress: () => {
+      onPress: requiresAccount(() => {
         try {
           navigation.navigate('Memberships' as never);
         } catch (error) {
           console.error('ProfileScreen: Navigation error to Memberships:', error);
         }
-      },
+      }),
     },
     {
       icon: 'person-outline',
       title: t('profile.personalInformation'),
-      onPress: () => {
+      onPress: requiresAccount(() => {
         try {
           navigation.navigate('PersonalInfo');
         } catch {}
-      },
+      }),
     },
     {
       icon: 'location-outline',
       title: t('profile.addresses'),
-      onPress: () => {
+      onPress: requiresAccount(() => {
         try {
           navigation.navigate('Addresses');
         } catch {}
-      },
+      }),
     },
     {
       icon: 'wallet-outline',
       title: t('profile.wallet', 'Wallet'),
-      onPress: () => {
+      onPress: requiresAccount(() => {
         try {
           navigation.navigate('Wallet');
         } catch {}
-      },
+      }),
     },
     {
       icon: 'notifications-outline',
       title: t('profile.notifications'),
-      onPress: () => {
+      onPress: requiresAccount(() => {
         try {
           navigation.navigate('Notifications');
         } catch (error) {
           console.error('ProfileScreen: Navigation error to Notifications:', error);
         }
-      },
+      }),
     },
+  ];
+
+  const publicMenuItems: MenuItem[] = [
     {
       icon: 'help-circle-outline',
       title: t('profile.helpSupport'),
@@ -184,20 +206,27 @@ const ProfileScreen: React.FC = () => {
       title: t('profile.about.termsConditions'),
       onPress: () => openAppInfo('terms_conditions'),
     },
-    {
-      icon: 'log-out-outline',
-      title: t('profile.logout'),
-      onPress: handleLogout,
-      color: COLORS.error,
-    },
   ];
+
+  const menuItems: MenuItem[] = isAuthenticated
+    ? [
+        ...accountMenuItems,
+        ...publicMenuItems,
+        {
+          icon: 'log-out-outline',
+          title: t('profile.logout'),
+          onPress: handleLogout,
+          color: COLORS.error,
+        },
+      ]
+    : publicMenuItems;
 
   return (
     <View style={styles.container}>
       <Header 
         title={t('tabs.profile')} 
         showBack={false}
-        showNotifications={true}
+        showNotifications={isAuthenticated}
         notificationCount={unreadNotificationCount}
         onNotificationPress={() => navigation.navigate('Notifications')}
         showCart={true}
@@ -226,10 +255,32 @@ const ProfileScreen: React.FC = () => {
               <Ionicons name="camera" size={16} color={COLORS.background} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.userName}>{displayName}</Text>
-          <Text style={styles.userEmail}>{displayEmail}</Text>
-          {displayPhone ? (
+          <Text style={styles.userName}>
+            {isAuthenticated ? displayName : t('profile.guestTitle', 'Guest')}
+          </Text>
+          <Text style={styles.userEmail}>
+            {isAuthenticated
+              ? displayEmail
+              : t('profile.guestSubtitle', 'Browse the shop and services without an account')}
+          </Text>
+          {isAuthenticated && displayPhone ? (
             <Text style={styles.userPhone}>{displayPhone}</Text>
+          ) : null}
+          {!isAuthenticated ? (
+            <View style={styles.guestAuthRow}>
+              <TouchableOpacity
+                style={styles.guestAuthPrimary}
+                onPress={() => navigateToClientAuth(navigation)}
+              >
+                <Text style={styles.guestAuthPrimaryText}>{t('auth.login', 'Log in')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.guestAuthSecondary}
+                onPress={() => navigateToClientAuth(navigation)}
+              >
+                <Text style={styles.guestAuthSecondaryText}>{t('auth.signup', 'Sign up')}</Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
         </View>
 
@@ -324,6 +375,34 @@ const styles = StyleSheet.create({
   userPhone: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
+  },
+  guestAuthRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.lg,
+  },
+  guestAuthPrimary: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: 8,
+  },
+  guestAuthPrimaryText: {
+    color: COLORS.background,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    fontSize: FONT_SIZES.sm,
+  },
+  guestAuthSecondary: {
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: 8,
+  },
+  guestAuthSecondaryText: {
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    fontSize: FONT_SIZES.sm,
   },
   menuContainer: {
     paddingHorizontal: SPACING.lg,

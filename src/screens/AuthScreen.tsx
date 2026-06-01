@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,16 +21,16 @@ import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
 import { authService, LoginResponse } from '../services/authService';
 import ClientSocialLogin from '../components/auth/ClientSocialLogin';
+import { navigateToGuestUserApp } from '../navigation/clientAuthNavigation';
 
 const AuthScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { setUser, setAuthenticated } = useAppStore();
   const { t } = useTranslation();
-  
-  // Get role from route params, default to 'client' for client role
+
   const selectedRole = route.params?.role || 'client';
-  
+
   const [isLogin, setIsLogin] = useState(true);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -68,33 +70,30 @@ const AuthScreen: React.FC = () => {
     setError(null);
 
     if (!email.trim()) {
-      setError('Email is required');
+      setError(t('auth.errorEmailRequired', 'Email is required'));
       return false;
     }
 
     if (!password.trim()) {
-      setError('Password is required');
+      setError(t('auth.errorPasswordRequired', 'Password is required'));
       return false;
     }
 
     if (!isLogin) {
       if (!name.trim()) {
-        setError('Name is required');
+        setError(t('auth.errorNameRequired', 'Name is required'));
         return false;
       }
-
       if (!phone.trim()) {
-        setError('Phone number is required');
+        setError(t('auth.errorPhoneRequired', 'Phone number is required'));
         return false;
       }
-
       if (password !== confirmPassword) {
-        setError('Passwords do not match');
+        setError(t('auth.errorPasswordMismatch', 'Passwords do not match'));
         return false;
       }
-
       if (password.length < 6) {
-        setError('Password must be at least 6 characters');
+        setError(t('auth.errorPasswordShort', 'Password must be at least 6 characters'));
         return false;
       }
     }
@@ -103,32 +102,27 @@ const AuthScreen: React.FC = () => {
   };
 
   const handleAuth = async () => {
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
     setError(null);
 
     try {
       if (isLogin) {
-        // Login
         const response = await authService.login({
           email: email.trim(),
           password: password,
           roles: 'client',
         });
-
         await finishClientSession(response);
       } else {
-        // Register
         const response = await authService.register({
           name: name.trim(),
           email: email.trim(),
           phone: phone.trim(),
           password: password,
           password_confirmation: confirmPassword,
-          role: selectedRole, // Dynamic role from route params
+          role: selectedRole,
         });
 
         const regRole =
@@ -144,9 +138,7 @@ const AuthScreen: React.FC = () => {
           return;
         }
 
-        // Get the mapped user from storage
         const appUser = await authService.getStoredUser();
-        
         if (appUser) {
           setUser(appUser);
           setAuthenticated(true);
@@ -154,175 +146,213 @@ const AuthScreen: React.FC = () => {
         }
       }
     } catch (err: any) {
-      console.error('Auth error:', err);
-      
-      // Handle error response
-      const errorMessage = 
-        err.response?.data?.message || 
-        err.message || 
-        (isLogin ? 'Login failed. Please try again.' : 'Registration failed. Please try again.');
-      
+      const errorMessage =
+        err.response?.data?.message ||
+        err.message ||
+        (isLogin
+          ? t('auth.loginFailed', 'Login failed. Please try again.')
+          : t('auth.signupFailed', 'Registration failed. Please try again.'));
       setError(errorMessage);
       Alert.alert(
-        isLogin ? 'Login Error' : 'Registration Error',
+        isLogin ? t('auth.loginError', 'Login Error') : t('auth.signupError', 'Registration Error'),
         errorMessage,
-        [{ text: 'OK' }]
+        [{ text: t('common.ok', 'OK') }]
       );
     } finally {
       setLoading(false);
     }
   };
 
+  const switchMode = (login: boolean) => {
+    setIsLogin(login);
+    setError(null);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      <ScrollView contentContainerStyle={styles.content}>
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => {
-            // RoleSelection uses replace() to open Auth, so goBack() does not return to role selection.
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'RoleSelection' }],
-            });
-          }}
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surfaceLight} />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Logo and Title */}
-      <View style={styles.logoContainer}>
-        <View style={styles.logo}>
-          <Image source={require('../../assets/logo.png')} style={styles.logoImage} />
-        </View>
-       
-        <Text style={styles.subtitle}>
-          {isLogin ? t('auth.welcome') : t('auth.createAccount')}
-        </Text>
-      </View>
-
-      {/* Form */}
-      <View style={styles.form}>
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
+          <View style={styles.topBar}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() =>
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'RoleSelection' }],
+                })
+              }
+              accessibilityLabel={t('common.back', 'Back')}
+            >
+              <Ionicons name="arrow-back" size={22} color={COLORS.primary} />
+            </TouchableOpacity>
           </View>
-        )}
 
-        {!isLogin && (
-          <Input
-            label={t('auth.nameLabel')}
-            placeholder={t('auth.namePlaceholder')}
-            value={name}
-            onChangeText={(text) => {
-              setName(text);
-              setError(null);
-            }}
-            leftIcon="person-outline"
-          />
-        )}
-
-        <Input
-          label={t('auth.emailLabel')}
-          placeholder={t('auth.emailPlaceholder')}
-          value={email}
-          onChangeText={(text) => {
-            setEmail(text);
-            setError(null);
-          }}
-          keyboardType="email-address"
-          leftIcon="mail-outline"
-        />
-
-        {!isLogin && (
-          <Input
-            label={t('auth.phoneLabel')}
-            placeholder={t('auth.phonePlaceholder')}
-            value={phone}
-            onChangeText={(text) => {
-              setPhone(text);
-              setError(null);
-            }}
-            keyboardType="phone-pad"
-            leftIcon="call-outline"
-          />
-        )}
-
-        <Input
-          label={t('auth.passwordLabel')}
-          placeholder={t('auth.passwordPlaceholder')}
-          value={password}
-          onChangeText={(text) => {
-            setPassword(text);
-            setError(null);
-          }}
-          secureTextEntry
-          leftIcon="lock-closed-outline"
-        />
-
-        {!isLogin && (
-          <Input
-            label={t('auth.confirmPasswordLabel')}
-            placeholder={t('auth.confirmPasswordPlaceholder')}
-            value={confirmPassword}
-            onChangeText={(text) => {
-              setConfirmPassword(text);
-              setError(null);
-            }}
-            secureTextEntry
-            leftIcon="lock-closed-outline"
-          />
-        )}
-
-        {!isLogin && selectedRole === 'client' && (
-          <View style={styles.walletTermsBlock}>
-            <Text style={styles.walletTermsHeading}>{t('wallet.termsHeading', 'Wallet terms')}</Text>
-            <Text style={styles.walletTermsParagraph1}>{t('wallet.termsParagraph1')}</Text>
-            <Text style={styles.walletTermsParagraph2}>{t('wallet.termsParagraph2')}</Text>
+          <View style={styles.hero}>
+            <View style={styles.logoRing}>
+              <Image source={require('../../assets/logo.png')} style={styles.logoImage} />
+            </View>
+            <Text style={styles.brandName}>Tandil</Text>
+            <Text style={styles.heroSubtitle}>
+              {isLogin ? t('auth.welcome') : t('auth.createAccount')}
+            </Text>
           </View>
-        )}
 
-        <Button
-          title={isLogin ? t('auth.login') : t('auth.signup')}
-          onPress={handleAuth}
-          loading={loading}
-          style={styles.authButton}
-        />
+          <View style={styles.card}>
+            <View style={styles.segment}>
+              <TouchableOpacity
+                style={[styles.segmentItem, isLogin && styles.segmentItemActive]}
+                onPress={() => switchMode(true)}
+                activeOpacity={0.9}
+              >
+                <Text style={[styles.segmentText, isLogin && styles.segmentTextActive]}>
+                  {t('auth.login')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.segmentItem, !isLogin && styles.segmentItemActive]}
+                onPress={() => switchMode(false)}
+                activeOpacity={0.9}
+              >
+                <Text style={[styles.segmentText, !isLogin && styles.segmentTextActive]}>
+                  {t('auth.signup')}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-        {isLogin && (
-          <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={styles.forgotPasswordText}>{t('auth.forgotPassword')}</Text>
-          </TouchableOpacity>
-        )}
+            {error ? (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={18} color={COLORS.error} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
 
-        {selectedRole === 'client' ? (
-          <ClientSocialLogin
-            disabled={loading}
-            onSuccess={finishClientSession}
-            onError={(msg) => {
-              setError(msg);
-              Alert.alert(isLogin ? t('auth.login') : t('auth.signup'), msg);
-            }}
-          />
-        ) : null}
-      </View>
+            {!isLogin ? (
+              <Input
+                label={t('auth.nameLabel')}
+                placeholder={t('auth.namePlaceholder')}
+                value={name}
+                onChangeText={(text) => {
+                  setName(text);
+                  setError(null);
+                }}
+                leftIcon="person-outline"
+              />
+            ) : null}
 
-      {/* Switch Mode */}
-      <View style={styles.switchContainer}>
-        <Text style={styles.switchText}>
-          {isLogin ? t('auth.dontHaveAccount') : t('auth.alreadyHaveAccount')}
-        </Text>
-        <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
-          <Text style={styles.switchButton}>
-            {isLogin ? t('auth.signup') : t('auth.login')}
-          </Text>
-        </TouchableOpacity>
-      </View>
-      </ScrollView>
+            <Input
+              label={t('auth.emailLabel')}
+              placeholder={t('auth.emailPlaceholder')}
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                setError(null);
+              }}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              leftIcon="mail-outline"
+            />
+
+            {!isLogin ? (
+              <Input
+                label={t('auth.phoneLabel')}
+                placeholder={t('auth.phonePlaceholder')}
+                value={phone}
+                onChangeText={(text) => {
+                  setPhone(text);
+                  setError(null);
+                }}
+                keyboardType="phone-pad"
+                leftIcon="call-outline"
+              />
+            ) : null}
+
+            <Input
+              label={t('auth.passwordLabel')}
+              placeholder={t('auth.passwordPlaceholder')}
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                setError(null);
+              }}
+              secureTextEntry
+              leftIcon="lock-closed-outline"
+            />
+
+            {!isLogin ? (
+              <Input
+                label={t('auth.confirmPasswordLabel')}
+                placeholder={t('auth.confirmPasswordPlaceholder')}
+                value={confirmPassword}
+                onChangeText={(text) => {
+                  setConfirmPassword(text);
+                  setError(null);
+                }}
+                secureTextEntry
+                leftIcon="lock-closed-outline"
+              />
+            ) : null}
+
+            {!isLogin && selectedRole === 'client' ? (
+              <View style={styles.walletTermsBlock}>
+                <Text style={styles.walletTermsHeading}>
+                  {t('wallet.termsHeading', 'Wallet terms')}
+                </Text>
+                <Text style={styles.walletTermsParagraph1}>{t('wallet.termsParagraph1')}</Text>
+                <Text style={styles.walletTermsParagraph2}>{t('wallet.termsParagraph2')}</Text>
+              </View>
+            ) : null}
+
+            <Button
+              title={isLogin ? t('auth.login') : t('auth.signup')}
+              onPress={handleAuth}
+              loading={loading}
+              size="medium"
+              style={styles.authButton}
+              textStyle={styles.authButtonText}
+            />
+
+            {selectedRole === 'client' ? (
+              <TouchableOpacity
+                style={styles.guestButton}
+                onPress={() => navigateToGuestUserApp(navigation)}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="storefront-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.guestButtonText}>
+                  {t('auth.continueAsGuest', 'Continue without signing in')}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {selectedRole === 'client' ? (
+              <>
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerLabel}>{t('auth.orContinueWith')}</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+                <ClientSocialLogin
+                  disabled={loading}
+                  onSuccess={finishClientSession}
+                  onError={(msg) => {
+                    setError(msg);
+                    Alert.alert(isLogin ? t('auth.login') : t('auth.signup'), msg);
+                  }}
+                />
+              </>
+            ) : null}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -330,54 +360,135 @@ const AuthScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceLight,
   },
-  content: {
+  flex: {
+    flex: 1,
+  },
+  scrollContent: {
     flexGrow: 1,
-    padding: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xxl,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.xl,
-  },
-  backButton: {
-    padding: SPACING.sm,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: SPACING.xxl,
-  },
-  logo: {
-    width: 120,
-    height: 120,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+  topBar: {
+    paddingTop: SPACING.sm,
     marginBottom: SPACING.md,
   },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  hero: {
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  logoRing: {
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
+    borderWidth: 3,
+    borderColor: COLORS.background,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
+  },
   logoImage: {
-    width: 120,
-    height: 120,
+    width: 88,
+    height: 88,
     resizeMode: 'contain',
   },
-  title: {
-    fontSize: FONT_SIZES.xxxl,
+  brandName: {
+    fontSize: FONT_SIZES.xxl,
     fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
+    color: COLORS.primary,
+    letterSpacing: 0.5,
   },
-  subtitle: {
-    fontSize: FONT_SIZES.lg,
+  heroSubtitle: {
+    marginTop: SPACING.xs,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  card: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  segment: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: 4,
+    marginBottom: SPACING.lg,
+  },
+  segmentItem: {
+    flex: 1,
+    paddingVertical: SPACING.sm + 2,
+    alignItems: 'center',
+    borderRadius: BORDER_RADIUS.md,
+  },
+  segmentItemActive: {
+    backgroundColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  segmentText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.textSecondary,
   },
-  form: {
-    marginBottom: SPACING.xl,
+  segmentTextActive: {
+    color: COLORS.background,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    backgroundColor: '#FFF5F5',
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  errorText: {
+    flex: 1,
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
   },
   walletTermsBlock: {
     marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
     padding: SPACING.md,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.surfaceLight,
     borderRadius: BORDER_RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -400,44 +511,53 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   authButton: {
-    marginTop: SPACING.lg,
+    marginTop: SPACING.sm,
+    minHeight: 44,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: BORDER_RADIUS.lg,
   },
-  forgotPassword: {
-    alignItems: 'center',
-    marginTop: SPACING.md,
-  },
-  forgotPasswordText: {
+  authButtonText: {
     fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.medium,
-  },
-  switchContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  switchText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  switchButton: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
     fontWeight: FONT_WEIGHTS.semiBold,
   },
-  errorContainer: {
-    backgroundColor: '#FFEBEE',
-    padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
-    marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.error,
+  guestButton: {
+    marginTop: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    minHeight: 44,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.surfaceLight,
   },
-  errorText: {
-    color: COLORS.error,
+  guestButtonText: {
     fontSize: FONT_SIZES.sm,
-    textAlign: 'center',
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerLabel: {
+    marginHorizontal: SPACING.md,
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHTS.medium,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
 });
 
-export default AuthScreen; 
+export default AuthScreen;

@@ -9,8 +9,12 @@ const { expo } = appJson;
 
 // EAS Build sets EAS_BUILD_PROFILE (e.g. 'preview', 'production'). Use it for Sentry environment.
 const easBuildProfile = process.env.EAS_BUILD_PROFILE || 'development';
-const stripeMerchantIdentifier =
-  process.env.EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER || expo.extra?.stripeMerchantIdentifier || '';
+const enableApplePay =
+  process.env.EXPO_PUBLIC_ENABLE_APPLE_PAY === 'true' ||
+  process.env.EXPO_PUBLIC_ENABLE_APPLE_PAY === '1';
+const stripeMerchantIdentifier = enableApplePay
+  ? process.env.EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER || expo.extra?.stripeMerchantIdentifier || ''
+  : '';
 
 const basePlugins = Array.isArray(expo.plugins) ? expo.plugins : [];
 const pluginsWithoutStripe = basePlugins.filter((p) => {
@@ -31,6 +35,7 @@ module.exports = {
     ...expo,
     ios: {
       ...expo.ios,
+      buildNumber: '31',
       usesAppleSignIn: true,
       entitlements: {
         ...(expo.ios?.entitlements || {}),
@@ -55,9 +60,10 @@ module.exports = {
     extra: {
       ...expo.extra,
       easBuildProfile,
+      enableApplePay,
       stripePublishableKey:
         process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || expo.extra?.stripePublishableKey || '',
-      stripeMerchantIdentifier,
+      stripeMerchantIdentifier: enableApplePay ? stripeMerchantIdentifier : '',
       googleClientId:
         process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || expo.extra?.googleClientId || expo.extra?.googleIosClientId || '',
       googleExpoClientId: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID || expo.extra?.googleExpoClientId || '',

@@ -19,6 +19,7 @@ import { getCart, removeCartItem, updateCartItemQuantity, getOrderSummary, CartA
 import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
 import { useIsAuthenticated } from '../../store';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
+import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import {
   meetsMinimumOrderAmount,
   MIN_ORDER_AMOUNT_AED,
@@ -278,7 +279,7 @@ const CartScreen: React.FC = () => {
           <Text style={styles.emptyStateText}>{t('cart.loginToViewBody', { defaultValue: 'Sign in to see items you have added.' })}</Text>
           <TouchableOpacity
             style={styles.shopButton}
-            onPress={() => navigation.navigate('Main' as never, { screen: 'Profile' } as never)}
+            onPress={() => navigateToClientAuth(navigation)}
           >
             <Text style={styles.shopButtonText}>{t('auth.login', 'Log in')}</Text>
           </TouchableOpacity>

@@ -1,5 +1,6 @@
 // API Configuration using expo-constants
 import Constants from 'expo-constants';
+import { ENABLE_APPLE_PAY } from './payments';
 
 // Get API base URL from app.json extra config
 // Works in both development and production builds
@@ -55,8 +56,11 @@ export function getStripePublishableKey(): string {
   return fromAppJson;
 }
 
-/** Stripe Apple Pay merchant identifier (merchant.com.example.app). */
+/** Stripe Apple Pay merchant identifier — empty when Apple Pay is disabled for App Store. */
 export function getStripeMerchantIdentifier(): string {
+  if (!ENABLE_APPLE_PAY) {
+    return '';
+  }
   try {
     if (
       Constants.expoConfig?.extra?.stripeMerchantIdentifier != null &&

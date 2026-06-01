@@ -255,7 +255,6 @@ const ClientSocialLogin: React.FC<ClientSocialLoginProps> = ({ onSuccess, onErro
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.dividerText}>{t('auth.orContinueWith')}</Text>
       <View style={styles.buttonsRow}>
         {googleRequestConfig ? (
           <GoogleSignInButton
@@ -302,13 +301,7 @@ const ClientSocialLogin: React.FC<ClientSocialLoginProps> = ({ onSuccess, onErro
 
 const styles = StyleSheet.create({
   wrap: {
-    marginTop: SPACING.lg,
-  },
-  dividerText: {
-    textAlign: 'center',
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
+    marginTop: SPACING.xs,
   },
   hintText: {
     marginTop: SPACING.sm,
@@ -326,19 +319,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.md,
-    gap: SPACING.xs,
-    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    gap: SPACING.sm,
+    backgroundColor: COLORS.surfaceLight,
   },
   socialButtonDisabled: {
     opacity: 0.55,
   },
   socialButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
   },
 });

@@ -42,8 +42,8 @@ const RoleSelectionScreen: React.FC = () => {
     setTimeout(() => {
       switch (role) {
         case 'user':
-          console.log('RoleSelectionScreen: Navigating to Auth (Client)...');
-          navigation.replace('Auth', { role: 'client' });
+          console.log('RoleSelectionScreen: Navigating to UserApp (guest browse)...');
+          navigation.replace('UserApp');
           break;
         case 'technician':
           console.log('RoleSelectionScreen: Navigating to TechnicianApp (Field Worker)...');

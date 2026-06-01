@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { shopService, ShopProduct } from '../../services/shopService';
 import { addCartItem } from '../../services/cartService';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
+import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import { buildFullImageUrl } from '../../config/api';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=800&q=60';
@@ -138,7 +139,7 @@ const StoreScreen: React.FC = () => {
         t('product.loginToAddToCart', { defaultValue: 'Please log in to add items to your cart.' }),
         [
           { text: t('common.cancel', 'Cancel'), style: 'cancel' },
-          { text: t('auth.login', 'Log in'), onPress: () => navigation.navigate('Main', { screen: 'Profile' }) }
+          { text: t('auth.login', 'Log in'), onPress: () => navigateToClientAuth(navigation) }
         ]
       );
       return;

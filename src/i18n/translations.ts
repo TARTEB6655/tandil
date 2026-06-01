@@ -104,6 +104,7 @@ export const en = {
     confirmPasswordPlaceholder: 'Confirm your password',
     login: 'Login',
     signup: 'Sign Up',
+    continueAsGuest: 'Continue without signing in',
     forgotPassword: 'Forgot Password?',
     orContinueWith: 'Or continue with',
     google: 'Google',
@@ -361,6 +362,8 @@ export const en = {
     helpSupport: 'Help & Support',
     settings: 'Settings',
     logout: 'Logout',
+    guestTitle: 'Guest',
+    guestSubtitle: 'Browse the shop and services without an account',
     userNameDefault: 'User Name',
     emailDefault: 'user@example.com',
     about: {
@@ -1975,7 +1978,7 @@ export const en = {
       },
       {
         q: 'What payment methods do you accept?',
-        a: 'We accept credit cards (Visa, Mastercard, American Express), cash on delivery, and digital wallets (Apple Pay, Google Pay). All payments are processed securely.',
+        a: 'We accept credit and debit cards (Visa, Mastercard, American Express) via secure Stripe checkout. Cash on delivery may be available for some orders. All payments are processed securely.',
       },
       {
         q: 'How long does a typical service take?',
