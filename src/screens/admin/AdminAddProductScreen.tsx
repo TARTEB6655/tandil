@@ -24,6 +24,9 @@ import { Button } from '../../components/common/Button';
 import { adminService, AdminCategory, AdminService } from '../../services/adminService';
 import { setPendingProductImage } from './pendingProductImage';
 import { compressImageForUpload, compressImagesForUpload } from '../../utils/compressImage';
+import ProductCustomizationBuilder from '../../components/admin/ProductCustomizationBuilder';
+import type { ProductCustomizationConfig } from '../../types/productCustomization';
+import { setProductCustomization } from '../../services/productCustomizationService';
 
 const STATUS_VALUES = ['active', 'draft', 'archived'] as const;
 const WEIGHT_UNITS = ['kg', 'g', 'lb', 'oz'] as const;
@@ -56,6 +59,7 @@ const AdminAddProductScreen: React.FC = () => {
   const [services, setServices] = useState<AdminService[]>([]);
   const [pickingMain, setPickingMain] = useState(false);
   const [pickingExtra, setPickingExtra] = useState(false);
+  const [customizationConfig, setCustomizationConfig] = useState<ProductCustomizationConfig>({ groups: [] });
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -249,6 +253,8 @@ const AdminAddProductScreen: React.FC = () => {
             is_featured: isFeatured ? 1 : 0,
             sku: sku.trim(),
             handle: handle.trim(),
+            product_type: customizationConfig.groups.length > 0 ? 'variable' : 'simple',
+            customization: customizationConfig,
             ...timingFields,
             mainImage: mainFile,
             extraImages: extraFiles.map((i) => ({ uri: i.uri })),
@@ -269,6 +275,8 @@ const AdminAddProductScreen: React.FC = () => {
           is_featured: isFeatured ? 1 : 0,
           sku: sku.trim(),
           handle: handle.trim(),
+          product_type: customizationConfig.groups.length > 0 ? 'variable' : 'simple',
+          customization: customizationConfig,
           ...timingFields,
         });
         createdData = res.data;
@@ -289,6 +297,9 @@ const AdminAddProductScreen: React.FC = () => {
       const createdProduct = (createdData as { data?: { id: number } })?.data;
       if (createdProduct?.id != null && mainImage) {
         setPendingProductImage(createdProduct.id, mainImage.uri);
+      }
+      if (createdProduct?.id != null) {
+        await setProductCustomization(createdProduct.id, customizationConfig);
       }
 
       Alert.alert(
@@ -311,6 +322,7 @@ const AdminAddProductScreen: React.FC = () => {
               setJobDuration('');
               setMainImage(null);
               setExtraImages([]);
+              setCustomizationConfig({ groups: [] });
               setErrors({});
               navigation.goBack();
             },
@@ -560,6 +572,13 @@ const AdminAddProductScreen: React.FC = () => {
                 </View>
               </View>
             </View>
+          </View>
+
+          <View style={styles.section}>
+            <ProductCustomizationBuilder
+              value={customizationConfig}
+              onChange={setCustomizationConfig}
+            />
           </View>
 
           <View style={styles.section}>

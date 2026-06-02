@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  TextInput,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,9 +18,9 @@ import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { adminService, AdminProduct } from '../../services/adminService';
 import { getProductImageUri } from '../../utils/productImage';
-import { getPendingProductImage, clearPendingProductImage } from './pendingProductImage';
+import { getPendingProductImage } from './pendingProductImage';
 
-const PER_PAGE = 15;
+const PER_PAGE = 10;
 
 // Prefetch first N image URIs with expo-image (disk cache) so list shows images faster
 const PREFETCH_COUNT = 15;
@@ -64,22 +65,45 @@ const AdminProductsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fetchProducts = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchDraft, setSearchDraft] = useState('');
+  const isSearching = searchQuery.trim().length > 0;
+
+  const fetchProducts = useCallback(async (
+    targetPage = 1,
+    mode: 'initial' | 'refresh' = 'initial',
+    queryOverride?: string
+  ) => {
+    if (mode === 'refresh') setRefreshing(true);
     else setLoading(true);
     setError(null);
     try {
+      const q = (queryOverride ?? searchQuery).trim();
       const response = await adminService.getProducts({
-        search: '',
+        search: q,
+        q,
         category_id: '',
         filter: 'all',
         per_page: PER_PAGE,
-        page: 1,
+        page: targetPage,
       });
-      // API returns { data: [...], pagination } – use response.data as the list
-      const list = Array.isArray(response.data) ? response.data : response.data?.data ?? [];
+
+      const list = Array.isArray(response.data) ? response.data : [];
+      const p = response.pagination ?? {
+        current_page: targetPage,
+        last_page: targetPage,
+        per_page: PER_PAGE,
+        total: list.length,
+      };
+
       setProducts(list);
       prefetchProductImages(list);
+      setPage(Number(p.current_page || targetPage));
+      setLastPage(Number(p.last_page || targetPage));
+      setTotal(Number(p.total || 0));
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || 'Failed to load products');
       setProducts([]);
@@ -87,11 +111,11 @@ const AdminProductsScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [searchQuery]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchProducts();
+      fetchProducts(1, 'initial');
     }, [fetchProducts])
   );
 
@@ -120,6 +144,7 @@ const AdminProductsScreen: React.FC = () => {
             try {
               await adminService.deleteProduct(item.id);
               setProducts((prev) => prev.filter((p) => p.id !== item.id));
+              setTotal((prev) => Math.max(0, prev - 1));
             } catch (err: any) {
               const msg =
                 err.response?.data?.message ??
@@ -176,15 +201,71 @@ const AdminProductsScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('admin.dashboard.products', 'Products')}</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>{t('admin.dashboard.products', 'Products')}</Text>
+          <Text style={styles.headerSubTitle}>
+            {t('admin.productsAdmin.totalCount', {
+              defaultValue: '{{count}} items',
+              count: total,
+            })}
+          </Text>
+        </View>
         <TouchableOpacity
           style={styles.addBtn}
           onPress={() => navigation.navigate('AdminAddProduct' as never)}
+          activeOpacity={0.85}
         >
-          <Ionicons name="add" size={24} color={COLORS.primary} />
+          <Ionicons name="add" size={20} color={COLORS.background} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.searchBarWrap}>
+        <View style={styles.searchInputWrap}>
+          <Ionicons name="search-outline" size={18} color={COLORS.textSecondary} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('admin.productsAdmin.searchPlaceholder', { defaultValue: 'Search product name...' })}
+            value={searchDraft}
+            onChangeText={(txt) => {
+              setSearchDraft(txt);
+              if (txt.trim() === '' && searchQuery !== '') {
+                setSearchQuery('');
+                fetchProducts(1, 'initial', '');
+              }
+            }}
+            returnKeyType="search"
+            onSubmitEditing={() => {
+              const q = searchDraft.trim();
+              setSearchQuery(q);
+              fetchProducts(1, 'initial', q);
+            }}
+            placeholderTextColor={COLORS.textSecondary}
+          />
+          {searchDraft.length > 0 ? (
+            <TouchableOpacity
+              onPress={() => {
+                setSearchDraft('');
+                setSearchQuery('');
+                fetchProducts(1, 'initial', '');
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close-circle" size={18} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        <TouchableOpacity
+          style={styles.searchBtn}
+          onPress={() => {
+            const q = searchDraft.trim();
+            setSearchQuery(q);
+            fetchProducts(1, 'initial', q);
+          }}
+        >
+          <Text style={styles.searchBtnText}>{t('common.search', { defaultValue: 'Search' })}</Text>
         </TouchableOpacity>
       </View>
 
@@ -212,7 +293,73 @@ const AdminProductsScreen: React.FC = () => {
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => fetchProducts(true)} colors={[COLORS.primary]} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => fetchProducts(1, 'refresh')} colors={[COLORS.primary]} />
+          }
+          ListHeaderComponent={
+            <View style={styles.paginationHeader}>
+              <Text style={styles.paginationHeaderText}>
+                {isSearching
+                  ? t('admin.productsAdmin.searchMeta', {
+                      defaultValue: 'Search results: {{total}} products',
+                      total,
+                    })
+                  : t('admin.productsAdmin.pageMeta', {
+                      defaultValue: 'Page {{page}} of {{lastPage}} • {{total}} products',
+                      page,
+                      lastPage,
+                      total,
+                    })}
+              </Text>
+            </View>
+          }
+          ListFooterComponent={
+            isSearching ? null : (
+              <View style={styles.paginationControls}>
+                <TouchableOpacity
+                  style={[styles.pageBtn, page <= 1 && styles.pageBtnDisabled]}
+                  onPress={() => page > 1 && fetchProducts(page - 1, 'initial')}
+                  disabled={page <= 1 || loading || refreshing}
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={16}
+                    color={page <= 1 ? COLORS.textSecondary : COLORS.primary}
+                  />
+                  <Text
+                    style={[
+                      styles.pageBtnText,
+                      page <= 1 && styles.pageBtnTextDisabled,
+                    ]}
+                  >
+                    {t('common.previous', { defaultValue: 'Previous' })}
+                  </Text>
+                </TouchableOpacity>
+
+                <Text style={styles.pageIndicator}>
+                  {page}/{Math.max(1, lastPage)}
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.pageBtn, page >= lastPage && styles.pageBtnDisabled]}
+                  onPress={() => page < lastPage && fetchProducts(page + 1, 'initial')}
+                  disabled={page >= lastPage || loading || refreshing}
+                >
+                  <Text
+                    style={[
+                      styles.pageBtnText,
+                      page >= lastPage && styles.pageBtnTextDisabled,
+                    ]}
+                  >
+                    {t('common.next', { defaultValue: 'Next' })}
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={page >= lastPage ? COLORS.textSecondary : COLORS.primary}
+                  />
+                </TouchableOpacity>
+              </View>
+            )
           }
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
@@ -234,14 +381,93 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.background,
   },
-  backBtn: { padding: SPACING.xs },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+  },
+  headerCenter: {
+    flex: 1,
+    marginHorizontal: SPACING.md,
+  },
   headerTitle: { fontSize: FONT_SIZES.lg, fontWeight: FONT_WEIGHTS.bold, color: COLORS.text },
-  addBtn: { padding: SPACING.xs },
+  headerSubTitle: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  addBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+  },
+  searchBarWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.sm,
+  },
+  searchInputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: SPACING.sm,
+    minHeight: 42,
+  },
+  searchInput: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: FONT_SIZES.sm,
+    paddingVertical: 8,
+  },
+  searchBtn: {
+    minHeight: 42,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchBtnText: {
+    color: COLORS.background,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
   listContent: { padding: SPACING.lg, paddingBottom: SPACING.xl * 2 },
+  paginationHeader: {
+    marginBottom: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  paginationHeaderText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHTS.medium,
+  },
   centerWrap: {
     flex: 1,
     justifyContent: 'center',
@@ -261,37 +487,54 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  left: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  left: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: SPACING.sm },
   productImage: {
-    width: 48,
-    height: 48,
+    width: 56,
+    height: 56,
     borderRadius: BORDER_RADIUS.md,
     backgroundColor: COLORS.border,
   },
   iconCircle: {
-    width: 48,
-    height: 48,
+    width: 56,
+    height: 56,
     borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   productInfo: { marginLeft: SPACING.md, flex: 1 },
-  name: { color: COLORS.text, fontWeight: FONT_WEIGHTS.semiBold, fontSize: FONT_SIZES.md, marginBottom: 2 },
+  name: {
+    color: COLORS.text,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    fontSize: FONT_SIZES.md,
+    marginBottom: 4,
+    lineHeight: 20,
+  },
   meta: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, marginBottom: 1 },
   categoryTag: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.primary,
-    marginTop: 2,
+    marginTop: 4,
+    backgroundColor: COLORS.primary + '14',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: BORDER_RADIUS.sm,
+    overflow: 'hidden',
   },
-  actions: { flexDirection: 'row', gap: 8 },
+  actions: { flexDirection: 'column', gap: 8 },
   smallBtn: {
     width: 36,
     height: 36,
@@ -300,7 +543,50 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: COLORS.background,
+  },
+  paginationControls: {
+    marginTop: SPACING.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+  },
+  pageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
     backgroundColor: COLORS.surface,
+    minWidth: 108,
+  },
+  pageBtnDisabled: {
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+  },
+  pageBtnText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.medium,
+  },
+  pageBtnTextDisabled: {
+    color: COLORS.textSecondary,
+  },
+  pageIndicator: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
 });
 

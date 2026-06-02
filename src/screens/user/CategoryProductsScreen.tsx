@@ -20,7 +20,6 @@ import { shopService, ShopProduct, isShopProductInStock } from '../../services/s
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 
 const { width: screenWidth } = Dimensions.get('window');
-const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=60';
 
 interface CategoryProductsScreenProps {
   route: {
@@ -28,7 +27,7 @@ interface CategoryProductsScreenProps {
       category: {
         id: string;
         name: string;
-        image: string;
+        image: string | null;
       };
     };
   };
@@ -42,7 +41,7 @@ const CategoryProductsScreen: React.FC<CategoryProductsScreenProps> = ({ route }
 
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [productCount, setProductCount] = useState(0);
-  const [categoryImage, setCategoryImage] = useState<string>(category.image || FALLBACK_IMAGE);
+  const [categoryImage, setCategoryImage] = useState<string | null>(category.image || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,7 +72,7 @@ const CategoryProductsScreen: React.FC<CategoryProductsScreenProps> = ({ route }
   }, [category.id, t]);
 
   const getProductImage = useCallback((p: ShopProduct) => {
-    return p.image_url ?? (p.main_image as any)?.image_url ?? p.image ?? FALLBACK_IMAGE;
+    return p.image_url ?? (p.main_image as any)?.image_url ?? p.image ?? null;
   }, []);
 
   const toDetailProduct = useCallback((p: ShopProduct) => ({
@@ -90,15 +89,25 @@ const CategoryProductsScreen: React.FC<CategoryProductsScreenProps> = ({ route }
     features: [],
   }), [getProductImage]);
 
-  const ProductImage = ({ uri }: { uri: string }) => (
-    <Image
-      source={{ uri: uri || FALLBACK_IMAGE }}
-      style={styles.productImage}
-      contentFit="cover"
-      transition={200}
-      cachePolicy="disk"
-    />
-  );
+  const ProductImage = ({ uri }: { uri: string | null }) => {
+    if (!uri) {
+      return (
+        <View style={styles.productImageEmpty}>
+          <Ionicons name="image-outline" size={22} color={COLORS.textSecondary} />
+          <Text style={styles.productImageEmptyText}>{t('home.noImage', { defaultValue: 'No image' })}</Text>
+        </View>
+      );
+    }
+    return (
+      <Image
+        source={{ uri }}
+        style={styles.productImage}
+        contentFit="cover"
+        transition={200}
+        cachePolicy="disk"
+      />
+    );
+  };
 
   const renderProductCard = ({ item }: { item: ShopProduct }) => {
     const detailProduct = toDetailProduct(item);
@@ -149,13 +158,20 @@ const CategoryProductsScreen: React.FC<CategoryProductsScreenProps> = ({ route }
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Category Header */}
         <View style={styles.categoryHeader}>
-          <Image
-            source={{ uri: categoryImage || FALLBACK_IMAGE }}
-            style={styles.categoryImage}
-            contentFit="cover"
-            transition={200}
-            cachePolicy="disk"
-          />
+          {categoryImage ? (
+            <Image
+              source={{ uri: categoryImage }}
+              style={styles.categoryImage}
+              contentFit="cover"
+              transition={200}
+              cachePolicy="disk"
+            />
+          ) : (
+            <View style={styles.categoryImageEmpty}>
+              <Ionicons name="image-outline" size={20} color={COLORS.textSecondary} />
+              <Text style={styles.categoryImageEmptyText}>{t('home.noImage', { defaultValue: 'No image' })}</Text>
+            </View>
+          )}
           <View style={styles.categoryInfo}>
             <Text style={styles.categoryTitle}>{category.name}</Text>
             <Text style={styles.productCount}>{productCount} {t('category.products', { defaultValue: 'Products' })}</Text>
@@ -294,6 +310,38 @@ const styles = StyleSheet.create({
   productImage: {
     width: '100%',
     height: '100%',
+  },
+  productImageEmpty: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+  },
+  productImageEmptyText: {
+    marginTop: SPACING.xs,
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+  },
+  categoryImageEmpty: {
+    width: 80,
+    height: 80,
+    borderRadius: BORDER_RADIUS.md,
+    marginRight: SPACING.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+  },
+  categoryImageEmptyText: {
+    marginTop: 2,
+    fontSize: 10,
+    color: COLORS.textSecondary,
   },
   badgeContainer: {
     position: 'absolute',

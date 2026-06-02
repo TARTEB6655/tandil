@@ -55,6 +55,23 @@ export interface ShopProduct {
   created_at?: string;
   updated_at?: string;
   category?: ShopProductCategory | null;
+  option_groups?: Array<{
+    id?: number;
+    name: string;
+    subtitle?: string | null;
+    input_type: 'single' | 'multiple' | string;
+    is_required: boolean;
+    sort_order?: number;
+    options: Array<{
+      id?: number;
+      label: string;
+      subtitle?: string | null;
+      price_modifier?: number;
+      image_path?: string | null;
+      image_url?: string | null;
+      sort_order?: number;
+    }>;
+  }>;
 }
 
 export interface ShopFeaturedProductsResponse {

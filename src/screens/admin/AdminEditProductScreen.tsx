@@ -25,6 +25,12 @@ import { Button } from '../../components/common/Button';
 import { adminService, AdminProduct, AdminCategory, AdminService } from '../../services/adminService';
 import { setPendingProductImage } from './pendingProductImage';
 import { compressImageForUpload, compressImagesForUpload } from '../../utils/compressImage';
+import ProductCustomizationBuilder from '../../components/admin/ProductCustomizationBuilder';
+import type { ProductCustomizationConfig } from '../../types/productCustomization';
+import {
+  getProductCustomization,
+  setProductCustomization,
+} from '../../services/productCustomizationService';
 
 const STATUS_VALUES = ['active', 'draft', 'archived'] as const;
 const WEIGHT_VALUES = ['kg', 'g', 'lb', 'oz'] as const;
@@ -57,6 +63,29 @@ const CurrentProductImage: React.FC<{
 };
 
 type AdminEditProductParams = { product: AdminProduct };
+
+function mapApiOptionGroupsToCustomization(product: AdminProduct | null): ProductCustomizationConfig | null {
+  const groups = (product as any)?.option_groups;
+  if (!Array.isArray(groups) || groups.length === 0) return null;
+  return {
+    groups: groups.map((group: any, groupIndex: number) => ({
+      id: String(group.id ?? `group_${groupIndex}`),
+      title: String(group.name ?? ''),
+      subtitle: typeof group.subtitle === 'string' ? group.subtitle : '',
+      required: Boolean(group.is_required),
+      selectionMode: group.input_type === 'multiple' ? 'multiple' : 'single',
+      options: Array.isArray(group.options)
+        ? group.options.map((opt: any, optionIndex: number) => ({
+            id: String(opt.temp_key ?? opt.id ?? `opt_${groupIndex}_${optionIndex}`),
+            label: String(opt.label ?? ''),
+            subtitle: typeof opt.subtitle === 'string' ? opt.subtitle : '',
+            priceDelta: Number(opt.price_modifier ?? 0),
+            imageUrl: typeof opt.image_url === 'string' ? opt.image_url : '',
+          }))
+        : [],
+    })),
+  };
+}
 
 const AdminEditProductScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -95,6 +124,7 @@ const AdminEditProductScreen: React.FC = () => {
   const [services, setServices] = useState<AdminService[]>([]);
   const [pickingMain, setPickingMain] = useState(false);
   const [pickingExtra, setPickingExtra] = useState(false);
+  const [customizationConfig, setCustomizationConfig] = useState<ProductCustomizationConfig>({ groups: [] });
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -213,6 +243,18 @@ const AdminEditProductScreen: React.FC = () => {
     }, [productId])
   );
 
+  useEffect(() => {
+    if (!productId) return;
+    const fromApi = mapApiOptionGroupsToCustomization(productDetails);
+    if (fromApi && fromApi.groups.length > 0) {
+      setCustomizationConfig(fromApi);
+      return;
+    }
+    getProductCustomization(productId)
+      .then((cfg) => setCustomizationConfig(cfg ?? { groups: [] }))
+      .catch(() => setCustomizationConfig({ groups: [] }));
+  }, [productId, productDetails]);
+
   const pickMainImageFromDevice = async () => {
     if (pickingMain) return;
     setPickingMain(true);
@@ -328,6 +370,8 @@ const AdminEditProductScreen: React.FC = () => {
         handle: handle.trim(),
         estimated_arrival: estimatedArrival.trim(),
         job_duration: jobDuration.trim(),
+        product_type: customizationConfig.groups.length > 0 ? 'variable' : 'simple',
+        customization: customizationConfig,
         image_ids_to_remove: removedGalleryImageIds.length > 0 ? removedGalleryImageIds : undefined,
       };
 
@@ -374,6 +418,7 @@ const AdminEditProductScreen: React.FC = () => {
       if (mainImage) {
         setPendingProductImage(productId, mainImage.uri);
       }
+      await setProductCustomization(productId, customizationConfig);
 
       // Keep local productDetails in sync with saved is_featured so toggle state is correct
       setProductDetails((prev) =>
@@ -669,6 +714,13 @@ const AdminEditProductScreen: React.FC = () => {
                 </View>
               </View>
             </View>
+          </View>
+
+          <View style={styles.section}>
+            <ProductCustomizationBuilder
+              value={customizationConfig}
+              onChange={setCustomizationConfig}
+            />
           </View>
 
           <View style={styles.section}>

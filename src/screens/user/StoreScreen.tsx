@@ -22,8 +22,6 @@ import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import { buildFullImageUrl } from '../../config/api';
 
-const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=800&q=60';
-
 type CategoryItem = { id: string; name: string; imageUri: string | null };
 
 const StoreScreen: React.FC = () => {
@@ -40,7 +38,7 @@ const StoreScreen: React.FC = () => {
   const { count: cartItemCount, refresh: refreshCartBadge } = useCartBadgeCount();
 
   const getProductImage = useCallback((p: ShopProduct) => {
-    return p.image_url ?? (p.main_image as any)?.image_url ?? p.image ?? FALLBACK_IMAGE;
+    return p.image_url ?? (p.main_image as any)?.image_url ?? p.image ?? null;
   }, []);
 
   const toDetailProduct = useCallback((p: ShopProduct) => ({
@@ -217,7 +215,14 @@ const StoreScreen: React.FC = () => {
         onPress={() => navigation.navigate('ProductDetail', { product: detail })}
       >
         <View style={styles.productImageContainer}>
-          <Image source={{ uri: imageUri || FALLBACK_IMAGE }} style={styles.productImage} contentFit="cover" transition={200} cachePolicy="disk" />
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.productImage} contentFit="cover" transition={200} cachePolicy="disk" />
+          ) : (
+            <View style={styles.productImageEmpty}>
+              <Ionicons name="image-outline" size={22} color={COLORS.textSecondary} />
+              <Text style={styles.productImageEmptyText}>{t('home.noImage', { defaultValue: 'No image' })}</Text>
+            </View>
+          )}
           {showDiscount && (
             <View style={styles.discountBadge}>
               <Text style={styles.discountText}>
@@ -499,6 +504,21 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  productImageEmpty: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+  },
+  productImageEmptyText: {
+    marginTop: SPACING.xs,
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
   },
   discountBadge: {
     position: 'absolute',

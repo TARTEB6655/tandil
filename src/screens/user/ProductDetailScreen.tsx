@@ -23,9 +23,9 @@ import { useIsAuthenticated } from '../../store';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { ensureMinimumOrderAmount } from '../../utils/shopOrderMinimum';
 import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
+import type { ProductCustomizationConfig } from '../../types/productCustomization';
 
 const { width: screenWidth } = Dimensions.get('window');
-const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=1200&q=60';
 
 export type ProductDetailDisplay = {
   id: string;
@@ -55,8 +55,8 @@ function shopProductToDisplay(p: ShopProduct | null): ProductDetailDisplay | nul
   if (!p) return null;
   const priceNum = typeof p.price === 'string' ? parseFloat(p.price) || 0 : p.price;
   const compareNum = typeof p.compare_at_price === 'string' ? parseFloat(p.compare_at_price) || 0 : (p.compare_at_price ?? 0);
-  const imageUrl = p.image_url ?? (p.main_image as any)?.image_url ?? p.image ?? FALLBACK_IMAGE;
-  const image = typeof imageUrl === 'string' ? imageUrl : FALLBACK_IMAGE;
+  const imageUrl = p.image_url ?? (p.main_image as any)?.image_url ?? p.image ?? '';
+  const image = typeof imageUrl === 'string' ? imageUrl : '';
   return {
     id: String(p.id),
     name: p.name,
@@ -74,6 +74,31 @@ function shopProductToDisplay(p: ShopProduct | null): ProductDetailDisplay | nul
   };
 }
 
+function mapApiOptionGroupsToCustomization(p: ShopProduct | null): ProductCustomizationConfig | null {
+  const groups = p?.option_groups;
+  if (!Array.isArray(groups) || groups.length === 0) return null;
+  return {
+    groups: groups
+      .map((group, groupIndex) => ({
+        id: String(group.id ?? `group_${groupIndex}`),
+        title: String(group.name ?? ''),
+        subtitle: typeof group.subtitle === 'string' ? group.subtitle : '',
+        required: Boolean(group.is_required),
+        selectionMode: group.input_type === 'multiple' ? 'multiple' : 'single',
+        options: Array.isArray(group.options)
+          ? group.options.map((opt, optionIndex) => ({
+              id: String(opt.id ?? `opt_${groupIndex}_${optionIndex}`),
+              label: String(opt.label ?? ''),
+              subtitle: typeof opt.subtitle === 'string' ? opt.subtitle : '',
+              priceDelta: Number(opt.price_modifier ?? 0),
+              imageUrl: typeof opt.image_url === 'string' ? opt.image_url : '',
+            }))
+          : [],
+      }))
+      .filter((g) => g.options.length > 0),
+  };
+}
+
 const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
@@ -85,6 +110,8 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   const [buyingNow, setBuyingNow] = useState(false);
   const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null);
   const [buyNowOrderTotal, setBuyNowOrderTotal] = useState<number | null>(null);
+  const [customization, setCustomization] = useState<ProductCustomizationConfig | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
   const isAuthenticated = useIsAuthenticated();
   const { count: cartItemCount, refresh: refreshCartBadge } = useCartBadgeCount();
 
@@ -116,6 +143,22 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   useEffect(() => {
     getShopSettings().then(setShopSettings).catch(() => setShopSettings(null));
   }, []);
+
+  useEffect(() => {
+    const cfg = mapApiOptionGroupsToCustomization(apiProduct);
+    setCustomization(cfg);
+    if (!cfg) {
+      setSelectedOptions({});
+      return;
+    }
+    const initialSelected: Record<string, string[]> = {};
+    cfg.groups.forEach((g) => {
+      if (g.required && g.options.length > 0) {
+        initialSelected[g.id] = [g.options[0].id];
+      }
+    });
+    setSelectedOptions(initialSelected);
+  }, [apiProduct]);
 
   useEffect(() => {
     if (!isAuthenticated || !product.inStock) {
@@ -158,6 +201,34 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
       ? buyNowOrderTotal
       : estimatedBuyNowTotal;
   const buyNowButtonLabel = t('product.buyNow', { defaultValue: 'Buy Now' });
+
+  const selectedOptionsExtra = useMemo(() => {
+    if (!customization) return 0;
+    let sum = 0;
+    customization.groups.forEach((group) => {
+      const ids = selectedOptions[group.id] ?? [];
+      ids.forEach((id) => {
+        const item = group.options.find((o) => o.id === id);
+        if (item) sum += item.priceDelta;
+      });
+    });
+    return sum;
+  }, [customization, selectedOptions]);
+
+  const buyNowMinCheckTotalWithOptions = buyNowTotalForMinCheck + selectedOptionsExtra * quantity;
+
+  const toggleOption = (groupId: string, optionId: string, selectionMode: 'single' | 'multiple') => {
+    setSelectedOptions((prev) => {
+      const existing = prev[groupId] ?? [];
+      if (selectionMode === 'single') {
+        return { ...prev, [groupId]: [optionId] };
+      }
+      const next = existing.includes(optionId)
+        ? existing.filter((id) => id !== optionId)
+        : [...existing, optionId];
+      return { ...prev, [groupId]: next };
+    });
+  };
 
   const handleAddToCart = async () => {
     if (!product.inStock) {
@@ -225,7 +296,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
       return;
     }
 
-    if (!ensureMinimumOrderAmount(buyNowTotalForMinCheck, currency, t)) {
+    if (!ensureMinimumOrderAmount(buyNowMinCheckTotalWithOptions, currency, t)) {
       return;
     }
 
@@ -360,13 +431,20 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Product Image */}
         <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: product.image || FALLBACK_IMAGE }}
-            style={styles.productImage}
-            contentFit="cover"
-            transition={200}
-            cachePolicy="disk"
-          />
+          {product.image ? (
+            <Image
+              source={{ uri: product.image }}
+              style={styles.productImage}
+              contentFit="cover"
+              transition={200}
+              cachePolicy="disk"
+            />
+          ) : (
+            <View style={styles.productImageEmpty}>
+              <Ionicons name="image-outline" size={26} color={COLORS.textSecondary} />
+              <Text style={styles.productImageEmptyText}>{t('home.noImage', { defaultValue: 'No image' })}</Text>
+            </View>
+          )}
           {product.badge && (
             <View style={styles.badgeContainer}>
               <Text style={styles.badgeText}>{t(`product.badges.${String(product.badge).toLowerCase().replace(/\s+/g, '')}`, { defaultValue: product.badge })}</Text>
@@ -484,6 +562,70 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
             </View>
           ) : null}
 
+          {customization?.groups?.length ? (
+            <View style={styles.customizationSection}>
+              <Text style={styles.sectionTitle}>
+                {t('product.customizationTitle', { defaultValue: 'Product options' })}
+              </Text>
+              {customization.groups.map((group) => {
+                const chosen = selectedOptions[group.id] ?? [];
+                return (
+                  <View key={group.id} style={styles.customizationGroup}>
+                    <View style={styles.customizationHead}>
+                      <Text style={styles.customizationTitle}>{group.title}</Text>
+                      <Text style={styles.customizationTag}>
+                        {group.required
+                          ? t('product.required', { defaultValue: 'Required' })
+                          : t('product.optional', { defaultValue: 'Optional' })}
+                      </Text>
+                    </View>
+                    {group.subtitle ? (
+                      <Text style={styles.customizationSubtitle}>{group.subtitle}</Text>
+                    ) : null}
+                    {group.options.map((opt) => {
+                      const isSelected = chosen.includes(opt.id);
+                      const priceText =
+                        opt.priceDelta > 0
+                          ? `+${opt.priceDelta.toFixed(2)} ${currency}`
+                          : t('product.free', { defaultValue: 'Free' });
+                      return (
+                        <TouchableOpacity
+                          key={opt.id}
+                          style={[styles.optionRow, isSelected && styles.optionRowSelected]}
+                          onPress={() => toggleOption(group.id, opt.id, group.selectionMode)}
+                        >
+                          <View style={styles.optionCheckWrap}>
+                            <Ionicons
+                              name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                              size={20}
+                              color={isSelected ? COLORS.primary : COLORS.textSecondary}
+                            />
+                          </View>
+                          {opt.imageUrl ? (
+                            <Image
+                              source={{ uri: opt.imageUrl }}
+                              style={styles.optionThumb}
+                              contentFit="cover"
+                            />
+                          ) : null}
+                          <View style={styles.optionTextWrap}>
+                            <Text style={styles.optionName}>{opt.label}</Text>
+                            {opt.subtitle ? (
+                              <Text style={styles.optionSubtitle}>{opt.subtitle}</Text>
+                            ) : null}
+                          </View>
+                          <Text style={[styles.optionPrice, opt.priceDelta <= 0 && styles.optionPriceFree]}>
+                            {priceText}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
           {product.features && product.features.length > 0 ? (
             <View style={styles.featuresSection}>
               <Text style={styles.sectionTitle}>{t('product.features')}</Text>
@@ -543,6 +685,21 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  productImageEmpty: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+  },
+  productImageEmptyText: {
+    marginTop: SPACING.xs,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
   },
   badgeContainer: {
     position: 'absolute',
@@ -693,6 +850,89 @@ const styles = StyleSheet.create({
   },
   descriptionSection: {
     marginBottom: SPACING.lg,
+  },
+  customizationSection: {
+    marginBottom: SPACING.lg,
+  },
+  customizationGroup: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.surface,
+    marginBottom: SPACING.sm,
+  },
+  customizationHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  customizationTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+  },
+  customizationTag: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+  },
+  customizationSubtitle: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.background,
+    marginBottom: SPACING.xs,
+  },
+  optionRowSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '12',
+  },
+  optionCheckWrap: {
+    marginRight: SPACING.sm,
+  },
+  optionThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: BORDER_RADIUS.sm,
+    marginRight: SPACING.sm,
+    backgroundColor: COLORS.border,
+  },
+  optionTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  optionName: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    fontWeight: FONT_WEIGHTS.medium,
+  },
+  optionSubtitle: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  optionPrice: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    marginLeft: SPACING.sm,
+  },
+  optionPriceFree: {
+    color: COLORS.success,
   },
   serviceTimingSection: {
     marginBottom: SPACING.lg,

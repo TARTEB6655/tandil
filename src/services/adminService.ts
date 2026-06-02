@@ -1,4 +1,5 @@
 import apiClient from './api';
+import type { ProductCustomizationConfig } from '../types/productCustomization';
 
 export interface AdminUser {
   id: number;
@@ -418,6 +419,53 @@ export interface AdminWalletClientDetailResponse {
   data?: AdminWalletClientDetailData;
 }
 
+type ProductOptionImageFile = {
+  key: string;
+  uri: string;
+};
+
+function mapCustomizationToApi(customization?: ProductCustomizationConfig | null): {
+  productType?: 'simple' | 'variable';
+  optionGroupsJson?: string;
+  optionImageFiles: ProductOptionImageFile[];
+} {
+  const groups = customization?.groups ?? [];
+  if (groups.length === 0) return { optionImageFiles: [] };
+
+  const optionImageFiles: ProductOptionImageFile[] = [];
+  const apiGroups = groups.map((group, groupIndex) => {
+    const apiOptions = (group.options ?? []).map((option, optionIndex) => {
+      const tempKey = option.id || `opt_${groupIndex}_${optionIndex}`;
+      const rawImage = typeof option.imageUrl === 'string' ? option.imageUrl.trim() : '';
+      if (rawImage && (rawImage.startsWith('file://') || rawImage.startsWith('content://'))) {
+        optionImageFiles.push({ key: tempKey, uri: rawImage });
+      }
+      return {
+        temp_key: tempKey,
+        label: option.label ?? '',
+        subtitle: option.subtitle ?? '',
+        price_modifier: Number(option.priceDelta ?? 0),
+        sort_order: optionIndex,
+      };
+    });
+
+    return {
+      name: group.title ?? '',
+      subtitle: group.subtitle ?? '',
+      input_type: group.selectionMode === 'multiple' ? 'multiple' : 'single',
+      is_required: Boolean(group.required),
+      sort_order: groupIndex,
+      options: apiOptions,
+    };
+  });
+
+  return {
+    productType: 'variable',
+    optionGroupsJson: JSON.stringify(apiGroups),
+    optionImageFiles,
+  };
+}
+
 export const adminService = {
   getUsers: async (params?: { 
     page?: number; 
@@ -640,6 +688,30 @@ export const adminService = {
       { params, timeout: 60000 }
     );
     return response.data;
+  },
+
+  /** GET /admin/dashboard/top-selling-products */
+  getTopSellingProducts: async (params?: {
+    limit?: number;
+    include_unsold?: 0 | 1;
+  }): Promise<{ success: boolean; data: AdminTopSellingProduct[] }> => {
+    const response = await apiClient.get('/admin/dashboard/top-selling-products', {
+      params: {
+        limit: params?.limit ?? 10,
+        include_unsold: params?.include_unsold ?? 1,
+      },
+      timeout: 60000,
+    });
+    const body = response?.data ?? {};
+    const rawList = Array.isArray((body as any)?.data)
+      ? (body as any).data
+      : Array.isArray((body as any)?.products)
+        ? (body as any).products
+        : [];
+    return {
+      success: Boolean((body as any)?.success ?? (body as any)?.status ?? true),
+      data: rawList as AdminTopSellingProduct[],
+    };
   },
 
   /** GET /notifications - authenticated notifications list (admin token supported). */
@@ -1239,12 +1311,22 @@ export const adminService = {
     is_featured?: number; // 0 = no, 1 = show in Featured Products
     estimated_arrival?: string;
     job_duration?: string;
+    product_type?: 'simple' | 'variable';
+    option_groups_json?: string;
+    customization?: ProductCustomizationConfig | null;
   }): Promise<{
     status: boolean;
     message?: string;
     data: AdminProductCreated;
   }> => {
-    const response = await apiClient.post('/admin/products', body, { timeout: 60000 });
+    const { customization, ...rest } = body;
+    const customizationPayload = mapCustomizationToApi(customization);
+    const payload: Record<string, any> = {
+      ...rest,
+      ...(customizationPayload.productType ? { product_type: customizationPayload.productType } : {}),
+      ...(customizationPayload.optionGroupsJson ? { option_groups_json: customizationPayload.optionGroupsJson } : {}),
+    };
+    const response = await apiClient.post('/admin/products', payload, { timeout: 60000 });
     return response.data;
   },
 
@@ -1264,9 +1346,13 @@ export const adminService = {
     is_featured?: number; // 0 = no, 1 = show in Featured Products
     estimated_arrival?: string;
     job_duration?: string;
+    product_type?: 'simple' | 'variable';
+    option_groups_json?: string;
+    customization?: ProductCustomizationConfig | null;
     mainImage: { uri: string };
     extraImages?: { uri: string }[];
   }): Promise<{ status: boolean; message?: string; data: AdminProductCreated }> => {
+    const customizationPayload = mapCustomizationToApi(params.customization);
     const formData = new FormData();
     formData.append('name', params.name);
     if (params.description) formData.append('description', params.description);
@@ -1279,8 +1365,12 @@ export const adminService = {
     if (params.weight_unit) formData.append('weight_unit', params.weight_unit);
     formData.append('sku', params.sku);
     formData.append('handle', params.handle);
+    if (params.product_type) formData.append('product_type', params.product_type);
     if (params.estimated_arrival?.trim()) formData.append('estimated_arrival', params.estimated_arrival.trim());
     if (params.job_duration?.trim()) formData.append('job_duration', params.job_duration.trim());
+    if (params.option_groups_json?.trim()) formData.append('option_groups_json', params.option_groups_json.trim());
+    if (customizationPayload.productType) formData.append('product_type', customizationPayload.productType);
+    if (customizationPayload.optionGroupsJson) formData.append('option_groups_json', customizationPayload.optionGroupsJson);
     if (params.image_urls?.length) {
       formData.append('image_urls', JSON.stringify(params.image_urls));
     }
@@ -1294,6 +1384,13 @@ export const adminService = {
         uri: file.uri,
         type: 'image/jpeg',
         name: `image-${index}.jpg`,
+      } as any);
+    });
+    customizationPayload.optionImageFiles.forEach((file) => {
+      formData.append(`option_images[${file.key}]`, {
+        uri: file.uri,
+        type: 'image/jpeg',
+        name: `${file.key}.jpg`,
       } as any);
     });
     const response = await apiClient.post('/admin/products', formData, { timeout: 300000 });
@@ -1319,9 +1416,19 @@ export const adminService = {
       is_featured?: number; // 0 = no, 1 = show in Featured Products
       estimated_arrival?: string | null;
       job_duration?: string | null;
+      product_type?: 'simple' | 'variable';
+      option_groups_json?: string;
+      customization?: ProductCustomizationConfig | null;
     }
   ): Promise<{ status: boolean; message?: string; updated_fields?: string[]; data: AdminProductCreated }> => {
-    const response = await apiClient.put(`/admin/products/${productId}`, body, { timeout: 60000 });
+    const { customization, ...rest } = body;
+    const customizationPayload = mapCustomizationToApi(customization);
+    const payload: Record<string, any> = {
+      ...rest,
+      ...(customizationPayload.productType ? { product_type: customizationPayload.productType } : {}),
+      ...(customizationPayload.optionGroupsJson ? { option_groups_json: customizationPayload.optionGroupsJson } : {}),
+    };
+    const response = await apiClient.put(`/admin/products/${productId}`, payload, { timeout: 60000 });
     return response.data;
   },
 
@@ -1344,10 +1451,14 @@ export const adminService = {
       is_featured?: number; // 0 = no, 1 = show in Featured Products
       estimated_arrival?: string | null;
       job_duration?: string | null;
+      product_type?: 'simple' | 'variable';
+      option_groups_json?: string;
+      customization?: ProductCustomizationConfig | null;
       mainImage?: { uri: string };
       extraImages?: { uri: string }[];
     }
   ): Promise<{ status: boolean; message?: string; updated_fields?: string[]; data: AdminProductCreated }> => {
+    const customizationPayload = mapCustomizationToApi(params.customization);
     const formData = new FormData();
     if (params.name !== undefined) formData.append('name', params.name);
     if (params.description !== undefined) formData.append('description', params.description ?? '');
@@ -1360,6 +1471,7 @@ export const adminService = {
     if (params.weight_unit) formData.append('weight_unit', params.weight_unit);
     if (params.sku !== undefined) formData.append('sku', params.sku);
     if (params.handle !== undefined) formData.append('handle', params.handle);
+    if (params.product_type !== undefined) formData.append('product_type', params.product_type);
     if (params.estimated_arrival !== undefined && params.estimated_arrival !== null) {
       formData.append('estimated_arrival', params.estimated_arrival);
     }
@@ -1369,6 +1481,11 @@ export const adminService = {
     if (params.image_urls?.length) {
       formData.append('image_urls', JSON.stringify(params.image_urls));
     }
+    if (params.option_groups_json?.trim()) {
+      formData.append('option_groups_json', params.option_groups_json.trim());
+    }
+    if (customizationPayload.productType) formData.append('product_type', customizationPayload.productType);
+    if (customizationPayload.optionGroupsJson) formData.append('option_groups_json', customizationPayload.optionGroupsJson);
     if (params.image_ids_to_remove?.length) {
       formData.append('image_ids_to_remove', JSON.stringify(params.image_ids_to_remove));
     }
@@ -1384,6 +1501,13 @@ export const adminService = {
         uri: file.uri,
         type: 'image/jpeg',
         name: `image-${index}.jpg`,
+      } as any);
+    });
+    customizationPayload.optionImageFiles.forEach((file) => {
+      formData.append(`option_images[${file.key}]`, {
+        uri: file.uri,
+        type: 'image/jpeg',
+        name: `${file.key}.jpg`,
       } as any);
     });
     const response = await apiClient.put(`/admin/products/${productId}`, formData, { timeout: 300000 });
@@ -2033,6 +2157,7 @@ export interface AdminProduct {
   id: number;
   category_id?: number;
   name: string;
+  product_type?: 'simple' | 'variable' | string;
   vendor?: string;
   type?: string;
   sku?: string;
@@ -2054,6 +2179,7 @@ export interface AdminProduct {
   service_id?: number | null;
   estimated_arrival?: string | null;
   job_duration?: string | null;
+  option_groups?: AdminProductOptionGroup[];
 }
 
 // Admin product create response (POST /admin/products – JSON or multipart)
@@ -2061,6 +2187,7 @@ export interface AdminProductCreated {
   id: number;
   name: string;
   description?: string;
+  product_type?: 'simple' | 'variable' | string;
   sku?: string;
   price: string | number;
   stock: number;
@@ -2097,6 +2224,30 @@ export interface AdminProductCreated {
     created_at?: string;
     updated_at?: string;
   }>;
+  option_groups?: AdminProductOptionGroup[];
+  variants?: Array<Record<string, any>>;
+  service_ids?: number[];
+}
+
+export interface AdminProductOption {
+  id?: number;
+  temp_key?: string;
+  label: string;
+  subtitle?: string | null;
+  price_modifier?: number;
+  image_path?: string | null;
+  image_url?: string | null;
+  sort_order?: number;
+}
+
+export interface AdminProductOptionGroup {
+  id?: number;
+  name: string;
+  subtitle?: string | null;
+  input_type: 'single' | 'multiple' | string;
+  is_required: boolean;
+  sort_order?: number;
+  options: AdminProductOption[];
 }
 
 // Reports types
@@ -2179,6 +2330,19 @@ export interface AdminActivity {
   created_at?: string;
   related_id?: number;
   related_type?: string;
+}
+
+export interface AdminTopSellingProduct {
+  product_id: number;
+  product_name: string;
+  product_image_url?: string | null;
+  category_name?: string | null;
+  price?: number | string | null;
+  sales: number;
+  sales_display?: string;
+  revenue?: number | string | null;
+  revenue_formatted?: string;
+  revenue_display?: string;
 }
 
 /** Audience counts on a delivery-stats payload (snake_case keys from API). */

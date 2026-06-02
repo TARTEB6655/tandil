@@ -14,7 +14,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { Image } from 'expo-image';
-import { adminService, AdminActivity, AdminDashboardProfile } from '../../services/adminService';
+import { adminService, AdminActivity, AdminDashboardProfile, AdminTopSellingProduct } from '../../services/adminService';
 
 function getGreetingKey(): 'admin.dashboard.greetingMorning' | 'admin.dashboard.greetingAfternoon' | 'admin.dashboard.greetingEvening' {
   const hour = new Date().getHours();
@@ -69,6 +69,8 @@ const AdminDashboardScreen: React.FC = () => {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [profile, setProfile] = useState<AdminDashboardProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [topProducts, setTopProducts] = useState<AdminTopSellingProduct[]>([]);
+  const [topProductsLoading, setTopProductsLoading] = useState(true);
 
   const fetchStatistics = useCallback(async () => {
     try {
@@ -198,6 +200,18 @@ const AdminDashboardScreen: React.FC = () => {
     }
   }, []);
 
+  const fetchTopSellingProducts = useCallback(async () => {
+    try {
+      setTopProductsLoading(true);
+      const res = await adminService.getTopSellingProducts({ limit: 10, include_unsold: 1 });
+      setTopProducts(Array.isArray(res.data) ? res.data : []);
+    } catch (_) {
+      setTopProducts([]);
+    } finally {
+      setTopProductsLoading(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       fetchStatistics();
@@ -207,7 +221,8 @@ const AdminDashboardScreen: React.FC = () => {
       fetchSupportTicketsCount();
       fetchUnreadNotificationsCount();
       fetchDashboardProfile();
-    }, [fetchStatistics, fetchRecentActivities, fetchPendingReportsCount, fetchNewOrdersCount, fetchSupportTicketsCount, fetchUnreadNotificationsCount, fetchDashboardProfile])
+      fetchTopSellingProducts();
+    }, [fetchStatistics, fetchRecentActivities, fetchPendingReportsCount, fetchNewOrdersCount, fetchSupportTicketsCount, fetchUnreadNotificationsCount, fetchDashboardProfile, fetchTopSellingProducts])
   );
 
   const greetingText = profile?.greeting?.trim() || t(getGreetingKey());
@@ -226,11 +241,7 @@ const AdminDashboardScreen: React.FC = () => {
     [pendingReportsCount, newOrdersCount, supportTicketsCount]
   );
 
-  const topProducts = [
-    { id: 1, name: 'Organic Fertilizer 5kg', sales: 245, revenue: 'AED 22K' },
-    { id: 2, name: 'Drip Irrigation Kit', sales: 189, revenue: 'AED 15K' },
-    { id: 3, name: 'Premium Potting Soil', sales: 167, revenue: 'AED 10K' },
-  ];
+  const topThreeProducts = useMemo(() => topProducts.slice(0, 3), [topProducts]);
 
   const renderActivity = ({ item }: { item: any }) => (
     <View style={styles.activityCard}>
@@ -262,13 +273,24 @@ const AdminDashboardScreen: React.FC = () => {
     </View>
   );
 
-  const renderProduct = ({ item }: { item: any }) => (
+  const renderProduct = ({ item }: { item: AdminTopSellingProduct }) => (
     <View style={styles.productCard}>
+      {item.product_image_url ? (
+        <Image source={{ uri: item.product_image_url }} style={styles.productThumb} contentFit="cover" />
+      ) : (
+        <View style={styles.productThumbPlaceholder}>
+          <Ionicons name="image-outline" size={18} color={COLORS.textSecondary} />
+        </View>
+      )}
       <View style={styles.productInfo}>
-        <Text style={styles.productName}>{item.name}</Text>
-        <Text style={styles.productSales}>{item.sales} {t('admin.dashboard.sales')}</Text>
+        <Text style={styles.productName}>{item.product_name}</Text>
+        <Text style={styles.productSales}>
+          {item.sales_display || `${item.sales ?? 0} ${t('admin.dashboard.sales')}`}
+        </Text>
       </View>
-      <Text style={styles.productRevenue}>{item.revenue}</Text>
+      <Text style={styles.productRevenue}>
+        {item.revenue_formatted || item.revenue_display || String(item.revenue ?? 0)}
+      </Text>
     </View>
   );
 
@@ -661,13 +683,34 @@ const AdminDashboardScreen: React.FC = () => {
 
         {/* Top Products */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('admin.dashboard.topSellingProducts')}</Text>
-          <FlatList
-            data={topProducts}
-            renderItem={renderProduct}
-            keyExtractor={(item) => item.id.toString()}
-            scrollEnabled={false}
-          />
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t('admin.dashboard.topSellingProducts')}</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('AdminTopSellingProducts' as never)}>
+              <Text style={styles.viewAllText}>{t('admin.dashboard.viewAll')}</Text>
+            </TouchableOpacity>
+          </View>
+          {topProductsLoading ? (
+            <View style={styles.activitiesLoading}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={styles.activitiesLoadingText}>
+                {t('common.loading', { defaultValue: 'Loading...' })}
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={topThreeProducts}
+              renderItem={renderProduct}
+              keyExtractor={(item, index) => `${item.product_id}-${index}`}
+              scrollEnabled={false}
+              ListEmptyComponent={
+                <View style={styles.activitiesEmpty}>
+                  <Text style={styles.activitiesEmptyText}>
+                    {t('admin.dashboard.noTopSellingProducts', { defaultValue: 'No top selling products found.' })}
+                  </Text>
+                </View>
+              }
+            />
+          )}
         </View>
 
         {/* Admin Actions */}
@@ -1026,6 +1069,24 @@ const styles = StyleSheet.create({
   },
   productInfo: {
     flex: 1,
+    marginLeft: SPACING.sm,
+  },
+  productThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.border,
+  },
+  productThumbPlaceholder: {
+    width: 52,
+    height: 52,
+    borderRadius: BORDER_RADIUS.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
   },
   productName: {
     fontSize: FONT_SIZES.md,

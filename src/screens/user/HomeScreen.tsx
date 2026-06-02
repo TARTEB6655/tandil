@@ -48,7 +48,7 @@ const HomeScreen: React.FC = () => {
   const flatListRef = useRef<FlatList>(null);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [bannersLoading, setBannersLoading] = useState(true);
-  const [productCategories, setProductCategories] = useState<Array<{ id: string; name: string; image: string; products_count?: number; coming_soon?: boolean }>>([]);
+  const [productCategories, setProductCategories] = useState<Array<{ id: string; name: string; image: string | null; products_count?: number; coming_soon?: boolean }>>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [dashboardServices, setDashboardServices] = useState<PublicService[]>([]);
   const [servicesLoading, setServicesLoading] = useState(true);
@@ -273,7 +273,6 @@ const HomeScreen: React.FC = () => {
   }, []);
 
   // Fetch product categories for Shop by Category (GET /shop/products/categories)
-  const categoryPlaceholderImage = 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=60';
   useEffect(() => {
     let cancelled = false;
     setCategoriesLoading(true);
@@ -284,7 +283,7 @@ const HomeScreen: React.FC = () => {
           const mapped = list.map((c) => ({
             id: String(c.id),
             name: c.name || '',
-            image: c.image_url || (c.image ? buildFullImageUrl(c.image) : categoryPlaceholderImage),
+            image: c.image_url || (c.image ? buildFullImageUrl(c.image) : null),
             products_count: c.products_count ?? 0,
             coming_soon: c.coming_soon ?? false,
           }));
@@ -817,7 +816,7 @@ const HomeScreen: React.FC = () => {
               }}
             >
               <View style={styles.categoryImageContainer}>
-                <HomeCategoryImage uri={category.image} placeholder={categoryPlaceholderImage} />
+                <HomeCategoryImage uri={category.image} />
               </View>
               <Text style={styles.categoryName}>{category.name}</Text>
             </TouchableOpacity>
@@ -1517,6 +1516,25 @@ const styles = StyleSheet.create({
     height: '100%',
     resizeMode: 'cover',
   },
+  categoryImageEmpty: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: COLORS.border,
+  },
+  categoryImageEmptyIcon: {
+    opacity: 0.5,
+  },
+  categoryImageEmptyText: {
+    marginTop: SPACING.xs,
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    opacity: 0.8,
+  },
   categoryName: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.medium,
@@ -1704,14 +1722,20 @@ const styles = StyleSheet.create({
 
 const HomeCategoryImage = React.memo(function HomeCategoryImage({
   uri,
-  placeholder,
 }: {
-  uri: string;
-  placeholder: string;
+  uri: string | null;
 }) {
+  if (!uri) {
+    return (
+      <View style={homeStyles.categoryImageEmpty}>
+        <Ionicons name="image-outline" size={20} color={COLORS.textSecondary} style={homeStyles.categoryImageEmptyIcon} />
+        <Text style={homeStyles.categoryImageEmptyText}>No image</Text>
+      </View>
+    );
+  }
   return (
     <Image
-      source={{ uri: uri || placeholder }}
+      source={{ uri }}
       style={homeStyles.categoryImage}
       contentFit="cover"
       transition={0}
