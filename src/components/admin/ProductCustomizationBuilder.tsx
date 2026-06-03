@@ -125,7 +125,7 @@ export const ProductCustomizationBuilder: React.FC<Props> = ({ value, onChange }
     <View style={styles.card}>
       <View style={styles.headRow}>
         <Text style={styles.title}>
-          {t('admin.addProduct.customizationTitle', { defaultValue: 'Product options (dummy)' })}
+          {t('admin.addProduct.customizationTitle')}
         </Text>
         <TouchableOpacity style={styles.addBtn} onPress={addGroup}>
           <Ionicons name="add-circle-outline" size={18} color={COLORS.background} />
@@ -136,10 +136,7 @@ export const ProductCustomizationBuilder: React.FC<Props> = ({ value, onChange }
       </View>
 
       <Text style={styles.hint}>
-        {t('admin.addProduct.customizationHint', {
-          defaultValue:
-            'Use this for sheep options like packaging, cutting, packing, contains, and weight. Dummy storage now; API can be connected later.',
-        })}
+        {t('admin.addProduct.customizationHint')}
       </Text>
 
       {groups.map((group, index) => (

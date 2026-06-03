@@ -1238,7 +1238,10 @@ export const en = {
       uploadFromDevice: 'Upload from device',
       opening: 'Opening…',
       mainBadge: 'Main',
-      errorNameRequired: 'Product name is required',
+      customizationTitle: 'Product attributes',
+      customizationHint:
+        'Add optional or required choices for this product, such as packaging type, cutting style, weight, or extras. Customers select these on the product page before checkout.',
+      addOptionGroup: 'Add group',
       errorPriceRequired: 'Price is required',
       errorPriceInvalid: 'Enter a valid price',
       errorStockRequired: 'Stock is required',
@@ -4027,6 +4030,10 @@ export const ar = {
       uploadFromDevice: 'رفع من الجهاز',
       opening: 'جارٍ الفتح…',
       mainBadge: 'رئيسية',
+      customizationTitle: 'خصائص المنتج',
+      customizationHint:
+        'أضف خيارات اختيارية أو مطلوبة للمنتج، مثل نوع التغليف أو طريقة التقطيع أو الوزن أو الإضافات. يختارها العميل في صفحة المنتج قبل الدفع.',
+      addOptionGroup: 'إضافة مجموعة',
       errorNameRequired: 'اسم المنتج مطلوب',
       errorPriceRequired: 'السعر مطلوب',
       errorPriceInvalid: 'أدخل سعراً صالحاً',
@@ -6692,6 +6699,10 @@ export const ur = {
       uploadFromDevice: 'ڈیوائس سے اپ لوڈ کریں',
       opening: 'کھولا جا رہا ہے…',
       mainBadge: 'مین',
+      customizationTitle: 'پروڈکٹ کی خصوصیات',
+      customizationHint:
+        'اس پروڈکٹ کے لیے اختیاری یا لازمی انتخاب شامل کریں، جیسے پیکیجنگ، کاٹنے کا انداز، وزن یا اضافی چیزیں۔ گاہک چیک آؤٹ سے پہلے پروڈکٹ صفحہ پر یہ منتخب کرتے ہیں۔',
+      addOptionGroup: 'گروپ شامل کریں',
       errorNameRequired: 'پروڈکٹ کا نام ضروری ہے',
       errorPriceRequired: 'قیمت ضروری ہے',
       errorPriceInvalid: 'درست قیمت درج کریں',
