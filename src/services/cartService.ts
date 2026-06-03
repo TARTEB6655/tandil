@@ -8,6 +8,7 @@ import apiClient from './api';
 export interface AddCartItemRequest {
   product_id: number;
   quantity: number;
+  selected_option_ids?: number[];
 }
 
 export interface AddCartItemResponse {
@@ -125,18 +126,26 @@ export async function getOrderSummary(
 
 /**
  * Get order summary for direct Buy Now from product details.
- * POST /shop/buy-now/summary with JSON body: { product_id, quantity }.
+ * POST /shop/buy-now/summary with JSON body: { product_id, quantity, selected_option_ids? }.
  */
 export async function getBuyNowSummary(
   productId: number,
   quantity: number,
-  options?: { use_wallet?: boolean; wallet_amount?: number }
+  options?: {
+    use_wallet?: boolean;
+    wallet_amount?: number;
+    selected_option_ids?: number[];
+  }
 ): Promise<BuyNowSummaryData | null> {
+  const selectedOptionIds = options?.selected_option_ids?.filter(
+    (id) => Number.isFinite(id) && id > 0
+  );
   const response = await apiClient.post<GetBuyNowSummaryResponse>(
     '/shop/buy-now/summary',
     {
       product_id: productId,
       quantity,
+      ...(selectedOptionIds?.length ? { selected_option_ids: selectedOptionIds } : {}),
       ...(typeof options?.use_wallet === 'boolean' ? { use_wallet: options.use_wallet } : {}),
       ...(typeof options?.wallet_amount === 'number' ? { wallet_amount: options.wallet_amount } : {}),
     },
@@ -146,6 +155,30 @@ export async function getBuyNowSummary(
   return null;
 }
 
+/**
+ * Add item to cart. Requires user to be logged in (customer token).
+ * POST /shop/cart/add with JSON body: { product_id, quantity, selected_option_ids? }.
+ */
+export async function addCartItem(
+  productId: number,
+  quantity: number,
+  selectedOptionIds?: number[]
+): Promise<AddCartItemResponse> {
+  const optionIds = selectedOptionIds?.filter((id) => Number.isFinite(id) && id > 0);
+  const response = await apiClient.post<AddCartItemResponse>(
+    '/shop/cart/add',
+    {
+      product_id: productId,
+      quantity,
+      ...(optionIds?.length ? { selected_option_ids: optionIds } : {}),
+    } as AddCartItemRequest,
+    {
+      timeout: 15000,
+    }
+  );
+  return response.data ?? {};
+}
+
 export interface GetCartResponse {
   success?: boolean;
   message?: string;
@@ -153,20 +186,6 @@ export interface GetCartResponse {
     items?: CartApiItem[];
     order_summary?: CartOrderSummary;
   };
-}
-
-/**
- * Add item to cart. Requires user to be logged in (customer token).
- * POST /shop/cart/add with JSON body: { product_id, quantity }.
- */
-export async function addCartItem(productId: number, quantity: number): Promise<AddCartItemResponse> {
-  const response = await apiClient.post<AddCartItemResponse>('/shop/cart/add', {
-    product_id: productId,
-    quantity,
-  } as AddCartItemRequest, {
-    timeout: 15000,
-  });
-  return response.data ?? {};
 }
 
 /**

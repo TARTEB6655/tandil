@@ -206,6 +206,22 @@ export const authService = {
     }
   },
 
+  /** POST /auth/delete-account — permanently delete the authenticated account. */
+  deleteAccount: async (body: {
+    confirmation: 'DELETE';
+    password: string;
+  }): Promise<{ success: boolean; message?: string }> => {
+    const response = await apiClient.post<{ success?: boolean; message?: string }>(
+      '/auth/delete-account',
+      body,
+      { timeout: 30000 }
+    );
+    return {
+      success: response.data?.success === true,
+      message: response.data?.message,
+    };
+  },
+
   getStoredUser: async (): Promise<User | null> => {
     try {
       const userJson = await AsyncStorage.getItem('user');

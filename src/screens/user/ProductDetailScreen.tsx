@@ -22,6 +22,10 @@ import { getShopSettings, ShopSettings } from '../../services/shopSettingsServic
 import { useIsAuthenticated } from '../../store';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { ensureMinimumOrderAmount } from '../../utils/shopOrderMinimum';
+import {
+  selectedOptionsToIds,
+  validateRequiredProductOptions,
+} from '../../utils/productSelectedOptions';
 import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import type { ProductCustomizationConfig } from '../../types/productCustomization';
 
@@ -160,6 +164,11 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     setSelectedOptions(initialSelected);
   }, [apiProduct]);
 
+  const selectedOptionIds = useMemo(
+    () => selectedOptionsToIds(selectedOptions),
+    [selectedOptions]
+  );
+
   useEffect(() => {
     if (!isAuthenticated || !product.inStock) {
       setBuyNowOrderTotal(null);
@@ -171,7 +180,9 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
       return;
     }
     let cancelled = false;
-    getBuyNowSummary(productId, quantity)
+    getBuyNowSummary(productId, quantity, {
+      selected_option_ids: selectedOptionIds.length ? selectedOptionIds : undefined,
+    })
       .then((res) => {
         if (!cancelled) {
           setBuyNowOrderTotal(
@@ -185,7 +196,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, product.id, product.inStock, quantity]);
+  }, [isAuthenticated, product.id, product.inStock, quantity, selectedOptionIds]);
 
   const currency = t('orders.currency', { defaultValue: 'AED' });
   const estimatedBuyNowTotal = useMemo(() => {
@@ -217,6 +228,23 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
 
   const buyNowMinCheckTotalWithOptions = buyNowTotalForMinCheck + selectedOptionsExtra * quantity;
 
+  const ensureCustomizationValid = (): boolean => {
+    const check = validateRequiredProductOptions(customization, selectedOptions);
+    if (check.valid) return true;
+    Alert.alert(
+      t('common.error', 'Error'),
+      check.missingGroupTitle
+        ? t('product.requiredOptionMissing', {
+            defaultValue: 'Please select required option(s) for {{group}}.',
+            group: check.missingGroupTitle,
+          })
+        : t('product.requiredOptionsMissing', {
+            defaultValue: 'Please select all required product options.',
+          })
+    );
+    return false;
+  };
+
   const toggleOption = (groupId: string, optionId: string, selectionMode: 'single' | 'multiple') => {
     setSelectedOptions((prev) => {
       const existing = prev[groupId] ?? [];
@@ -235,6 +263,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
       Alert.alert(t('category.outOfStock'), t('category.outOfStock'));
       return;
     }
+    if (!ensureCustomizationValid()) return;
     if (!isAuthenticated) {
       Alert.alert(
         t('product.loginRequired', { defaultValue: 'Login required' }),
@@ -253,7 +282,11 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         Alert.alert(t('common.error', 'Error'), t('product.invalidProduct', { defaultValue: 'Invalid product.' }));
         return;
       }
-      await addCartItem(productId, quantity);
+      await addCartItem(
+        productId,
+        quantity,
+        selectedOptionIds.length ? selectedOptionIds : undefined
+      );
       refreshCartBadge();
       Alert.alert(
         t('product.addedToCart'),
@@ -295,6 +328,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
       Alert.alert(t('category.outOfStock'), t('category.outOfStock'));
       return;
     }
+    if (!ensureCustomizationValid()) return;
 
     if (!ensureMinimumOrderAmount(buyNowMinCheckTotalWithOptions, currency, t)) {
       return;
@@ -320,7 +354,9 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
 
     setBuyingNow(true);
     try {
-      const res = await getBuyNowSummary(productId, quantity);
+      const res = await getBuyNowSummary(productId, quantity, {
+        selected_option_ids: selectedOptionIds.length ? selectedOptionIds : undefined,
+      });
       if (res?.item && res?.order_summary) {
         const buyNowTotal = Number(res.order_summary.total) || 0;
         const buyNowCurrency = res.order_summary.currency || t('orders.currency', { defaultValue: 'AED' });
@@ -346,6 +382,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
           total: res.order_summary.total,
           buyNowSummary: res.order_summary,
           isBuyNow: true,
+          selectedOptionIds: selectedOptionIds.length ? selectedOptionIds : undefined,
         });
         return;
       }
@@ -370,6 +407,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
           },
         ],
         isBuyNow: true,
+        selectedOptionIds: selectedOptionIds.length ? selectedOptionIds : undefined,
       });
     } catch (err: any) {
       const status = err.response?.status;

@@ -33,6 +33,19 @@ To test login: Profile tab → **Log in** / **Sign up**.
 
 ---
 
+## Account deletion (Guideline 5.1.1(v))
+
+Users can permanently delete their account in the app:
+
+1. Client → **Profile** tab → log in if needed.
+2. Tap **Delete Account** (above Logout).
+3. Enter your **password**, type **DELETE** to confirm, then tap **Delete**.
+4. Confirm again in the dialog — account is removed on the server and the app signs out.
+
+Demo account for review: use a test account you create in-app, or provide credentials in App Review Information. Deletion is irreversible for that account.
+
+---
+
 ## Payments
 
 - Shop checkout uses **Stripe** for card payments (Payment Sheet).

@@ -72,21 +72,20 @@ const ProfileScreen: React.FC = () => {
   // Resolve profile picture: use full URL from API or build from relative path (e.g. profiles/xxx -> /media/profiles/xxx)
   const profilePictureUrl = getProfilePictureUrl(profile);
 
+  const resetToRoleSelection = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'RoleSelection' }],
+    });
+  };
+
   const handleLogout = async () => {
     try {
       await logout();
-      // Navigate to RoleSelection screen after logout
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'RoleSelection' }],
-      });
+      resetToRoleSelection();
     } catch (error) {
       console.error('Logout error:', error);
-      // Still navigate even if logout fails
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'RoleSelection' }],
-      });
+      resetToRoleSelection();
     }
   };
 
@@ -112,6 +111,10 @@ const ProfileScreen: React.FC = () => {
     }
     onPress();
   };
+
+  const handleDeleteAccount = requiresAccount(() => {
+    navigation.navigate('DeleteAccount');
+  });
 
   const accountMenuItems: MenuItem[] = [
     {
@@ -212,6 +215,12 @@ const ProfileScreen: React.FC = () => {
     ? [
         ...accountMenuItems,
         ...publicMenuItems,
+        {
+          icon: 'trash-outline',
+          title: t('settings.items.deleteAccount.title'),
+          onPress: handleDeleteAccount,
+          color: COLORS.error,
+        },
         {
           icon: 'log-out-outline',
           title: t('profile.logout'),

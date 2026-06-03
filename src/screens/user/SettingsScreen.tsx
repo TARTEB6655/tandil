@@ -14,7 +14,6 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../
 import Header from '../../components/common/Header';
 import { useAppStore } from '../../store';
 import { useTranslation } from 'react-i18next';
-import { authService } from '../../services/authService';
 import { captureTestEvent, captureException } from '../../utils/sentry';
 
 const SettingsScreen: React.FC = () => {
@@ -63,24 +62,7 @@ const SettingsScreen: React.FC = () => {
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      t('settings.alerts.deleteTitle'),
-      t('settings.alerts.deleteBody'),
-      [
-        {
-          text: t('settings.alerts.cancel'),
-          style: 'cancel',
-        },
-        {
-          text: t('settings.alerts.delete'),
-          style: 'destructive',
-          onPress: () => {
-            // Handle account deletion
-            Alert.alert(t('settings.alerts.deletedTitle'), t('settings.alerts.deletedBody'));
-          },
-        },
-      ]
-    );
+    navigation.navigate('DeleteAccount');
   };
 
   const renderSettingItem = (

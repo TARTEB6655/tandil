@@ -24,6 +24,7 @@ export interface CreatePaymentIntentBody {
   is_buy_now?: boolean;
   product_id?: number;
   quantity?: number;
+  selected_option_ids?: number[];
   use_wallet?: boolean;
   wallet_amount?: number;
   /** Applied coupon code, or empty string when none (POST /shop/checkout/stripe/payment-intent). */

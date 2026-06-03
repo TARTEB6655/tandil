@@ -83,7 +83,13 @@ const CheckoutScreen: React.FC = () => {
     cartItems = [],
     buyNowSummary = null,
     isBuyNow = false,
-  } = route.params || { cartItems: [], buyNowSummary: null, isBuyNow: false };
+    selectedOptionIds = [],
+  } = route.params || {
+    cartItems: [],
+    buyNowSummary: null,
+    isBuyNow: false,
+    selectedOptionIds: [],
+  };
   
   const [currentStep, setCurrentStep] = useState<'location' | 'payment'>('location');
   const [loading, setLoading] = useState(false);
@@ -151,6 +157,9 @@ const CheckoutScreen: React.FC = () => {
           const buyNowRes = await getBuyNowSummary(pid, qty, {
             use_wallet: useWallet,
             wallet_amount: 0,
+            selected_option_ids: Array.isArray(selectedOptionIds) && selectedOptionIds.length
+              ? selectedOptionIds
+              : undefined,
           });
           if (buyNowRes?.order_summary) {
             setOrderSummaryApi(buyNowRes.order_summary);
@@ -171,7 +180,7 @@ const CheckoutScreen: React.FC = () => {
         setWalletSummaryLoading(false);
       }
     },
-    [cartItems, isBuyNow]
+    [cartItems, isBuyNow, selectedOptionIds]
   );
 
   useEffect(() => {
@@ -372,6 +381,12 @@ const CheckoutScreen: React.FC = () => {
         }
         if (Number.isFinite(qty)) {
           paymentIntentBody = { ...paymentIntentBody, quantity: qty };
+        }
+        if (Array.isArray(selectedOptionIds) && selectedOptionIds.length) {
+          paymentIntentBody = {
+            ...paymentIntentBody,
+            selected_option_ids: selectedOptionIds,
+          };
         }
       }
 

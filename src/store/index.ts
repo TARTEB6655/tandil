@@ -25,7 +25,7 @@ interface AppStore extends AppState {
   addNotification: (notification: Notification) => void;
   markNotificationAsRead: (notificationId: string) => void;
   clearNotifications: () => void;
-  logout: () => void;
+  logout: (options?: { skipApi?: boolean }) => Promise<void>;
 }
 
 export const useAppStore = create<AppStore>()(
@@ -283,16 +283,18 @@ export const useAppStore = create<AppStore>()(
       
       clearNotifications: () => set({ notifications: [] }),
       
-      logout: async () => {
-        // Call API logout endpoint
-        try {
-          await authService.logout();
-        } catch (error) {
-          console.error('Logout API error:', error);
-          // Still clear local state even if API call fails
+      logout: async (options?: { skipApi?: boolean }) => {
+        if (options?.skipApi) {
+          await authService.clearLocalSession();
+        } else {
+          try {
+            await authService.logout();
+          } catch (error) {
+            console.error('Logout API error:', error);
+            await authService.clearLocalSession();
+          }
         }
-        
-        // Clear local state
+
         set({
           user: null,
           isAuthenticated: false,
