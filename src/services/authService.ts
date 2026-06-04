@@ -206,19 +206,17 @@ export const authService = {
     }
   },
 
-  /** POST /auth/delete-account — permanently delete the authenticated account. */
-  deleteAccount: async (body: {
-    confirmation: 'DELETE';
-    password: string;
-  }): Promise<{ success: boolean; message?: string }> => {
-    const response = await apiClient.post<{ success?: boolean; message?: string }>(
-      '/auth/delete-account',
-      body,
-      { timeout: 30000 }
-    );
+  /** POST /auth/delete-account — Bearer token only; no request body (matches backend Postman). */
+  deleteAccount: async (): Promise<{ success: boolean; message?: string }> => {
+    const response = await apiClient.request<{ success?: boolean; message?: string }>({
+      method: 'POST',
+      url: '/auth/delete-account',
+      timeout: 30000,
+    });
+    const data = response.data;
     return {
-      success: response.data?.success === true,
-      message: response.data?.message,
+      success: response.status >= 200 && response.status < 300 && data?.success !== false,
+      message: data?.message,
     };
   },
 

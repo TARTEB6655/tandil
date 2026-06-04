@@ -284,7 +284,6 @@ export type UserStackParamList = {
   EditAddress: { addressId: number };
   PaymentMethods: undefined;
   AppInfoContent: { pageKey: AppInfoPageKey };
-  DeleteAccount: undefined;
 };
 
 export type TechnicianStackParamList = {

@@ -14,12 +14,14 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../
 import Header from '../../components/common/Header';
 import { useAppStore } from '../../store';
 import { useTranslation } from 'react-i18next';
+import { authService } from '../../services/authService';
 import { captureTestEvent, captureException } from '../../utils/sentry';
 
 const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const { user, language, setLanguage, logout } = useAppStore();
+  const [deletingAccount, setDeletingAccount] = useState(false);
   
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [locationEnabled, setLocationEnabled] = useState(true);
@@ -62,7 +64,46 @@ const SettingsScreen: React.FC = () => {
   };
 
   const handleDeleteAccount = () => {
-    navigation.navigate('DeleteAccount');
+    Alert.alert(
+      t('settings.alerts.deleteTitle'),
+      t('settings.alerts.deleteBody'),
+      [
+        { text: t('settings.alerts.cancel'), style: 'cancel' },
+        {
+          text: t('settings.alerts.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            if (deletingAccount) return;
+            setDeletingAccount(true);
+            try {
+              const result = await authService.deleteAccount();
+              if (!result.success) {
+                Alert.alert(
+                  t('common.error'),
+                  result.message || t('settings.alerts.deleteFailed')
+                );
+                return;
+              }
+              await logout({ skipApi: true });
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'RoleSelection' }],
+              });
+              Alert.alert(t('settings.alerts.deletedTitle'), t('settings.alerts.deletedBody'));
+            } catch (error: unknown) {
+              const message =
+                (error as { response?: { data?: { message?: string } } })?.response?.data
+                  ?.message ||
+                (error instanceof Error ? error.message : null) ||
+                t('settings.alerts.deleteFailed');
+              Alert.alert(t('common.error'), message);
+            } finally {
+              setDeletingAccount(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderSettingItem = (

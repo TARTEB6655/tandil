@@ -31,6 +31,7 @@ import {
   getProductCustomization,
   setProductCustomization,
 } from '../../services/productCustomizationService';
+import { mapAdminApiOptionGroupsToCustomization, hasLocalOptionImageUploads } from '../../utils/adminProductOptions';
 
 const STATUS_VALUES = ['active', 'draft', 'archived'] as const;
 const WEIGHT_VALUES = ['kg', 'g', 'lb', 'oz'] as const;
@@ -63,29 +64,6 @@ const CurrentProductImage: React.FC<{
 };
 
 type AdminEditProductParams = { product: AdminProduct };
-
-function mapApiOptionGroupsToCustomization(product: AdminProduct | null): ProductCustomizationConfig | null {
-  const groups = (product as any)?.option_groups;
-  if (!Array.isArray(groups) || groups.length === 0) return null;
-  return {
-    groups: groups.map((group: any, groupIndex: number) => ({
-      id: String(group.id ?? `group_${groupIndex}`),
-      title: String(group.name ?? ''),
-      subtitle: typeof group.subtitle === 'string' ? group.subtitle : '',
-      required: Boolean(group.is_required),
-      selectionMode: group.input_type === 'multiple' ? 'multiple' : 'single',
-      options: Array.isArray(group.options)
-        ? group.options.map((opt: any, optionIndex: number) => ({
-            id: String(opt.temp_key ?? opt.id ?? `opt_${groupIndex}_${optionIndex}`),
-            label: String(opt.label ?? ''),
-            subtitle: typeof opt.subtitle === 'string' ? opt.subtitle : '',
-            priceDelta: Number(opt.price_modifier ?? 0),
-            imageUrl: typeof opt.image_url === 'string' ? opt.image_url : '',
-          }))
-        : [],
-    })),
-  };
-}
 
 const AdminEditProductScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -245,7 +223,7 @@ const AdminEditProductScreen: React.FC = () => {
 
   useEffect(() => {
     if (!productId) return;
-    const fromApi = mapApiOptionGroupsToCustomization(productDetails);
+    const fromApi = mapAdminApiOptionGroupsToCustomization((productDetails as any)?.option_groups);
     if (fromApi && fromApi.groups.length > 0) {
       setCustomizationConfig(fromApi);
       return;
@@ -377,6 +355,7 @@ const AdminEditProductScreen: React.FC = () => {
 
       const hasMainFile = mainImage != null;
       const hasExtraFiles = extraImages.length > 0;
+      const hasOptionImageFiles = hasLocalOptionImageUploads(customizationConfig);
       let updatedData: {
         image_url?: string;
         image?: string;
@@ -386,7 +365,7 @@ const AdminEditProductScreen: React.FC = () => {
         gallery_images?: Array<{ image_url?: string; image_path?: string }>;
       } | undefined;
 
-      if (hasMainFile || hasExtraFiles) {
+      if (hasMainFile || hasExtraFiles || hasOptionImageFiles) {
         const res = await adminService.updateProductWithImages(productId, {
           ...payload,
           image_ids_to_remove: removedGalleryImageIds.length > 0 ? removedGalleryImageIds : undefined,

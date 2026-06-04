@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,7 @@ import { getClientNotifications } from '../../services/clientNotificationService
 import { shareApp, rateApp } from '../../utils/appShare';
 import type { AppInfoPageKey } from '../../types/appInfo';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
+import { authService } from '../../services/authService';
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -34,6 +36,7 @@ const ProfileScreen: React.FC = () => {
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const { count: cartItemCount } = useCartBadgeCount();
 
   useFocusEffect(
@@ -112,9 +115,48 @@ const ProfileScreen: React.FC = () => {
     onPress();
   };
 
-  const handleDeleteAccount = requiresAccount(() => {
-    navigation.navigate('DeleteAccount');
-  });
+  const confirmDeleteAccount = () => {
+    Alert.alert(
+      t('settings.alerts.deleteTitle'),
+      t('settings.alerts.deleteBody'),
+      [
+        { text: t('settings.alerts.cancel'), style: 'cancel' },
+        {
+          text: t('settings.alerts.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            if (deletingAccount) return;
+            setDeletingAccount(true);
+            try {
+              const result = await authService.deleteAccount();
+              if (!result.success) {
+                Alert.alert(
+                  t('common.error'),
+                  result.message || t('settings.alerts.deleteFailed')
+                );
+                return;
+              }
+              await logout({ skipApi: true });
+              resetToRoleSelection();
+              Alert.alert(
+                t('settings.alerts.deletedTitle'),
+                t('settings.alerts.deletedBody')
+              );
+            } catch (error: unknown) {
+              const message =
+                (error as { response?: { data?: { message?: string } } })?.response?.data
+                  ?.message ||
+                (error instanceof Error ? error.message : null) ||
+                t('settings.alerts.deleteFailed');
+              Alert.alert(t('common.error'), message);
+            } finally {
+              setDeletingAccount(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const accountMenuItems: MenuItem[] = [
     {
@@ -218,7 +260,7 @@ const ProfileScreen: React.FC = () => {
         {
           icon: 'trash-outline',
           title: t('settings.items.deleteAccount.title'),
-          onPress: handleDeleteAccount,
+          onPress: requiresAccount(confirmDeleteAccount),
           color: COLORS.error,
         },
         {
@@ -298,8 +340,9 @@ const ProfileScreen: React.FC = () => {
             <TouchableOpacity
               key={`${item.title}-${index}`}
               style={styles.menuItem}
-              onPress={item.onPress}
-            >
+          onPress={item.onPress}
+          disabled={deletingAccount}
+        >
               <View style={styles.menuItemLeft}>
                 <Ionicons 
                   name={item.icon as any} 

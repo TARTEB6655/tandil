@@ -419,6 +419,9 @@ export interface AdminWalletClientDetailResponse {
   data?: AdminWalletClientDetailData;
 }
 
+import type { ProductCustomizationConfig } from '../types/productCustomization';
+import { mapCustomizationConfigToApiPayload } from '../utils/adminProductOptions';
+
 type ProductOptionImageFile = {
   key: string;
   uri: string;
@@ -429,40 +432,11 @@ function mapCustomizationToApi(customization?: ProductCustomizationConfig | null
   optionGroupsJson?: string;
   optionImageFiles: ProductOptionImageFile[];
 } {
-  const groups = customization?.groups ?? [];
-  if (groups.length === 0) return { optionImageFiles: [] };
-
-  const optionImageFiles: ProductOptionImageFile[] = [];
-  const apiGroups = groups.map((group, groupIndex) => {
-    const apiOptions = (group.options ?? []).map((option, optionIndex) => {
-      const tempKey = option.id || `opt_${groupIndex}_${optionIndex}`;
-      const rawImage = typeof option.imageUrl === 'string' ? option.imageUrl.trim() : '';
-      if (rawImage && (rawImage.startsWith('file://') || rawImage.startsWith('content://'))) {
-        optionImageFiles.push({ key: tempKey, uri: rawImage });
-      }
-      return {
-        temp_key: tempKey,
-        label: option.label ?? '',
-        subtitle: option.subtitle ?? '',
-        price_modifier: Number(option.priceDelta ?? 0),
-        sort_order: optionIndex,
-      };
-    });
-
-    return {
-      name: group.title ?? '',
-      subtitle: group.subtitle ?? '',
-      input_type: group.selectionMode === 'multiple' ? 'multiple' : 'single',
-      is_required: Boolean(group.required),
-      sort_order: groupIndex,
-      options: apiOptions,
-    };
-  });
-
+  const payload = mapCustomizationConfigToApiPayload(customization);
   return {
-    productType: 'variable',
-    optionGroupsJson: JSON.stringify(apiGroups),
-    optionImageFiles,
+    productType: payload.productType,
+    optionGroupsJson: payload.optionGroupsJson,
+    optionImageFiles: payload.optionImageFiles,
   };
 }
 
@@ -1349,7 +1323,7 @@ export const adminService = {
     product_type?: 'simple' | 'variable';
     option_groups_json?: string;
     customization?: ProductCustomizationConfig | null;
-    mainImage: { uri: string };
+    mainImage?: { uri: string };
     extraImages?: { uri: string }[];
   }): Promise<{ status: boolean; message?: string; data: AdminProductCreated }> => {
     const customizationPayload = mapCustomizationToApi(params.customization);
@@ -1374,11 +1348,13 @@ export const adminService = {
     if (params.image_urls?.length) {
       formData.append('image_urls', JSON.stringify(params.image_urls));
     }
-    formData.append('main_image', {
-      uri: params.mainImage.uri,
-      type: 'image/jpeg',
-      name: 'main-image.jpg',
-    } as any);
+    if (params.mainImage?.uri) {
+      formData.append('main_image', {
+        uri: params.mainImage.uri,
+        type: 'image/jpeg',
+        name: 'main-image.jpg',
+      } as any);
+    }
     (params.extraImages ?? []).forEach((file, index) => {
       formData.append('images[]', {
         uri: file.uri,
@@ -1432,7 +1408,7 @@ export const adminService = {
     return response.data;
   },
 
-  // Update product with image files (PUT /admin/products/:id, multipart). API: main_image (optional) + images[] + image_ids_to_remove.
+  // Update product with image files (POST /admin/products/:id, multipart). Matches Postman: option_images[temp_key].
   updateProductWithImages: async (
     productId: number,
     params: {
@@ -1510,7 +1486,9 @@ export const adminService = {
         name: `${file.key}.jpg`,
       } as any);
     });
-    const response = await apiClient.put(`/admin/products/${productId}`, formData, { timeout: 300000 });
+    const response = await apiClient.post(`/admin/products/${productId}`, formData, {
+      timeout: 300000,
+    });
     return response.data;
   },
 

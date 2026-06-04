@@ -27,6 +27,7 @@ import { compressImageForUpload, compressImagesForUpload } from '../../utils/com
 import ProductCustomizationBuilder from '../../components/admin/ProductCustomizationBuilder';
 import type { ProductCustomizationConfig } from '../../types/productCustomization';
 import { setProductCustomization } from '../../services/productCustomizationService';
+import { hasLocalOptionImageUploads } from '../../utils/adminProductOptions';
 
 const STATUS_VALUES = ['active', 'draft', 'archived'] as const;
 const WEIGHT_UNITS = ['kg', 'g', 'lb', 'oz'] as const;
@@ -236,12 +237,12 @@ const AdminAddProductScreen: React.FC = () => {
 
       const hasMainFile = mainImage != null;
       const hasExtraFiles = extraImages.length > 0;
+      const hasOptionImageFiles = hasLocalOptionImageUploads(customizationConfig);
 
-      if (hasMainFile || hasExtraFiles) {
+      if (hasMainFile || hasExtraFiles || hasOptionImageFiles) {
         const mainFile = mainImage ?? (extraImages[0] ? { uri: extraImages[0].uri } : null);
         const extraFiles = mainImage ? extraImages : extraImages.slice(1);
-        if (mainFile) {
-          const res = await adminService.createProductWithImages({
+        const res = await adminService.createProductWithImages({
             name: name.trim(),
             description: description.trim() || undefined,
             price: parseFloat(price),
@@ -256,11 +257,10 @@ const AdminAddProductScreen: React.FC = () => {
             product_type: customizationConfig.groups.length > 0 ? 'variable' : 'simple',
             customization: customizationConfig,
             ...timingFields,
-            mainImage: mainFile,
+            mainImage: mainFile ?? undefined,
             extraImages: extraFiles.map((i) => ({ uri: i.uri })),
           });
           createdData = res.data;
-        }
       }
       if (!createdData) {
         const res = await adminService.createProduct({

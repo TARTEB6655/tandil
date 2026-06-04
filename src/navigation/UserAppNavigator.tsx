@@ -46,7 +46,6 @@ import EditAddressScreen from '../screens/user/EditAddressScreen';
 import PaymentMethodsScreen from '../screens/user/PaymentMethodsScreen';
 import WalletScreen from '../screens/user/WalletScreen';
 import AppInfoContentScreen from '../screens/user/AppInfoContentScreen';
-import DeleteAccountScreen from '../screens/user/DeleteAccountScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator<UserStackParamList>();
@@ -157,7 +156,6 @@ const UserAppNavigator = () => {
       <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />
       <Stack.Screen name="Wallet" component={WalletScreen} />
       <Stack.Screen name="AppInfoContent" component={AppInfoContentScreen} />
-      <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
     </Stack.Navigator>
   );
 };
