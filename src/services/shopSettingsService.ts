@@ -36,28 +36,28 @@ export async function getShopSettings(): Promise<ShopSettings> {
   };
 
   try {
-    const res = await publicApiClient.get('/settings/shop', { timeout: 10000 });
+    const res = await publicApiClient.get('/settings/shop', { timeout: 20000 });
     const parsed = tryResponse(res);
     if (parsed) return parsed;
   } catch (_) {
     // ignore
   }
   try {
-    const res = await apiClient.get('/settings/shop', { timeout: 10000 });
+    const res = await apiClient.get('/settings/shop', { timeout: 20000 });
     const parsed = tryResponse(res);
     if (parsed) return parsed;
   } catch (_) {
     // ignore
   }
   try {
-    const res = await apiClient.get('/admin/settings/shop', { timeout: 10000 });
+    const res = await apiClient.get('/admin/settings/shop', { timeout: 20000 });
     const parsed = tryResponse(res);
     if (parsed) return parsed;
   } catch (_) {
     // ignore
   }
   try {
-    const res = await publicApiClient.get('/shop/settings', { timeout: 10000 });
+    const res = await publicApiClient.get('/shop/settings', { timeout: 20000 });
     const parsed = tryResponse(res);
     if (parsed) return parsed;
   } catch (_) {

@@ -22,6 +22,7 @@ import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { adminService, AdminCategory } from '../../services/adminService';
 import { compressImageForUpload } from '../../utils/compressImage';
+import { getCategoryShippingCost, getCategoryTaxPercentage } from '../../utils/categoryPricing';
 
 type AdminEditCategoryParams = { category: AdminCategory };
 
@@ -35,6 +36,8 @@ const AdminEditCategoryScreen: React.FC = () => {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const [shippingAmount, setShippingAmount] = useState('0');
+  const [taxPercentage, setTaxPercentage] = useState('5');
   const [isActive, setIsActive] = useState(true);
   const [image, setImage] = useState<{ uri: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,6 +49,10 @@ const AdminEditCategoryScreen: React.FC = () => {
       setName(category.name ?? '');
       setSlug(category.slug ?? '');
       setDescription(category.description ?? '');
+      const shippingNum = getCategoryShippingCost(category);
+      setShippingAmount(shippingNum != null ? String(shippingNum) : '0');
+      const taxNum = getCategoryTaxPercentage(category);
+      setTaxPercentage(taxNum != null ? String(taxNum) : '5');
       const activeVal = category.is_active;
       setIsActive(activeVal === 0 || activeVal === false ? false : true);
     }
@@ -100,6 +107,14 @@ const AdminEditCategoryScreen: React.FC = () => {
   const validateForm = (): boolean => {
     const newErrors: { [key: string]: string } = {};
     if (!name.trim()) newErrors.name = t('admin.categoryForm.errorNameRequired');
+    const shipping = parseFloat(shippingAmount);
+    if (shippingAmount.trim() === '' || Number.isNaN(shipping) || shipping < 0) {
+      newErrors.shipping = t('admin.categoryForm.shippingInvalid');
+    }
+    const tax = parseFloat(taxPercentage);
+    if (taxPercentage.trim() === '' || Number.isNaN(tax) || tax < 0 || tax > 100) {
+      newErrors.tax = t('admin.categoryForm.taxInvalid');
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -121,6 +136,8 @@ const AdminEditCategoryScreen: React.FC = () => {
         name: name.trim(),
         slug: slug.trim() || undefined,
         description: description.trim() || undefined,
+        shipping_cost: parseFloat(shippingAmount),
+        tax_percentage: parseFloat(taxPercentage),
         is_active: isActive ? 1 : 0,
         image: image ?? undefined,
       });
@@ -207,7 +224,39 @@ const AdminEditCategoryScreen: React.FC = () => {
               multiline
               numberOfLines={3}
             />
+          </View>
 
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('admin.categoryForm.shippingSection')}</Text>
+            <Input
+              label={t('admin.categoryForm.shippingCostLabel')}
+              placeholder="0"
+              value={shippingAmount}
+              onChangeText={(txt) => {
+                setShippingAmount(txt);
+                if (errors.shipping) setErrors({ ...errors, shipping: '' });
+              }}
+              keyboardType="numeric"
+              leftIcon="bicycle-outline"
+              error={errors.shipping}
+            />
+            <Text style={styles.fieldHint}>{t('admin.categoryForm.shippingCostHint')}</Text>
+            <Input
+              label={t('admin.categoryForm.taxPercentLabel')}
+              placeholder="5"
+              value={taxPercentage}
+              onChangeText={(txt) => {
+                setTaxPercentage(txt);
+                if (errors.tax) setErrors({ ...errors, tax: '' });
+              }}
+              keyboardType="numeric"
+              leftIcon="pricetag-outline"
+              error={errors.tax}
+            />
+            <Text style={styles.fieldHint}>{t('admin.categoryForm.taxPercentHint')}</Text>
+          </View>
+
+          <View style={styles.section}>
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>
                 {t('admin.categoryForm.isActiveLabel', 'Status')}
@@ -331,6 +380,13 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
     marginBottom: SPACING.sm,
+  },
+  fieldHint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: -SPACING.xs,
+    marginBottom: SPACING.sm,
+    lineHeight: 18,
   },
   currentLabel: {
     fontSize: FONT_SIZES.sm,

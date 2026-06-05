@@ -1,9 +1,11 @@
 import React from 'react';
+import { ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants';
+import { useAuthStackInitialRoute } from '../hooks/useAuthStackInitialRoute';
 
 // Screens
 import SupervisorLoginScreen from '../screens/supervisor/SupervisorLoginScreen';
@@ -81,9 +83,20 @@ const TabNavigator = () => {
 };
 
 const SupervisorAppNavigator = () => {
+  const initialRoute = useAuthStackInitialRoute('supervisor');
+
+  if (!initialRoute) {
+    return (
+      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
       <Stack.Navigator
+        initialRouteName={initialRoute}
         screenOptions={{
           headerShown: false,
         }}

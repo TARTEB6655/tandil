@@ -24,7 +24,6 @@ const AdminProductSettingsScreen: React.FC = () => {
   const [allowBackorders, setAllowBackorders] = useState(false);
   const [showOutOfStock, setShowOutOfStock] = useState(true);
 
-  const [shippingAmount, setShippingAmount] = useState('');
   const [taxPercent, setTaxPercent] = useState('');
   const [shopSettingsLoading, setShopSettingsLoading] = useState(true);
   const [shopSettingsSaving, setShopSettingsSaving] = useState(false);
@@ -37,15 +36,11 @@ const AdminProductSettingsScreen: React.FC = () => {
         if (cancelled) return;
         const d = res.data;
         if (d) {
-          setShippingAmount(String(d.shipping_amount ?? 0));
           setTaxPercent(String(d.tax_percent ?? 0));
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setShippingAmount('0');
-          setTaxPercent('5');
-        }
+        if (!cancelled) setTaxPercent('5');
       })
       .finally(() => {
         if (!cancelled) setShopSettingsLoading(false);
@@ -53,20 +48,15 @@ const AdminProductSettingsScreen: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  const handleSaveShippingTax = () => {
-    const shipping = parseFloat(shippingAmount);
+  const handleSaveTax = () => {
     const tax = parseFloat(taxPercent);
-    if (Number.isNaN(shipping) || shipping < 0) {
-      Alert.alert(t('common.error'), t('admin.settings.productSettings.shippingInvalid'));
-      return;
-    }
     if (Number.isNaN(tax) || tax < 0 || tax > 100) {
       Alert.alert(t('common.error'), t('admin.settings.productSettings.taxInvalid'));
       return;
     }
     setShopSettingsSaving(true);
     adminService
-      .updateShopSettings({ shipping_amount: shipping, tax_percent: tax })
+      .updateShopSettings({ tax_percent: tax })
       .then(() => {
         Alert.alert(t('admin.settings.success'), t('admin.settings.productSettings.saved'));
       })
@@ -155,7 +145,7 @@ const AdminProductSettingsScreen: React.FC = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {t('admin.settings.productSettings.shippingTax')}
+            {t('admin.settings.productSettings.taxSection')}
           </Text>
           <View style={styles.sectionContent}>
             {shopSettingsLoading ? (
@@ -165,26 +155,6 @@ const AdminProductSettingsScreen: React.FC = () => {
               </View>
             ) : (
               <>
-                <View style={styles.settingItem}>
-                  <View style={styles.settingIcon}>
-                    <Ionicons name="car-outline" size={24} color={COLORS.primary} />
-                  </View>
-                  <View style={styles.settingContent}>
-                    <Text style={styles.settingTitle}>
-                      {t('admin.settings.productSettings.shippingAmount')}
-                    </Text>
-                    <Text style={styles.settingSubtitle}>
-                      {t('admin.settings.productSettings.shippingAmountHint')}
-                    </Text>
-                  </View>
-                  <TextInput
-                    style={styles.input}
-                    value={shippingAmount}
-                    onChangeText={setShippingAmount}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                  />
-                </View>
                 <View style={styles.settingItem}>
                   <View style={styles.settingIcon}>
                     <Ionicons name="pricetag-outline" size={24} color={COLORS.primary} />
@@ -207,7 +177,7 @@ const AdminProductSettingsScreen: React.FC = () => {
                 </View>
                 <TouchableOpacity
                   style={[styles.saveButton, shopSettingsSaving && styles.saveButtonDisabled]}
-                  onPress={handleSaveShippingTax}
+                  onPress={handleSaveTax}
                   disabled={shopSettingsSaving}
                 >
                   {shopSettingsSaving ? (

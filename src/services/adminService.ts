@@ -1609,13 +1609,16 @@ export const adminService = {
     return response.data ?? {};
   },
 
-  // Create category (POST /admin/categories, multipart: name, slug?, description?, image?, is_active?)
+  // Create category (POST /admin/categories, multipart per Postman: shipping_cost, tax_percentage required)
   createCategory: async (params: {
     name: string;
     slug?: string;
     description?: string;
     image?: { uri: string };
     is_active?: number; // 1 = active, 0 = disabled (Coming Soon). Default 1.
+    shipping_cost: number;
+    tax_percentage: number;
+    sort_order?: number;
   }): Promise<{ status?: boolean; success?: boolean; message?: string; data: AdminCategory }> => {
     const formData = new FormData();
     formData.append('name', params.name.trim());
@@ -1624,6 +1627,11 @@ export const adminService = {
     }
     if (params.description != null && String(params.description).trim()) {
       formData.append('description', params.description.trim());
+    }
+    formData.append('shipping_cost', String(params.shipping_cost));
+    formData.append('tax_percentage', String(params.tax_percentage));
+    if (params.sort_order != null && !Number.isNaN(params.sort_order)) {
+      formData.append('sort_order', String(params.sort_order));
     }
     if (params.is_active !== undefined) {
       formData.append('is_active', String(params.is_active));
@@ -1639,7 +1647,7 @@ export const adminService = {
     return response.data;
   },
 
-  // Update category (POST /admin/categories/:id, multipart: name, slug?, description?, image?, is_active?)
+  // Update category (POST /admin/categories/:id, multipart: shipping_cost?, tax_percentage? optional on update)
   updateCategory: async (
     categoryId: number,
     params: {
@@ -1648,6 +1656,9 @@ export const adminService = {
       description?: string;
       image?: { uri: string };
       is_active?: number; // 1 = active, 0 = disabled (Coming Soon).
+      shipping_cost?: number;
+      tax_percentage?: number;
+      sort_order?: number;
     }
   ): Promise<{ status?: boolean; success?: boolean; message?: string; data: AdminCategory }> => {
     const formData = new FormData();
@@ -1657,6 +1668,15 @@ export const adminService = {
     }
     if (params.description != null && String(params.description).trim()) {
       formData.append('description', params.description.trim());
+    }
+    if (params.shipping_cost !== undefined && !Number.isNaN(params.shipping_cost)) {
+      formData.append('shipping_cost', String(params.shipping_cost));
+    }
+    if (params.tax_percentage !== undefined && !Number.isNaN(params.tax_percentage)) {
+      formData.append('tax_percentage', String(params.tax_percentage));
+    }
+    if (params.sort_order !== undefined && !Number.isNaN(params.sort_order)) {
+      formData.append('sort_order', String(params.sort_order));
     }
     if (params.is_active !== undefined) {
       formData.append('is_active', String(params.is_active));
@@ -1993,10 +2013,10 @@ export const adminService = {
     return response.data;
   },
 
-  /** Update shop settings. PUT /api/admin/settings/shop body: { shipping_amount, tax_percent } */
+  /** Update shop settings. PUT /api/admin/settings/shop — shipping is per category; tax optional global default. */
   updateShopSettings: async (body: {
-    shipping_amount: number;
-    tax_percent: number;
+    shipping_amount?: number;
+    tax_percent?: number;
   }): Promise<{
     success?: boolean;
     data?: { shipping_amount: number; tax_percent: number; currency: string };
@@ -2065,6 +2085,15 @@ export interface AdminCategory {
   image?: string | null;
   image_url?: string | null;
   is_active?: number | boolean; // 1 = active, 0 = disabled (Coming Soon)
+  /** Display order in admin/client (lower = earlier). */
+  sort_order?: number;
+  /** Delivery fee (AED) for this category. 0 = free. */
+  shipping_cost?: number | string | null;
+  /** Tax % on product subtotal in this category at checkout. */
+  tax_percentage?: number | string | null;
+  /** Legacy field names (older API responses). */
+  shipping_amount?: number | string | null;
+  tax_percent?: number | string | null;
   created_at?: string;
   updated_at?: string;
   products_count?: number;

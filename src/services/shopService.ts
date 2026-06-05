@@ -16,6 +16,8 @@ export interface ShopProductCategory {
   updated_at?: string;
   products_count?: number;
   coming_soon?: boolean;
+  /** Optional display order provided by admin panel. */
+  sort_order?: number;
 }
 
 export interface ShopCategoriesResponse {

@@ -28,6 +28,8 @@ const AdminAddCategoryScreen: React.FC = () => {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const [shippingAmount, setShippingAmount] = useState('0');
+  const [taxPercentage, setTaxPercentage] = useState('5');
   const [isActive, setIsActive] = useState(true);
   const [image, setImage] = useState<{ uri: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -86,6 +88,14 @@ const AdminAddCategoryScreen: React.FC = () => {
   const validateForm = (): boolean => {
     const newErrors: { [key: string]: string } = {};
     if (!name.trim()) newErrors.name = t('admin.categoryForm.errorNameRequired', 'Category name is required');
+    const shipping = parseFloat(shippingAmount);
+    if (shippingAmount.trim() === '' || Number.isNaN(shipping) || shipping < 0) {
+      newErrors.shipping = t('admin.categoryForm.shippingInvalid', 'Enter a valid shipping cost (≥ 0).');
+    }
+    const tax = parseFloat(taxPercentage);
+    if (taxPercentage.trim() === '' || Number.isNaN(tax) || tax < 0 || tax > 100) {
+      newErrors.tax = t('admin.categoryForm.taxInvalid', 'Enter a valid tax percentage (0–100).');
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -106,6 +116,8 @@ const AdminAddCategoryScreen: React.FC = () => {
         name: name.trim(),
         slug: slug.trim() || undefined,
         description: description.trim() || undefined,
+        shipping_cost: parseFloat(shippingAmount),
+        tax_percentage: parseFloat(taxPercentage),
         is_active: isActive ? 1 : 0,
         image: image ?? undefined,
       });
@@ -179,7 +191,51 @@ const AdminAddCategoryScreen: React.FC = () => {
               multiline
               numberOfLines={3}
             />
+          </View>
 
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {t('admin.categoryForm.shippingSection', 'Delivery & tax')}
+            </Text>
+            <Input
+              label={t('admin.categoryForm.shippingCostLabel', 'Shipping cost (AED) *')}
+              placeholder="0"
+              value={shippingAmount}
+              onChangeText={(txt) => {
+                setShippingAmount(txt);
+                if (errors.shipping) setErrors({ ...errors, shipping: '' });
+              }}
+              keyboardType="numeric"
+              leftIcon="bicycle-outline"
+              error={errors.shipping}
+            />
+            <Text style={styles.fieldHint}>
+              {t(
+                'admin.categoryForm.shippingCostHint',
+                'Delivery fee for this category (0 = free). Small items often use bike; large items use car.'
+              )}
+            </Text>
+            <Input
+              label={t('admin.categoryForm.taxPercentLabel', 'Tax percentage (%) *')}
+              placeholder="5"
+              value={taxPercentage}
+              onChangeText={(txt) => {
+                setTaxPercentage(txt);
+                if (errors.tax) setErrors({ ...errors, tax: '' });
+              }}
+              keyboardType="numeric"
+              leftIcon="pricetag-outline"
+              error={errors.tax}
+            />
+            <Text style={styles.fieldHint}>
+              {t(
+                'admin.categoryForm.taxPercentHint',
+                'Tax applied to product subtotal in this category at checkout.'
+              )}
+            </Text>
+          </View>
+
+          <View style={styles.section}>
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>
                 {t('admin.categoryForm.isActiveLabel', 'Status')}
@@ -293,6 +349,13 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
     marginBottom: SPACING.sm,
+  },
+  fieldHint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: -SPACING.xs,
+    marginBottom: SPACING.sm,
+    lineHeight: 18,
   },
   uploadBtn: {
     flexDirection: 'row',

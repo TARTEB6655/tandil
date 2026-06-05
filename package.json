@@ -47,6 +47,7 @@
     "react-i18next": "^15.6.1",
     "react-native": "0.79.6",
     "react-native-calendars": "^1.1313.0",
+    "react-native-draggable-flatlist": "^4.0.3",
     "react-native-elements": "^3.4.3",
     "react-native-gesture-handler": "~2.24.0",
     "react-native-gl-model-view": "^1.6.0",

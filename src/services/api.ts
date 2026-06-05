@@ -60,9 +60,13 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // Handle network errors
+    // No HTTP response: offline, DNS failure, or request timeout (not a 401 — see block above)
     if (!error.response) {
-      console.error('Network Error:', error.message);
+      const isTimeout =
+        error.code === 'ECONNABORTED' || /timeout/i.test(error.message ?? '');
+      if (__DEV__ && !isTimeout) {
+        console.warn('Network Error:', error.message);
+      }
     }
 
     return Promise.reject(error);

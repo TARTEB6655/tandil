@@ -1,10 +1,12 @@
 import React from 'react';
+import { ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants';
 import { useTranslation } from 'react-i18next';
+import { useAuthStackInitialRoute } from '../hooks/useAuthStackInitialRoute';
 
 // Screens
 import HRManagerLoginScreen from '../screens/hrmanager/HRManagerLoginScreen';
@@ -86,9 +88,20 @@ const TabNavigator = () => {
 };
 
 const HRManagerAppNavigator = () => {
+  const initialRoute = useAuthStackInitialRoute('hr');
+
+  if (!initialRoute) {
+    return (
+      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
       <Stack.Navigator
+        initialRouteName={initialRoute}
         screenOptions={{
           headerShown: false,
         }}

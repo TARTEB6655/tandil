@@ -64,7 +64,14 @@ const StoreScreen: React.FC = () => {
         const list = await shopService.getProductCategories();
         if (cancelled) return;
         const allItem: CategoryItem = { id: 'all', name: t('store.categories.all', { defaultValue: 'All' }), imageUri: null };
-        const fromApi: CategoryItem[] = list.map((c) => {
+        const sorted = [...list].sort((a, b) => {
+          // Keep original ordering when sort_order is missing.
+          if (a.sort_order == null && b.sort_order == null) return 0;
+          if (a.sort_order == null) return 1;
+          if (b.sort_order == null) return -1;
+          return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+        });
+        const fromApi: CategoryItem[] = sorted.map((c) => {
           const raw = c.image_url ?? c.image ?? null;
           let uri: string | null = null;
           if (typeof raw === 'string' && raw.trim()) {

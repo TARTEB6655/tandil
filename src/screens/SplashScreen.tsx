@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,27 +9,45 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING, BORDER_RADIUS } from '../constants';
 import { useTranslation } from 'react-i18next';
+import { useAppStore } from '../store';
+import { restoreSessionAndGetRoute } from '../utils/sessionRestore';
 
 const { width, height } = Dimensions.get('window');
+
+const SPLASH_MIN_MS = 2000;
 
 const SplashScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
-  
-  console.log('SplashScreen: Rendering...');
+  const setUser = useAppStore((s) => s.setUser);
+  const setAuthenticated = useAppStore((s) => s.setAuthenticated);
+  const hasNavigated = useRef(false);
+
+  const goNext = useCallback(async () => {
+    if (hasNavigated.current) return;
+    hasNavigated.current = true;
+
+    const route = await restoreSessionAndGetRoute(setUser, setAuthenticated);
+    navigation.replace(route);
+  }, [navigation, setAuthenticated, setUser]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      console.log('SplashScreen: Navigating to RoleSelection...');
-      navigation.replace('RoleSelection');
-    }, 3000); // Increased from 2000 to 3000
+    let cancelled = false;
 
-    return () => clearTimeout(timer);
-  }, [navigation]);
+    (async () => {
+      await new Promise((resolve) => setTimeout(resolve, SPLASH_MIN_MS));
+      if (!cancelled) {
+        await goNext();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [goNext]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -44,9 +62,11 @@ const SplashScreen: React.FC = () => {
       
       <View style={styles.footer}>
         <Text style={styles.loadingText}>{t('splash.loading')}</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.skipButton}
-          onPress={() => navigation.replace('RoleSelection')}
+          onPress={() => {
+            void goNext();
+          }}
         >
           <Text style={styles.skipButtonText}>{t('splash.skip')}</Text>
         </TouchableOpacity>
