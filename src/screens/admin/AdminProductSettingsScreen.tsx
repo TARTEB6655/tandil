@@ -1,21 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   Switch,
-  TextInput,
-  Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
-import { adminService } from '../../services/adminService';
 
 const AdminProductSettingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -23,51 +18,6 @@ const AdminProductSettingsScreen: React.FC = () => {
   const [lowStockWarning, setLowStockWarning] = useState(true);
   const [allowBackorders, setAllowBackorders] = useState(false);
   const [showOutOfStock, setShowOutOfStock] = useState(true);
-
-  const [taxPercent, setTaxPercent] = useState('');
-  const [shopSettingsLoading, setShopSettingsLoading] = useState(true);
-  const [shopSettingsSaving, setShopSettingsSaving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    adminService
-      .getShopSettings()
-      .then((res) => {
-        if (cancelled) return;
-        const d = res.data;
-        if (d) {
-          setTaxPercent(String(d.tax_percent ?? 0));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setTaxPercent('5');
-      })
-      .finally(() => {
-        if (!cancelled) setShopSettingsLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  const handleSaveTax = () => {
-    const tax = parseFloat(taxPercent);
-    if (Number.isNaN(tax) || tax < 0 || tax > 100) {
-      Alert.alert(t('common.error'), t('admin.settings.productSettings.taxInvalid'));
-      return;
-    }
-    setShopSettingsSaving(true);
-    adminService
-      .updateShopSettings({ tax_percent: tax })
-      .then(() => {
-        Alert.alert(t('admin.settings.success'), t('admin.settings.productSettings.saved'));
-      })
-      .catch((err: any) => {
-        Alert.alert(
-          t('common.error'),
-          err.response?.data?.message || err.message || t('admin.settings.productSettings.saveFailed')
-        );
-      })
-      .finally(() => setShopSettingsSaving(false));
-  };
 
   return (
     <View style={styles.container}>
@@ -121,7 +71,7 @@ const AdminProductSettingsScreen: React.FC = () => {
                 thumbColor={allowBackorders ? COLORS.primary : COLORS.background}
               />
             </View>
-            <View style={styles.settingItem}>
+            <View style={[styles.settingItem, styles.settingItemLast]}>
               <View style={styles.settingIcon}>
                 <Ionicons name="eye-outline" size={24} color={COLORS.primary} />
               </View>
@@ -145,58 +95,10 @@ const AdminProductSettingsScreen: React.FC = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {t('admin.settings.productSettings.taxSection')}
-          </Text>
-          <View style={styles.sectionContent}>
-            {shopSettingsLoading ? (
-              <View style={styles.settingItem}>
-                <ActivityIndicator size="small" color={COLORS.primary} />
-                <Text style={styles.settingSubtitle}>{t('admin.settings.loading')}</Text>
-              </View>
-            ) : (
-              <>
-                <View style={styles.settingItem}>
-                  <View style={styles.settingIcon}>
-                    <Ionicons name="pricetag-outline" size={24} color={COLORS.primary} />
-                  </View>
-                  <View style={styles.settingContent}>
-                    <Text style={styles.settingTitle}>
-                      {t('admin.settings.productSettings.taxPercent')}
-                    </Text>
-                    <Text style={styles.settingSubtitle}>
-                      {t('admin.settings.productSettings.taxPercentHint')}
-                    </Text>
-                  </View>
-                  <TextInput
-                    style={styles.input}
-                    value={taxPercent}
-                    onChangeText={setTaxPercent}
-                    keyboardType="decimal-pad"
-                    placeholder="5"
-                  />
-                </View>
-                <TouchableOpacity
-                  style={[styles.saveButton, shopSettingsSaving && styles.saveButtonDisabled]}
-                  onPress={handleSaveTax}
-                  disabled={shopSettingsSaving}
-                >
-                  {shopSettingsSaving ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>{t('admin.settings.productSettings.save')}</Text>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
             {t('admin.settings.productSettings.display')}
           </Text>
           <View style={styles.sectionContent}>
-            <View style={styles.settingItem}>
+            <View style={[styles.settingItem, styles.settingItemLast]}>
               <View style={styles.settingIcon}>
                 <Ionicons name="cash-outline" size={24} color={COLORS.primary} />
               </View>
@@ -245,6 +147,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
+  settingItemLast: {
+    borderBottomWidth: 0,
+  },
   settingIcon: {
     width: 40,
     height: 40,
@@ -266,33 +171,6 @@ const styles = StyleSheet.create({
   settingSubtitle: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.sm,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-    minWidth: 72,
-    textAlign: 'right',
-  },
-  saveButton: {
-    backgroundColor: COLORS.primary,
-    margin: SPACING.md,
-    paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveButtonDisabled: {
-    opacity: 0.7,
-  },
-  saveButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: '#fff',
   },
 });
 
