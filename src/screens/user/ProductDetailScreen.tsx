@@ -23,11 +23,15 @@ import { useIsAuthenticated } from '../../store';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { ensureMinimumOrderAmount } from '../../utils/shopOrderMinimum';
 import {
+  mapShopApiOptionGroupsToCustomization,
   selectedOptionsToIds,
   validateRequiredProductOptions,
+  validateSelectedOptionsForCartApi,
 } from '../../utils/productSelectedOptions';
 import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import type { ProductCustomizationConfig } from '../../types/productCustomization';
+
+const mapApiOptionGroupsToCustomization = mapShopApiOptionGroupsToCustomization;
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -78,31 +82,6 @@ function shopProductToDisplay(p: ShopProduct | null): ProductDetailDisplay | nul
   };
 }
 
-function mapApiOptionGroupsToCustomization(p: ShopProduct | null): ProductCustomizationConfig | null {
-  const groups = p?.option_groups;
-  if (!Array.isArray(groups) || groups.length === 0) return null;
-  return {
-    groups: groups
-      .map((group, groupIndex) => ({
-        id: String(group.id ?? `group_${groupIndex}`),
-        title: String(group.name ?? ''),
-        subtitle: typeof group.subtitle === 'string' ? group.subtitle : '',
-        required: Boolean(group.is_required),
-        selectionMode: group.input_type === 'multiple' ? 'multiple' : 'single',
-        options: Array.isArray(group.options)
-          ? group.options.map((opt, optionIndex) => ({
-              id: String(opt.id ?? `opt_${groupIndex}_${optionIndex}`),
-              label: String(opt.label ?? ''),
-              subtitle: typeof opt.subtitle === 'string' ? opt.subtitle : '',
-              priceDelta: Number(opt.price_modifier ?? 0),
-              imageUrl: typeof opt.image_url === 'string' ? opt.image_url : '',
-            }))
-          : [],
-      }))
-      .filter((g) => g.options.length > 0),
-  };
-}
-
 const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
@@ -149,7 +128,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   }, []);
 
   useEffect(() => {
-    const cfg = mapApiOptionGroupsToCustomization(apiProduct);
+    const cfg = mapApiOptionGroupsToCustomization(apiProduct?.option_groups);
     setCustomization(cfg);
     if (!cfg) {
       setSelectedOptions({});
@@ -165,8 +144,8 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   }, [apiProduct]);
 
   const selectedOptionIds = useMemo(
-    () => selectedOptionsToIds(selectedOptions),
-    [selectedOptions]
+    () => selectedOptionsToIds(selectedOptions, customization),
+    [selectedOptions, customization]
   );
 
   useEffect(() => {
@@ -226,6 +205,11 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     return sum;
   }, [customization, selectedOptions]);
 
+  const addToCartSubtotal = useMemo(() => {
+    const unitPrice = product.price + selectedOptionsExtra;
+    return Math.round(unitPrice * quantity * 100) / 100;
+  }, [product.price, selectedOptionsExtra, quantity]);
+
   const buyNowMinCheckTotalWithOptions = buyNowTotalForMinCheck + selectedOptionsExtra * quantity;
 
   const ensureCustomizationValid = (): boolean => {
@@ -264,6 +248,21 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
       return;
     }
     if (!ensureCustomizationValid()) return;
+    const optionApiCheck = validateSelectedOptionsForCartApi(customization, selectedOptions);
+    if (!optionApiCheck.valid) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        optionApiCheck.missingGroupTitle
+          ? t('product.requiredOptionMissing', {
+              defaultValue: 'Please select required option(s) for {{group}}.',
+              group: optionApiCheck.missingGroupTitle,
+            })
+          : t('product.invalidOptions', {
+              defaultValue: 'Could not save your selected options. Please try again.',
+            })
+      );
+      return;
+    }
     if (!isAuthenticated) {
       Alert.alert(
         t('product.loginRequired', { defaultValue: 'Login required' }),
@@ -282,10 +281,11 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         Alert.alert(t('common.error', 'Error'), t('product.invalidProduct', { defaultValue: 'Invalid product.' }));
         return;
       }
+      const mustSendOptions = Boolean(customization?.groups?.some((g) => g.required));
       await addCartItem(
         productId,
         quantity,
-        selectedOptionIds.length ? selectedOptionIds : undefined
+        mustSendOptions || selectedOptionIds.length > 0 ? selectedOptionIds : undefined
       );
       refreshCartBadge();
       Alert.alert(
@@ -688,9 +688,18 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
           {addingToCart ? (
             <ActivityIndicator size="small" color={COLORS.primary} />
           ) : (
-            <Ionicons name="cart-outline" size={20} color={COLORS.primary} />
+            <View style={styles.addToCartInner}>
+              <View style={styles.addToCartLabelRow}>
+                <Ionicons name="cart-outline" size={18} color={COLORS.primary} />
+                <Text style={styles.addToCartText} numberOfLines={1}>
+                  {t('product.addToCart')}
+                </Text>
+              </View>
+              <Text style={styles.addToCartPrice} numberOfLines={1}>
+                {currency} {addToCartSubtotal.toFixed(2)}
+              </Text>
+            </View>
           )}
-          <Text style={styles.addToCartText}>{addingToCart ? t('common.loading', 'Loading…') : t('product.addToCart')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -1031,31 +1040,49 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   addToCartButton: {
-    flex: 1,
-    flexDirection: 'row',
+    flex: 1.15,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.sm,
     borderRadius: BORDER_RADIUS.md,
     borderWidth: 2,
     borderColor: COLORS.primary,
     backgroundColor: COLORS.surface,
-    gap: SPACING.xs,
+    minHeight: 56,
+  },
+  addToCartInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  addToCartLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginBottom: 2,
   },
   addToCartText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.primary,
+  },
+  addToCartPrice: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primary,
+    textAlign: 'center',
   },
   buyNowButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.sm,
     borderRadius: BORDER_RADIUS.md,
     backgroundColor: COLORS.primary,
+    minHeight: 56,
   },
   buyNowText: {
     fontSize: FONT_SIZES.md,

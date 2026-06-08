@@ -36,6 +36,7 @@ export interface ShopProduct {
   barcode?: string;
   description?: string;
   handle?: string;
+  product_type?: string | null;
   price: string | number;
   compare_at_price?: string | number;
   weight?: string;

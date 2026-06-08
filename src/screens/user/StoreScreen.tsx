@@ -21,6 +21,7 @@ import { addCartItem } from '../../services/cartService';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import { buildFullImageUrl } from '../../config/api';
+import { productRequiresOptionSelection } from '../../utils/productSelectedOptions';
 
 type CategoryItem = { id: string; name: string; imageUri: string | null };
 
@@ -138,6 +139,10 @@ const StoreScreen: React.FC = () => {
         });
 
   const handleAddToCart = async (product: ShopProduct) => {
+    if (productRequiresOptionSelection(product)) {
+      navigation.navigate('ProductDetail', { product: toDetailProduct(product) });
+      return;
+    }
     if (!isAuthenticated) {
       Alert.alert(
         t('product.loginRequired', { defaultValue: 'Login required' }),

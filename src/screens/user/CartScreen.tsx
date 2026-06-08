@@ -15,7 +15,15 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
-import { getCart, removeCartItem, updateCartItemQuantity, getOrderSummary, CartApiItem, CartOrderSummary, OrderSummaryData } from '../../services/cartService';
+import {
+  getCart,
+  removeCartItem,
+  updateCartItemQuantity,
+  getOrderSummary,
+  CartApiItem,
+  CartOrderSummary,
+  OrderSummaryData,
+} from '../../services/cartService';
 import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
 import { useIsAuthenticated } from '../../store';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';

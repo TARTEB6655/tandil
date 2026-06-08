@@ -194,7 +194,13 @@ export interface GetCartResponse {
  */
 export async function getCart(): Promise<GetCartResponse> {
   const response = await apiClient.get<GetCartResponse>('/shop/cart', { timeout: 15000 });
-  return response.data ?? {};
+  const data = response.data ?? {};
+  if (data.success === false && data.message) {
+    const err: any = new Error(data.message);
+    err.response = { data: { message: data.message }, status: 422 };
+    throw err;
+  }
+  return data;
 }
 
 /**
