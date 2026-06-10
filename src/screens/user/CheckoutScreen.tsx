@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -93,6 +93,7 @@ const CheckoutScreen: React.FC = () => {
   
   const [currentStep, setCurrentStep] = useState<'location' | 'payment'>('location');
   const [loading, setLoading] = useState(false);
+  const [validatingLocation, setValidatingLocation] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locationCoords, setLocationCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null);
@@ -125,6 +126,9 @@ const CheckoutScreen: React.FC = () => {
   const [applyWallet, setApplyWallet] = useState(false);
   const [walletSummaryLoading, setWalletSummaryLoading] = useState(false);
   const [couponCartLines, setCouponCartLines] = useState<CartLineForCoupons[]>([]);
+  const walletRefreshRequestRef = useRef(0);
+  const applyWalletPrevRef = useRef(false);
+  const prevStepRef = useRef<'location' | 'payment'>('location');
   const STEP_ORDER: Array<'location' | 'payment'> = ['location', 'payment'];
   const activeStepIndex = STEP_ORDER.indexOf(currentStep);
 
@@ -144,9 +148,11 @@ const CheckoutScreen: React.FC = () => {
   };
 
   const refreshSummaryForWallet = useCallback(
-    async (useWallet: boolean) => {
+    async (useWallet: boolean, options?: { showLoading?: boolean }) => {
       if (isBuyNow && !cartItems?.length) return;
-      setWalletSummaryLoading(true);
+      const showLoading = options?.showLoading ?? false;
+      const requestId = ++walletRefreshRequestRef.current;
+      if (showLoading) setWalletSummaryLoading(true);
       try {
         if (isBuyNow) {
           const first = (cartItems || [])[0] as CartItem | undefined;
@@ -161,6 +167,7 @@ const CheckoutScreen: React.FC = () => {
               ? selectedOptionIds
               : undefined,
           });
+          if (requestId !== walletRefreshRequestRef.current) return;
           if (buyNowRes?.order_summary) {
             setOrderSummaryApi(buyNowRes.order_summary);
             if (typeof buyNowRes.order_summary.wallet_balance === 'number') {
@@ -169,6 +176,7 @@ const CheckoutScreen: React.FC = () => {
           }
         } else {
           const summary = await getOrderSummary({ use_wallet: useWallet, wallet_amount: 0 });
+          if (requestId !== walletRefreshRequestRef.current) return;
           if (summary) {
             setOrderSummaryApi(summary);
             if (typeof summary.wallet_balance === 'number') {
@@ -177,7 +185,9 @@ const CheckoutScreen: React.FC = () => {
           }
         }
       } finally {
-        setWalletSummaryLoading(false);
+        if (showLoading && requestId === walletRefreshRequestRef.current) {
+          setWalletSummaryLoading(false);
+        }
       }
     },
     [cartItems, isBuyNow, selectedOptionIds]
@@ -202,22 +212,30 @@ const CheckoutScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       getShopSettings().then(setShopSettings);
-      if (isBuyNow && buyNowSummary) {
-        setOrderSummaryApi(buyNowSummary);
-      } else {
-        getOrderSummary().then(setOrderSummaryApi);
-      }
       getWalletSummary().then((r) => {
         setWalletApiBalance(r.data != null ? Number(r.data.balance) || 0 : 0);
       });
-      refreshSummaryForWallet(applyWallet).catch(() => {});
-    }, [buyNowSummary, isBuyNow, applyWallet, refreshSummaryForWallet])
+    }, [])
   );
 
   useEffect(() => {
-    if (currentStep === 'payment') {
-      refreshSummaryForWallet(applyWallet).catch(() => {});
+    const enteredPayment = prevStepRef.current !== 'payment' && currentStep === 'payment';
+    prevStepRef.current = currentStep;
+    if (!enteredPayment) return;
+    applyWalletPrevRef.current = applyWallet;
+    if (applyWallet) {
+      refreshSummaryForWallet(true, { showLoading: true }).catch(() => {});
     }
+  }, [currentStep, applyWallet, refreshSummaryForWallet]);
+
+  useEffect(() => {
+    if (currentStep !== 'payment') {
+      applyWalletPrevRef.current = applyWallet;
+      return;
+    }
+    if (applyWalletPrevRef.current === applyWallet) return;
+    applyWalletPrevRef.current = applyWallet;
+    refreshSummaryForWallet(applyWallet, { showLoading: true }).catch(() => {});
   }, [applyWallet, currentStep, refreshSummaryForWallet]);
 
   useEffect(() => {
@@ -831,7 +849,7 @@ const CheckoutScreen: React.FC = () => {
         return;
       }
 
-      setLoading(true);
+      setValidatingLocation(true);
       try {
         const resolveRes = await resolveVisitArea({
           full_name: shippingAddress.fullName,
@@ -854,11 +872,11 @@ const CheckoutScreen: React.FC = () => {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         Alert.alert(t('checkout.locationNotServiceableTitle', 'Location unavailable'), msg, [
-          { text: t('common.ok', 'OK') },
-        ]);
+          { text: t('common.ok', 'OK') }],
+        );
         return;
       } finally {
-        setLoading(false);
+        setValidatingLocation(false);
       }
     }
 
@@ -999,19 +1017,20 @@ const CheckoutScreen: React.FC = () => {
                   thumbColor={applyWallet ? COLORS.primary : COLORS.textSecondary}
                 />
               </View>
-              {walletSummaryLoading ? (
-                <Text style={styles.walletOffHint}>
-                  {t('checkout.walletUpdating', 'Updating wallet summary...')}
-                </Text>
-              ) : null}
-              {!applyWallet ? (
-                <Text style={styles.walletOffHint}>
-                  {t(
-                    'checkout.walletOffHint',
-                    'Leave off to pay the full amount with your card. Turn on to reduce what you pay now by your wallet balance.'
-                  )}
-                </Text>
-              ) : null}
+              <View style={styles.walletHintSlot}>
+                {walletSummaryLoading ? (
+                  <Text style={styles.walletOffHint}>
+                    {t('checkout.walletUpdating', 'Updating wallet summary...')}
+                  </Text>
+                ) : !applyWallet ? (
+                  <Text style={styles.walletOffHint}>
+                    {t(
+                      'checkout.walletOffHint',
+                      'Leave off to pay the full amount with your card. Turn on to reduce what you pay now by your wallet balance.'
+                    )}
+                  </Text>
+                ) : null}
+              </View>
             </View>
           )}
 
@@ -1066,11 +1085,16 @@ const CheckoutScreen: React.FC = () => {
             currentStep === 'payment' && styles.placeOrderButton,
           ]}
           onPress={handleNext}
-          disabled={loading}
+          disabled={loading || validatingLocation}
         >
             <Text style={styles.nextButtonText}>
-              {loading ? t('checkout.processing') : 
-               currentStep === 'payment' ? t('checkout.placeOrder') : t('checkout.next')}
+              {validatingLocation
+                ? t('checkout.validatingAddress', 'Validating address…')
+                : loading
+                  ? t('checkout.processing')
+                  : currentStep === 'payment'
+                    ? t('checkout.placeOrder')
+                    : t('checkout.next')}
             </Text>
           {currentStep !== 'payment' && (
             <Ionicons name="arrow-forward" size={20} color={COLORS.background} />
@@ -1448,6 +1472,10 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginRight: SPACING.md,
     lineHeight: 20,
+  },
+  walletHintSlot: {
+    minHeight: 48,
+    justifyContent: 'center',
   },
   walletOffHint: {
     marginTop: SPACING.sm,
