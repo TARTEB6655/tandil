@@ -26,6 +26,7 @@ import {
 } from '../../services/cartService';
 import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
 import { useIsAuthenticated } from '../../store';
+import { invalidateClientSession, isUnauthenticatedError } from '../../utils/invalidateClientSession';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import {
@@ -118,11 +119,21 @@ const CartScreen: React.FC = () => {
       } catch (_) {
         setOrderSummaryApi(null);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setCartItems([]);
       setOrderSummary(null);
       setOrderSummaryApi(null);
-      setError(err.response?.data?.message || err.message || t('cart.errorLoad', { defaultValue: 'Failed to load cart' }));
+      if (isUnauthenticatedError(err)) {
+        await invalidateClientSession();
+        setError(null);
+        return;
+      }
+      const ax = err as { response?: { data?: { message?: string } }; message?: string };
+      setError(
+        ax.response?.data?.message ||
+          ax.message ||
+          t('cart.errorLoad', { defaultValue: 'Failed to load cart' })
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);

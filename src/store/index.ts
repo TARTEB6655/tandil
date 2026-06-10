@@ -306,11 +306,10 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       // Bump storage key to invalidate old demo images persisted by AsyncStorage
-      name: 'tandil-storage-v2',
+      name: 'tandil-storage-v3',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
-        user: state.user,
-        isAuthenticated: state.isAuthenticated,
+        // Auth lives in auth_token + session restore — do not persist isAuthenticated/user
         language: state.language,
         theme: state.theme,
         cart: state.cart,

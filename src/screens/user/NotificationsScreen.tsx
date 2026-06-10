@@ -15,6 +15,9 @@ import dayjs from 'dayjs';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
+import { useIsAuthenticated } from '../../store';
+import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
+import { invalidateClientSession, isUnauthenticatedError } from '../../utils/invalidateClientSession';
 import {
   getClientNotifications,
   markClientNotificationAsRead,
@@ -70,6 +73,7 @@ function rowTitleAndMessage(
 const NotificationsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const isAuthenticated = useIsAuthenticated();
   const [list, setList] = useState<ClientNotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,18 +84,30 @@ const NotificationsScreen: React.FC = () => {
   const [clearingAll, setClearingAll] = useState(false);
 
   const loadNotifications = useCallback(async () => {
+    if (!isAuthenticated) {
+      setList([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const result = await getClientNotifications({ per_page: 20, page: 1 });
       setList(result.list);
-    } catch {
+    } catch (err: unknown) {
+      if (isUnauthenticatedError(err)) {
+        await invalidateClientSession();
+        setList([]);
+        setError(null);
+        return;
+      }
       setError(t('notifications.errorLoad', 'Failed to load notifications.'));
       setList([]);
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [isAuthenticated, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -251,6 +267,21 @@ const NotificationsScreen: React.FC = () => {
     <View style={styles.container}>
       <Header title={t('notifications.title')} showBack={true} onBackPress={handleBackPress} />
 
+      {!isAuthenticated ? (
+        <View style={styles.centered}>
+          <Ionicons name="log-in-outline" size={64} color={COLORS.textSecondary} />
+          <Text style={styles.emptyText}>
+            {t('notifications.loginToView', 'Log in to view your notifications.')}
+          </Text>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => navigateToClientAuth(navigation)}
+          >
+            <Text style={styles.loginButtonText}>{t('auth.login', 'Log in')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
       <View style={styles.actionsContainer}>
         <ScrollView
           horizontal
@@ -351,6 +382,8 @@ const NotificationsScreen: React.FC = () => {
             contentContainerStyle={styles.notificationsList}
           />
         </View>
+      )}
+        </>
       )}
     </View>
   );
@@ -523,6 +556,19 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.textSecondary,
     textAlign: 'center',
+    marginTop: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  loginButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+  },
+  loginButtonText: {
+    color: COLORS.background,
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold as any,
   },
 });
 

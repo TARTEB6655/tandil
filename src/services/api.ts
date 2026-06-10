@@ -50,13 +50,10 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        await AsyncStorage.removeItem('auth_token');
-        await AsyncStorage.removeItem('auth_role');
-        await AsyncStorage.removeItem('auth_slug');
-        await AsyncStorage.removeItem('user');
-        // You can navigate to login screen here if needed
+        const { invalidateClientSession } = await import('../utils/invalidateClientSession');
+        await invalidateClientSession();
       } catch (e) {
-        console.error('Error clearing storage:', e);
+        console.error('Error clearing session after 401:', e);
       }
     }
 

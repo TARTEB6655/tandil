@@ -56,13 +56,13 @@ export async function restoreSessionAndGetRoute(
       return rootRoute;
     }
 
-    if (token && (!user || !rootRoute)) {
-      await authService.clearLocalSession();
-      setUser(null);
-      setAuthenticated(false);
-    }
+    await authService.clearLocalSession();
+    setUser(null);
+    setAuthenticated(false);
   } catch (error) {
     console.error('Session restore failed:', error);
+    setUser(null);
+    setAuthenticated(false);
   }
 
   return 'RoleSelection';
