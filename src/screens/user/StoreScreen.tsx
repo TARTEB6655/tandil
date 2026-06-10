@@ -163,7 +163,7 @@ const StoreScreen: React.FC = () => {
     try {
       await addCartItem(productId, 1);
       setAddedToCart(String(productId));
-      refreshCartBadge();
+      refreshCartBadge(true);
       setTimeout(() => setAddedToCart(null), 1000);
     } catch (err: any) {
       const status = err.response?.status;

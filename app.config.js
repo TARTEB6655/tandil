@@ -45,7 +45,8 @@ module.exports = {
       },
       infoPlist: {
         ...expo.ios?.infoPlist,
-        NSLocationWhenInUseUsageDescription: 'We use your location to show local weather on your dashboard.',
+        NSLocationWhenInUseUsageDescription:
+          'We use your location to auto-fill your delivery address at checkout and show local weather on your dashboard.',
         LSApplicationQueriesSchemes: ['tel', 'mailto', ...(expo.ios?.infoPlist?.LSApplicationQueriesSchemes || [])],
       },
     },
@@ -82,7 +83,7 @@ module.exports = {
         'expo-location',
         {
           locationWhenInUsePermission:
-            'We use your location to show local weather and delivery options on your dashboard.',
+            'We use your location to auto-fill your delivery address at checkout and show local weather on your dashboard.',
         },
       ],
       'expo-web-browser',

@@ -287,7 +287,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         quantity,
         mustSendOptions || selectedOptionIds.length > 0 ? selectedOptionIds : undefined
       );
-      refreshCartBadge();
+      refreshCartBadge(true);
       Alert.alert(
         t('product.addedToCart'),
         `${product.name} (Qty: ${quantity})`,

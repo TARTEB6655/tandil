@@ -10,9 +10,10 @@ import {
   TextInput,
   Platform,
   Switch,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
@@ -42,6 +43,10 @@ import { getStripePaymentSheetReturnURL } from '../../config/stripeLinking';
 import { captureException } from '../../utils/sentry';
 import * as Location from 'expo-location';
 import { resolveVisitArea } from '../../services/visitService';
+import {
+  ensureForegroundLocationPermission,
+  getDevicePositionForUserAction,
+} from '../../utils/deviceLocation';
 import { getWalletSummary } from '../../services/walletService';
 import { useAppStore } from '../../store';
 import { useCouponStore } from '../../store/couponStore';
@@ -208,15 +213,6 @@ const CheckoutScreen: React.FC = () => {
     });
     return () => { cancelled = true; };
   }, [buyNowSummary, isBuyNow]);
-
-  useFocusEffect(
-    useCallback(() => {
-      getShopSettings().then(setShopSettings);
-      getWalletSummary().then((r) => {
-        setWalletApiBalance(r.data != null ? Number(r.data.balance) || 0 : 0);
-      });
-    }, [])
-  );
 
   useEffect(() => {
     const enteredPayment = prevStepRef.current !== 'payment' && currentStep === 'payment';
@@ -607,20 +603,52 @@ const CheckoutScreen: React.FC = () => {
   const handleUseMyLocation = async () => {
     setLocating(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
+      const permission = await ensureForegroundLocationPermission();
+      if (permission !== 'granted') {
+        Alert.alert(
+          t('checkout.locationPermissionRequired', 'Location permission is required to auto-fill your address.'),
+          t(
+            'checkout.locationPermissionDeniedMessage',
+            'Enable location access for Tandil in your phone Settings, then try again.'
+          ),
+          [
+            { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+            {
+              text: t('checkout.openSettings', 'Open Settings'),
+              onPress: () => {
+                Linking.openSettings().catch(() => {});
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servicesEnabled) {
         Alert.alert(
           t('common.error', 'Error'),
           t(
-            'checkout.locationPermissionRequired',
-            'Location permission is required to auto-fill your address.'
+            'checkout.locationServicesDisabled',
+            'Turn on Location Services on your phone, then try again.'
           ),
           [{ text: t('common.ok', 'OK') }]
         );
         return;
       }
 
-      const coords = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const coords = await getDevicePositionForUserAction();
+      if (!coords) {
+        Alert.alert(
+          t('common.error', 'Error'),
+          t(
+            'checkout.locationFetchFailed',
+            'Unable to get your current location. Move outdoors or nearer a window and try again.'
+          ),
+          [{ text: t('common.ok', 'OK') }]
+        );
+        return;
+      }
       const places = await Location.reverseGeocodeAsync({
         latitude: coords.coords.latitude,
         longitude: coords.coords.longitude,

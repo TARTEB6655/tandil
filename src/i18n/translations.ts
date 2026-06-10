@@ -287,8 +287,13 @@ export const en = {
       'Use GPS to auto-fill your shipping address instead of typing all address fields manually.',
     useMyLocation: 'Use my location',
     locationPermissionRequired: 'Location permission is required to auto-fill your address.',
+    locationPermissionDeniedMessage:
+      'Enable location access for Tandil in your phone Settings, then try again.',
+    locationServicesDisabled: 'Turn on Location Services on your phone, then try again.',
+    openSettings: 'Open Settings',
     locationNotFound: 'Could not fetch address from your location.',
-    locationFetchFailed: 'Unable to get your current location. Please try again.',
+    locationFetchFailed:
+      'Unable to get your current location. Move outdoors or nearer a window and try again.',
     completeLocationFirst:
       'Please use your location or complete your address before continuing.',
     phoneNumberStep: 'Phone',

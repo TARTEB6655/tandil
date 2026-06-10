@@ -35,7 +35,7 @@ import { WeatherData } from '../../services/weatherService';
 import { getClientNotifications } from '../../services/clientNotificationService';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { useIsAuthenticated } from '../../store';
-import { loadDashboardWeather } from '../../utils/dashboardWeather';
+import { getCachedDashboardWeather, loadDashboardWeather } from '../../utils/dashboardWeather';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -197,10 +197,21 @@ const HomeScreen: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  const refreshDashboardWeather = useCallback(async () => {
+  const refreshDashboardWeather = useCallback(async (force = false) => {
+    if (!force) {
+      const cached = getCachedDashboardWeather();
+      if (cached) {
+        setLocationPermission(cached.permissionGranted);
+        setWeather(cached.weather);
+        setWeatherLoading(false);
+        return;
+      }
+    }
     setWeatherLoading(true);
     try {
-      const { weather: data, permissionGranted } = await loadDashboardWeather(isAuthenticated);
+      const { weather: data, permissionGranted } = await loadDashboardWeather(isAuthenticated, {
+        force,
+      });
       setLocationPermission(permissionGranted);
       setWeather(data);
     } catch {
@@ -213,14 +224,14 @@ const HomeScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-      refreshDashboardWeather();
+      refreshDashboardWeather(false);
     }, [refreshDashboardWeather])
   );
 
   const handleWeatherCardPress = useCallback(async () => {
     if (weatherLoading) return;
     if (weather) return;
-    await refreshDashboardWeather();
+    await refreshDashboardWeather(true);
   }, [weather, weatherLoading, refreshDashboardWeather]);
 
   // Fetch public services for Place Service Orders (GET /services?per_page=12, no auth)
