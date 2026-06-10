@@ -135,11 +135,13 @@ export async function getBuyNowSummary(
     use_wallet?: boolean;
     wallet_amount?: number;
     selected_option_ids?: number[];
+    coupon_code?: string;
   }
 ): Promise<BuyNowSummaryData | null> {
   const selectedOptionIds = options?.selected_option_ids?.filter(
     (id) => Number.isFinite(id) && id > 0
   );
+  const couponCode = options?.coupon_code?.trim().toUpperCase();
   const response = await apiClient.post<GetBuyNowSummaryResponse>(
     '/shop/buy-now/summary',
     {
@@ -148,6 +150,7 @@ export async function getBuyNowSummary(
       ...(selectedOptionIds?.length ? { selected_option_ids: selectedOptionIds } : {}),
       ...(typeof options?.use_wallet === 'boolean' ? { use_wallet: options.use_wallet } : {}),
       ...(typeof options?.wallet_amount === 'number' ? { wallet_amount: options.wallet_amount } : {}),
+      ...(couponCode ? { coupon_code: couponCode } : {}),
     },
     { timeout: 15000 }
   );

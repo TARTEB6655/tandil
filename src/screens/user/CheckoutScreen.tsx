@@ -152,6 +152,9 @@ const CheckoutScreen: React.FC = () => {
     }, 0);
   };
 
+  const appliedCoupon = useCouponStore((s) => s.applied);
+  const clearCoupon = useCouponStore((s) => s.clear);
+
   const refreshSummaryForWallet = useCallback(
     async (useWallet: boolean, options?: { showLoading?: boolean }) => {
       if (isBuyNow && !cartItems?.length) return;
@@ -165,12 +168,14 @@ const CheckoutScreen: React.FC = () => {
           const pid = Number(first.productId);
           const qty = Number(first.quantity);
           if (!Number.isFinite(pid) || !Number.isFinite(qty)) return;
+          const couponCode = useCouponStore.getState().appliedCode?.trim().toUpperCase();
           const buyNowRes = await getBuyNowSummary(pid, qty, {
             use_wallet: useWallet,
             wallet_amount: 0,
             selected_option_ids: Array.isArray(selectedOptionIds) && selectedOptionIds.length
               ? selectedOptionIds
               : undefined,
+            ...(couponCode ? { coupon_code: couponCode } : {}),
           });
           if (requestId !== walletRefreshRequestRef.current) return;
           if (buyNowRes?.order_summary) {
@@ -206,18 +211,38 @@ const CheckoutScreen: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     getShopSettings().then((s) => { if (!cancelled) setShopSettings(s); });
-    if (isBuyNow && buyNowSummary) {
-      if (!cancelled) setOrderSummaryApi(buyNowSummary);
-    } else {
-      getOrderSummary().then((s) => { if (!cancelled) setOrderSummaryApi(s ?? null); });
-    }
+
+    const loadSummary = async () => {
+      if (isBuyNow) {
+        if (buyNowSummary) {
+          if (!cancelled) setOrderSummaryApi(buyNowSummary);
+          return;
+        }
+        const first = (cartItems || [])[0] as CartItem | undefined;
+        if (!first) return;
+        const pid = Number(first.productId);
+        const qty = Number(first.quantity);
+        if (!Number.isFinite(pid) || !Number.isFinite(qty)) return;
+        const res = await getBuyNowSummary(pid, qty, {
+          selected_option_ids: Array.isArray(selectedOptionIds) && selectedOptionIds.length
+            ? selectedOptionIds
+            : undefined,
+        });
+        if (!cancelled && res?.order_summary) setOrderSummaryApi(res.order_summary);
+        return;
+      }
+      const s = await getOrderSummary();
+      if (!cancelled) setOrderSummaryApi(s ?? null);
+    };
+    loadSummary();
+
     getWalletSummary().then((r) => {
       if (!cancelled) {
         setWalletApiBalance(r.data != null ? Number(r.data.balance) || 0 : 0);
       }
     });
     return () => { cancelled = true; };
-  }, [buyNowSummary, isBuyNow]);
+  }, [buyNowSummary, isBuyNow, cartItems, selectedOptionIds]);
 
   useEffect(() => {
     const enteredPayment = prevStepRef.current !== 'payment' && currentStep === 'payment';
@@ -269,8 +294,6 @@ const CheckoutScreen: React.FC = () => {
       .catch(() => setCouponCartLines(fromRoute));
   }, [currentStep, isBuyNow, cartItems]);
 
-  const appliedCoupon = useCouponStore((s) => s.applied);
-  const clearCoupon = useCouponStore((s) => s.clear);
   const couponOnPaymentStep = currentStep === 'payment';
 
   const couponCartContext = useMemo(
@@ -279,22 +302,44 @@ const CheckoutScreen: React.FC = () => {
   );
 
   const useApiSummary = orderSummaryApi != null;
-  const subtotal = useApiSummary ? orderSummaryApi.subtotal : calculateSubtotal();
-  const discount = useApiSummary ? orderSummaryApi.discount : calculateDiscount();
-  const shippingBase = useApiSummary ? orderSummaryApi.shipping : (shopSettings?.shipping_amount ?? 0);
-  const taxPercent = useApiSummary ? (orderSummaryApi.tax_percent ?? 0) : (shopSettings?.tax_percent ?? 0);
+  const subtotal = useApiSummary
+    ? Number(orderSummaryApi.subtotal) || (isBuyNow ? calculateSubtotal() : 0)
+    : calculateSubtotal();
+  const discount = useApiSummary
+    ? Number(orderSummaryApi.discount) || 0
+    : calculateDiscount();
+  const shippingBase = useApiSummary
+    ? Number(orderSummaryApi.shipping) || 0
+    : (shopSettings?.shipping_amount ?? 0);
+  const taxPercent = useApiSummary
+    ? (orderSummaryApi.tax_percent ?? 0)
+    : (shopSettings?.tax_percent ?? 0);
   const couponDiscount =
     couponOnPaymentStep && appliedCoupon ? (appliedCoupon.coupon_discount ?? 0) : 0;
   const shippingAmount =
     couponOnPaymentStep && appliedCoupon?.free_shipping ? 0 : shippingBase;
   const taxableBase = Math.max(0, subtotal - discount - couponDiscount);
-  const taxAmount = Math.round(taxableBase * (taxPercent / 100) * 100) / 100;
-  const total =
-    couponOnPaymentStep && useApiSummary
-      ? Math.round((taxableBase + shippingAmount + taxAmount) * 100) / 100
+  const taxAmount =
+    couponOnPaymentStep && appliedCoupon
+      ? Math.round(taxableBase * (taxPercent / 100) * 100) / 100
+      : useApiSummary && orderSummaryApi.tax != null
+        ? Number(orderSummaryApi.tax) || 0
+        : Math.round(taxableBase * (taxPercent / 100) * 100) / 100;
+  const clientTotal = Math.round((taxableBase + shippingAmount + taxAmount) * 100) / 100;
+  const apiTotal = useApiSummary ? Number(orderSummaryApi.total) || 0 : 0;
+  const shouldUseClientTotal =
+    couponOnPaymentStep && useApiSummary && !isBuyNow;
+  const total = shouldUseClientTotal
+    ? clientTotal
+    : couponOnPaymentStep && isBuyNow && appliedCoupon
+      ? apiTotal > 0
+        ? apiTotal
+        : clientTotal
       : useApiSummary
-        ? orderSummaryApi.total
-        : Math.round((taxableBase + shippingAmount + taxAmount) * 100) / 100;
+        ? apiTotal > 0
+          ? apiTotal
+          : clientTotal
+        : clientTotal;
   const currency = useApiSummary ? orderSummaryApi.currency : (shopSettings?.currency ?? 'AED');
 
   const { walletApplied, payableTotal } = useMemo(() => {
@@ -960,8 +1005,25 @@ const CheckoutScreen: React.FC = () => {
                 setOrderSummaryApi(summary);
                 return;
               }
-              const code = useCouponStore.getState().appliedCode;
-              if (!code || isBuyNow) return;
+              const code = useCouponStore.getState().appliedCode?.trim().toUpperCase();
+              if (!code) return;
+              if (isBuyNow) {
+                const first = (cartItems || [])[0] as CartItem | undefined;
+                if (!first) return;
+                const pid = Number(first.productId);
+                const qty = Number(first.quantity);
+                if (!Number.isFinite(pid) || !Number.isFinite(qty)) return;
+                const refreshed = await getBuyNowSummary(pid, qty, {
+                  use_wallet: applyWallet,
+                  wallet_amount: 0,
+                  selected_option_ids: Array.isArray(selectedOptionIds) && selectedOptionIds.length
+                    ? selectedOptionIds
+                    : undefined,
+                  coupon_code: code,
+                });
+                if (refreshed?.order_summary) setOrderSummaryApi(refreshed.order_summary);
+                return;
+              }
               const refreshed = await getOrderSummary({
                 use_wallet: applyWallet,
                 wallet_amount: 0,
@@ -970,7 +1032,6 @@ const CheckoutScreen: React.FC = () => {
               if (refreshed) setOrderSummaryApi(refreshed);
             }}
             onCleared={async () => {
-              if (isBuyNow) return;
               await refreshSummaryForWallet(applyWallet, { showLoading: true });
             }}
           />
