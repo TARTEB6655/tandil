@@ -35,7 +35,13 @@ import { WeatherData } from '../../services/weatherService';
 import { getClientNotifications } from '../../services/clientNotificationService';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { useIsAuthenticated } from '../../store';
-import { getCachedDashboardWeather, loadDashboardWeather } from '../../utils/dashboardWeather';
+import {
+  type DashboardWeatherPermission,
+  getCachedDashboardWeather,
+  loadDashboardWeather,
+  reconcileWeatherCacheWithSystem,
+} from '../../utils/dashboardWeather';
+import { resolveLocationAccessForApp } from '../../utils/deviceLocation';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -58,7 +64,16 @@ const HomeScreen: React.FC = () => {
   const [exclusiveOffersLoading, setExclusiveOffersLoading] = useState(true);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
-  const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
+  const [locationPermissionStatus, setLocationPermissionStatus] =
+    useState<DashboardWeatherPermission | null>(null);
+  /** Boolean mirror — avoids ReferenceError if a hot-reload still references `locationPermission`. */
+  const locationPermission =
+    locationPermissionStatus === 'granted'
+      ? true
+      : locationPermissionStatus === 'denied'
+        ? false
+        : null;
+  const weatherPromptedRef = useRef(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const { count: cartItemCount } = useCartBadgeCount();
 
@@ -197,42 +212,159 @@ const HomeScreen: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  const refreshDashboardWeather = useCallback(async (force = false) => {
-    if (!force) {
-      const cached = getCachedDashboardWeather();
-      if (cached) {
-        setLocationPermission(cached.permissionGranted);
-        setWeather(cached.weather);
-        setWeatherLoading(false);
-        return;
+  const applyWeatherResult = useCallback(
+    (result: {
+      weather: WeatherData | null;
+      permissionStatus?: DashboardWeatherPermission;
+      permissionGranted?: boolean;
+    }) => {
+      const status: DashboardWeatherPermission =
+        result.permissionStatus ??
+        (result.permissionGranted === true
+          ? 'granted'
+          : result.permissionGranted === false
+            ? 'denied'
+            : 'undetermined');
+      setLocationPermissionStatus(status);
+      setWeather(result.weather);
+    },
+    []
+  );
+
+  const refreshDashboardWeather = useCallback(
+    async (options?: { force?: boolean; requestPermission?: boolean }) => {
+      const force = options?.force ?? false;
+      const requestPermission = options?.requestPermission ?? false;
+
+      if (!force) {
+        const cached = getCachedDashboardWeather(isAuthenticated);
+        if (cached) {
+          applyWeatherResult(cached);
+          setWeatherLoading(false);
+          return;
+        }
       }
-    }
-    setWeatherLoading(true);
-    try {
-      const { weather: data, permissionGranted } = await loadDashboardWeather(isAuthenticated, {
-        force,
-      });
-      setLocationPermission(permissionGranted);
-      setWeather(data);
-    } catch {
-      setWeather(null);
-      setLocationPermission(false);
-    } finally {
-      setWeatherLoading(false);
-    }
-  }, [isAuthenticated]);
+
+      setWeatherLoading(true);
+      try {
+        const result = await loadDashboardWeather(isAuthenticated, { force, requestPermission });
+        applyWeatherResult(result);
+      } catch {
+        setWeather(null);
+        resolveLocationAccessForApp()
+          .then(setLocationPermissionStatus)
+          .catch(() => setLocationPermissionStatus('undetermined'));
+      } finally {
+        setWeatherLoading(false);
+      }
+    },
+    [applyWeatherResult, isAuthenticated]
+  );
+
+  useEffect(() => {
+    if (weatherPromptedRef.current) return;
+    weatherPromptedRef.current = true;
+    refreshDashboardWeather({ requestPermission: true });
+  }, [refreshDashboardWeather]);
+
+  const prevAuthenticatedRef = useRef(isAuthenticated);
+  useEffect(() => {
+    if (prevAuthenticatedRef.current === isAuthenticated) return;
+    prevAuthenticatedRef.current = isAuthenticated;
+    refreshDashboardWeather({ force: true, requestPermission: false });
+  }, [isAuthenticated, refreshDashboardWeather]);
 
   useFocusEffect(
     useCallback(() => {
-      refreshDashboardWeather(false);
-    }, [refreshDashboardWeather])
+      let cancelled = false;
+      (async () => {
+        const livePermission = await reconcileWeatherCacheWithSystem(isAuthenticated);
+        if (cancelled) return;
+
+        setLocationPermissionStatus(livePermission);
+
+        const cached = getCachedDashboardWeather(isAuthenticated);
+        if (cached?.weather) {
+          applyWeatherResult(cached);
+          setWeatherLoading(false);
+          return;
+        }
+
+        if (livePermission === 'granted') {
+          await refreshDashboardWeather({ force: true, requestPermission: false });
+          return;
+        }
+
+        if (cached) {
+          applyWeatherResult(cached);
+        }
+        setWeatherLoading(false);
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [applyWeatherResult, isAuthenticated, refreshDashboardWeather])
   );
+
+  const showLocationSettingsAlert = useCallback(() => {
+    Alert.alert(
+      t('home.weather.permissionTitle', 'Location access is off'),
+      isAuthenticated
+        ? t(
+            'home.weather.permissionMessage',
+            'Enable location access for Tandil in your phone Settings to show local weather on your dashboard.'
+          )
+        : t(
+            'home.weather.permissionMessageGuest',
+            'No account is required. Enable location for Tandil in your phone Settings to show local weather while you browse.'
+          ),
+      [
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
+        {
+          text: t('checkout.openSettings', 'Open Settings'),
+          onPress: () => {
+            Linking.openSettings().catch(() => {});
+          },
+        },
+      ]
+    );
+  }, [isAuthenticated, t]);
 
   const handleWeatherCardPress = useCallback(async () => {
     if (weatherLoading) return;
     if (weather) return;
-    await refreshDashboardWeather(true);
-  }, [weather, weatherLoading, refreshDashboardWeather]);
+
+    const livePermission = await resolveLocationAccessForApp({ requestIfNeeded: true });
+    setLocationPermissionStatus(livePermission);
+
+    if (livePermission === 'denied') {
+      showLocationSettingsAlert();
+      return;
+    }
+
+    await refreshDashboardWeather({
+      force: true,
+      requestPermission: false,
+    });
+  }, [weather, weatherLoading, refreshDashboardWeather, showLocationSettingsAlert]);
+
+  const renderWeatherPrompt = (
+    icon: keyof typeof Ionicons.glyphMap,
+    title: string,
+    subtitle: string
+  ) => (
+    <View style={styles.weatherPromptRow}>
+      <View style={styles.weatherIconCircle}>
+        <Ionicons name={icon} size={26} color="#fff" />
+      </View>
+      <View style={styles.weatherPromptTextCol}>
+        <Text style={styles.weatherPromptTitle}>{title}</Text>
+        <Text style={styles.weatherPromptSubtitle}>{subtitle}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.75)" />
+    </View>
+  );
 
   // Fetch public services for Place Service Orders (GET /services?per_page=12, no auth)
   useEffect(() => {
@@ -411,24 +543,31 @@ const HomeScreen: React.FC = () => {
         disabled={weatherLoading || !!weather}
       >
         {weatherLoading ? (
-          <View style={styles.weatherContent}>
+          <View style={styles.weatherPromptRow}>
             <ActivityIndicator size="small" color="#fff" />
-            <Text style={styles.weatherCardSubtext}>{t('home.weather.loading', 'Getting weather…')}</Text>
-          </View>
-        ) : !weather && locationPermission === false ? (
-          <View style={styles.weatherContent}>
-            <View style={styles.weatherIconCircle}>
-              <Ionicons name="location-outline" size={28} color="#fff" />
-            </View>
-            <Text style={styles.weatherCardSubtext}>
-              {t('home.weather.enableLocation', 'Tap to enable location for local weather')}
+            <Text style={styles.weatherPromptSubtitle}>
+              {t('home.weather.loading', 'Getting weather…')}
             </Text>
-            {isAuthenticated ? (
-              <Text style={styles.weatherCardHint}>
-                {t('home.weather.savedAddressHint', 'Or add a default address in your profile for your area.')}
-              </Text>
-            ) : null}
           </View>
+        ) : !weather && locationPermissionStatus === 'denied' ? (
+          renderWeatherPrompt(
+            'location-outline',
+            t('home.weather.settingsTitle', 'Location access is off'),
+            isAuthenticated
+              ? t('home.weather.settingsSubtitle', 'Tap to open Settings and allow location')
+              : t(
+                  'home.weather.settingsSubtitleGuest',
+                  'Tap to open Settings · no sign-in needed'
+                )
+          )
+        ) : !weather && locationPermissionStatus === 'undetermined' ? (
+          renderWeatherPrompt(
+            'navigate-outline',
+            t('home.weather.enableTitle', 'Local weather'),
+            isAuthenticated
+              ? t('home.weather.enableSubtitle', 'Tap to allow location for your area')
+              : t('home.weather.enableSubtitleGuest', 'Tap to allow location · guests welcome')
+          )
         ) : weather ? (
           <>
             <View style={styles.weatherRow}>
@@ -457,9 +596,11 @@ const HomeScreen: React.FC = () => {
             </View>
           </>
         ) : (
-          <View style={styles.weatherContent}>
-            <Text style={styles.weatherCardSubtext}>{t('home.weather.unavailable', 'Tap to refresh weather')}</Text>
-          </View>
+          renderWeatherPrompt(
+            'cloud-outline',
+            t('home.weather.refreshTitle', 'Load local weather'),
+            t('home.weather.refreshSubtitle', 'Tap to try again')
+          )
         )}
       </TouchableOpacity>
 
@@ -1270,6 +1411,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: SPACING.sm,
     paddingVertical: SPACING.sm,
+  },
+  weatherPromptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    minHeight: 72,
+  },
+  weatherPromptTextCol: {
+    flex: 1,
+    gap: 4,
+  },
+  weatherPromptTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold as any,
+    color: '#fff',
+  },
+  weatherPromptSubtitle: {
+    fontSize: FONT_SIZES.sm,
+    color: 'rgba(255,255,255,0.82)',
+    lineHeight: 18,
   },
   weatherIconCircle: {
     width: 56,

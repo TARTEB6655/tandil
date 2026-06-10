@@ -1,23 +1,53 @@
 import * as Location from 'expo-location';
 import { fetchWeather, fetchWeatherByPlaceName, WeatherData } from '../services/weatherService';
 import type { UserAddress } from '../services/userService';
-import { getDevicePositionWithTimeout } from './deviceLocation';
+import {
+  getDevicePositionWithTimeout,
+  resolveLocationAccessForApp,
+} from './deviceLocation';
+
+export type DashboardWeatherPermission = 'granted' | 'denied' | 'undetermined';
 
 export type DashboardWeatherResult = {
   weather: WeatherData | null;
+  permissionStatus: DashboardWeatherPermission;
+  /** @deprecated Use permissionStatus === 'granted' */
   permissionGranted: boolean;
 };
 
 const WEATHER_CACHE_MS = 15 * 60 * 1000;
-let cachedWeather: { at: number; result: DashboardWeatherResult } | null = null;
+let cachedWeather: {
+  at: number;
+  forAuthenticated: boolean;
+  result: DashboardWeatherResult;
+} | null = null;
 
-export function getCachedDashboardWeather(): DashboardWeatherResult | null {
+export function getCachedDashboardWeather(isAuthenticated: boolean): DashboardWeatherResult | null {
   if (!cachedWeather) return null;
+  if (cachedWeather.forAuthenticated !== isAuthenticated) return null;
   if (Date.now() - cachedWeather.at > WEATHER_CACHE_MS) {
     cachedWeather = null;
     return null;
   }
   return cachedWeather.result;
+}
+
+export function clearDashboardWeatherCache(): void {
+  cachedWeather = null;
+}
+
+/** Drop stale cache when OS permission no longer matches what we cached. */
+export async function reconcileWeatherCacheWithSystem(
+  isAuthenticated: boolean
+): Promise<DashboardWeatherPermission> {
+  const live = await resolveLocationAccessForApp();
+  if (!cachedWeather || cachedWeather.forAuthenticated !== isAuthenticated) {
+    return live;
+  }
+  if (cachedWeather.result.permissionStatus !== live) {
+    cachedWeather = null;
+  }
+  return live;
 }
 
 function formatExpoGeocode(place: Location.LocationGeocodedAddress): string | null {
@@ -97,54 +127,73 @@ async function weatherFromSavedAddress(): Promise<WeatherData | null> {
   };
 }
 
+function toResult(
+  weather: WeatherData | null,
+  permissionStatus: DashboardWeatherPermission
+): DashboardWeatherResult {
+  return {
+    weather,
+    permissionStatus,
+    permissionGranted: permissionStatus === 'granted',
+  };
+}
+
+function maybeCacheResult(
+  result: DashboardWeatherResult,
+  isAuthenticated: boolean
+): DashboardWeatherResult {
+  if (result.permissionStatus === 'granted' && result.weather) {
+    cachedWeather = { at: Date.now(), forAuthenticated: isAuthenticated, result };
+  }
+  return result;
+}
+
 /**
- * Load weather for the client home dashboard: GPS first, then saved address when logged in.
- * Results are cached ~15 minutes unless `force` is true.
+ * Load weather for the client home dashboard.
+ * Denied / undetermined results are never cached so Settings changes apply immediately.
  */
 export async function loadDashboardWeather(
   isAuthenticated: boolean,
-  options?: { force?: boolean }
+  options?: { force?: boolean; requestPermission?: boolean }
 ): Promise<DashboardWeatherResult> {
-  if (!options?.force) {
-    const cached = getCachedDashboardWeather();
+  await reconcileWeatherCacheWithSystem(isAuthenticated);
+
+  if (!options?.force && !options?.requestPermission) {
+    const cached = getCachedDashboardWeather(isAuthenticated);
     if (cached) return cached;
   }
 
-  let { status } = await Location.getForegroundPermissionsAsync();
-  if (status === 'undetermined') {
-    const requested = await Location.requestForegroundPermissionsAsync();
-    status = requested.status;
+  const permissionStatus = await resolveLocationAccessForApp({
+    requestIfNeeded: options?.requestPermission ?? false,
+  });
+
+  if (permissionStatus === 'denied') {
+    return toResult(null, 'denied');
   }
 
-  const permissionGranted = status === 'granted';
-
-  if (permissionGranted) {
+  if (permissionStatus === 'granted') {
     try {
       const gpsWeather = await weatherFromGps();
       if (gpsWeather) {
-        const result = { weather: gpsWeather, permissionGranted: true };
-        cachedWeather = { at: Date.now(), result };
-        return result;
+        return maybeCacheResult(toResult(gpsWeather, 'granted'), isAuthenticated);
       }
     } catch {
-      // try saved address below
+      // try saved address below (logged-in only)
     }
-  }
 
-  if (isAuthenticated) {
-    try {
-      const saved = await weatherFromSavedAddress();
-      if (saved) {
-        const result = { weather: saved, permissionGranted };
-        cachedWeather = { at: Date.now(), result };
-        return result;
+    if (isAuthenticated) {
+      try {
+        const saved = await weatherFromSavedAddress();
+        if (saved) {
+          return maybeCacheResult(toResult(saved, 'granted'), isAuthenticated);
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
+
+    return toResult(null, 'granted');
   }
 
-  const result = { weather: null, permissionGranted };
-  cachedWeather = { at: Date.now(), result };
-  return result;
+  return toResult(null, 'undetermined');
 }

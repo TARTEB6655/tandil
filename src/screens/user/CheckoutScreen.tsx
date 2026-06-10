@@ -180,7 +180,12 @@ const CheckoutScreen: React.FC = () => {
             }
           }
         } else {
-          const summary = await getOrderSummary({ use_wallet: useWallet, wallet_amount: 0 });
+          const couponCode = useCouponStore.getState().appliedCode?.trim().toUpperCase();
+          const summary = await getOrderSummary({
+            use_wallet: useWallet,
+            wallet_amount: 0,
+            ...(couponCode ? { coupon_code: couponCode } : {}),
+          });
           if (requestId !== walletRefreshRequestRef.current) return;
           if (summary) {
             setOrderSummaryApi(summary);
@@ -278,37 +283,35 @@ const CheckoutScreen: React.FC = () => {
   const discount = useApiSummary ? orderSummaryApi.discount : calculateDiscount();
   const shippingBase = useApiSummary ? orderSummaryApi.shipping : (shopSettings?.shipping_amount ?? 0);
   const taxPercent = useApiSummary ? (orderSummaryApi.tax_percent ?? 0) : (shopSettings?.tax_percent ?? 0);
-  const couponDiscount = couponOnPaymentStep ? (appliedCoupon?.coupon_discount ?? 0) : 0;
+  const couponDiscount =
+    couponOnPaymentStep && appliedCoupon ? (appliedCoupon.coupon_discount ?? 0) : 0;
   const shippingAmount =
     couponOnPaymentStep && appliedCoupon?.free_shipping ? 0 : shippingBase;
   const taxableBase = Math.max(0, subtotal - discount - couponDiscount);
-  const derivedTaxAmount = Math.round(taxableBase * (taxPercent / 100) * 100) / 100;
-  const hasCouponOverride = couponOnPaymentStep && appliedCoupon != null;
-  const taxAmount = hasCouponOverride
-    ? derivedTaxAmount
-    : useApiSummary
-      ? (orderSummaryApi.tax ?? Math.max(0, (orderSummaryApi.total ?? 0) - (subtotal - discount + shippingBase)))
-      : Math.round((subtotal - discount) * (taxPercent / 100) * 100) / 100;
-  const total = hasCouponOverride
-    ? Math.round((taxableBase + shippingAmount + taxAmount) * 100) / 100
-    : useApiSummary
-      ? orderSummaryApi.total
-      : Math.round((subtotal - discount + shippingAmount + taxAmount) * 100) / 100;
+  const taxAmount = Math.round(taxableBase * (taxPercent / 100) * 100) / 100;
+  const total =
+    couponOnPaymentStep && useApiSummary
+      ? Math.round((taxableBase + shippingAmount + taxAmount) * 100) / 100
+      : useApiSummary
+        ? orderSummaryApi.total
+        : Math.round((taxableBase + shippingAmount + taxAmount) * 100) / 100;
   const currency = useApiSummary ? orderSummaryApi.currency : (shopSettings?.currency ?? 'AED');
 
   const { walletApplied, payableTotal } = useMemo(() => {
     const orderTotal = Number(total) || 0;
     const apiWalletApplied = Number(orderSummaryApi?.wallet_amount_applied ?? 0);
-    const apiAmountDue = Number(orderSummaryApi?.amount_due ?? NaN);
-    if (currentStep === 'payment' && applyWallet && apiWalletApplied > 0 && Number.isFinite(apiAmountDue)) {
-      return { walletApplied: apiWalletApplied, payableTotal: Math.max(0, apiAmountDue) };
-    }
+
     if (currentStep !== 'payment' || !applyWallet || walletApiBalance <= 0) {
       return { walletApplied: 0, payableTotal: orderTotal };
     }
-    const applied = Math.min(walletApiBalance, orderTotal);
-    const payable = Math.max(0, Math.round((orderTotal - applied) * 100) / 100);
-    return { walletApplied: applied, payableTotal: payable };
+
+    const applied =
+      apiWalletApplied > 0 ? apiWalletApplied : Math.min(walletApiBalance, orderTotal);
+
+    return {
+      walletApplied: applied,
+      payableTotal: Math.max(0, Math.round((orderTotal - applied) * 100) / 100),
+    };
   }, [currentStep, applyWallet, walletApiBalance, total, orderSummaryApi]);
 
   const showOrderPlacedAlert = () => {
@@ -968,11 +971,7 @@ const CheckoutScreen: React.FC = () => {
             }}
             onCleared={async () => {
               if (isBuyNow) return;
-              const refreshed = await getOrderSummary({
-                use_wallet: applyWallet,
-                wallet_amount: 0,
-              });
-              if (refreshed) setOrderSummaryApi(refreshed);
+              await refreshSummaryForWallet(applyWallet, { showLoading: true });
             }}
           />
         ) : null}

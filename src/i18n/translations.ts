@@ -63,6 +63,25 @@ export const en = {
       },
     },
     badges: { popular: 'Popular', new: 'New', bestValue: 'Best Value' },
+    weather: {
+      loading: 'Getting weather…',
+      enableTitle: 'Local weather',
+      enableSubtitle: 'Tap to allow location for your area',
+      enableSubtitleGuest: 'Tap to allow location · guests welcome',
+      settingsTitle: 'Location access is off',
+      settingsSubtitle: 'Tap to open Settings and allow location',
+      settingsSubtitleGuest: 'Tap to open Settings · no sign-in needed',
+      refreshTitle: 'Load local weather',
+      refreshSubtitle: 'Tap to try again',
+      permissionTitle: 'Location access is off',
+      permissionMessage:
+        'Enable location access for Tandil in your phone Settings to show local weather on your dashboard.',
+      permissionMessageGuest:
+        'No account is required. Enable location for Tandil in your phone Settings to show local weather while you browse.',
+      yourLocation: 'Your location',
+      currentLocation: 'Current location',
+      unavailable: 'Tap to refresh weather',
+    },
     featuredItems: {
       scheduledWatering: { name: 'Scheduled Watering', description: 'Irrigation visit with moisture checks' },
       plantingService: { name: 'Planting Service', description: 'Soil preparation and planting' },
