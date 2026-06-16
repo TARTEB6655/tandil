@@ -11,9 +11,15 @@ const { expo } = appJson;
 const easBuildProfile = process.env.EAS_BUILD_PROFILE || 'development';
 const enableApplePay =
   process.env.EXPO_PUBLIC_ENABLE_APPLE_PAY === 'true' ||
-  process.env.EXPO_PUBLIC_ENABLE_APPLE_PAY === '1';
+  process.env.EXPO_PUBLIC_ENABLE_APPLE_PAY === '1' ||
+  expo.extra?.enableApplePay === true ||
+  expo.extra?.enableApplePay === 'true' ||
+  expo.extra?.enableApplePay === 1 ||
+  expo.extra?.enableApplePay === '1';
 const stripeMerchantIdentifier = enableApplePay
-  ? process.env.EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER || expo.extra?.stripeMerchantIdentifier || ''
+  ? process.env.EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER ||
+    expo.extra?.stripeMerchantIdentifier ||
+    'merchant.com.tandilapp.uae'
   : '';
 
 const basePlugins = Array.isArray(expo.plugins) ? expo.plugins : [];

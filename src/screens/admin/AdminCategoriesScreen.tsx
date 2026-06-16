@@ -272,75 +272,107 @@ const AdminCategoriesScreen: React.FC = () => {
     [fetchCategories, t]
   );
 
+  const openProductReorder = useCallback(
+    (category: AdminCategory) => {
+      navigation.navigate('AdminReorderCategoryProducts', {
+        categoryId: category.id,
+        categoryName: category.name,
+      });
+    },
+    [navigation]
+  );
+
   const renderItem = ({ item }: { item: AdminCategory }) => {
     const imageUri = item.image_url ?? (item.image ? buildFullImageUrl(item.image) : null);
     const shippingCost = getCategoryShippingCost(item);
     const taxPct = getCategoryTaxPercentage(item);
     return (
       <View style={styles.row}>
-        <View style={styles.iconCircle}>
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.categoryThumb} contentFit="cover" />
-          ) : (
-            <Ionicons name="pricetag-outline" size={24} color={COLORS.primary} />
-          )}
-        </View>
-        <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
-          {item.slug ? (
-            <Text style={styles.slug} numberOfLines={1}>{item.slug}</Text>
-          ) : null}
-          {item.description ? (
-            <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
-          ) : null}
-          <View style={styles.metaRow}>
-            {shippingCost != null && (
-              <Text style={styles.meta}>
-                {t('admin.categoriesAdmin.shippingList', {
-                  amount: shippingCost.toFixed(2),
-                })}
-              </Text>
-            )}
-            {taxPct != null && (
-              <Text style={styles.meta}>
-                {t('admin.categoriesAdmin.taxList', { amount: taxPct.toFixed(0) })}
-              </Text>
-            )}
-            {item.products_count != null && (
-              <Text style={styles.meta}>{item.products_count} products</Text>
-            )}
-            {(item.is_active === 0 || item.is_active === false) && (
-              <Text style={styles.inactiveBadge}>
-                {t('admin.categoriesAdmin.inactive', 'Inactive')}
-              </Text>
+        <View style={styles.rowTop}>
+          <View style={styles.iconCircle}>
+            {imageUri ? (
+              <Image source={{ uri: imageUri }} style={styles.categoryThumb} contentFit="cover" />
+            ) : (
+              <Ionicons name="pricetag-outline" size={24} color={COLORS.primary} />
             )}
           </View>
-        </View>
-        <View style={styles.rowRight}>
-          <View style={styles.toggleWrap}>
-            <Switch
-              value={item.is_active !== 0 && item.is_active !== false}
-              onValueChange={() => handleToggleStatus(item)}
-              disabled={togglingId === item.id}
-              trackColor={{ false: COLORS.border, true: COLORS.primary }}
-              thumbColor={COLORS.background}
-            />
+          <View style={styles.info}>
+            <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
+            {item.slug ? (
+              <Text style={styles.slug} numberOfLines={1}>{item.slug}</Text>
+            ) : null}
+            {item.description ? (
+              <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
+            ) : null}
+            <View style={styles.metaRow}>
+              {shippingCost != null && (
+                <Text style={styles.meta}>
+                  {t('admin.categoriesAdmin.shippingList', {
+                    amount: shippingCost.toFixed(2),
+                  })}
+                </Text>
+              )}
+              {taxPct != null && (
+                <Text style={styles.meta}>
+                  {t('admin.categoriesAdmin.taxList', { amount: taxPct.toFixed(0) })}
+                </Text>
+              )}
+              {item.products_count != null && (
+                <Text style={styles.meta}>{item.products_count} products</Text>
+              )}
+              {(item.is_active === 0 || item.is_active === false) && (
+                <Text style={styles.inactiveBadge}>
+                  {t('admin.categoriesAdmin.inactive', 'Inactive')}
+                </Text>
+              )}
+            </View>
           </View>
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.smallBtn}
-              onPress={() => handleEditCategory(item)}
-            >
-              <Ionicons name="create-outline" size={18} color={COLORS.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.smallBtn}
-              onPress={() => handleDeleteCategory(item)}
-            >
-              <Ionicons name="trash-outline" size={18} color={COLORS.error} />
-            </TouchableOpacity>
+          <View style={styles.rowRight}>
+            <View style={styles.toggleWrap}>
+              <Switch
+                value={item.is_active !== 0 && item.is_active !== false}
+                onValueChange={() => handleToggleStatus(item)}
+                disabled={togglingId === item.id}
+                trackColor={{ false: COLORS.border, true: COLORS.primary }}
+                thumbColor={COLORS.background}
+              />
+            </View>
+            <View style={styles.actions}>
+              <TouchableOpacity
+                style={styles.smallBtn}
+                onPress={() => handleEditCategory(item)}
+              >
+                <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.smallBtn}
+                onPress={() => handleDeleteCategory(item)}
+              >
+                <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
+
+        <TouchableOpacity
+          style={styles.reorderProductsBtn}
+          onPress={() => openProductReorder(item)}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="reorder-four-outline" size={18} color={COLORS.primary} />
+          <View style={styles.reorderProductsBtnText}>
+            <Text style={styles.reorderProductsBtnTitle}>
+              {t('admin.categoriesAdmin.reorderProducts', 'Reorder products')}
+            </Text>
+            <Text style={styles.reorderProductsBtnSub}>
+              {t(
+                'admin.categoriesAdmin.reorderProductsSub',
+                'Set product order shown in client store'
+              )}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+        </TouchableOpacity>
       </View>
     );
   };
@@ -570,14 +602,16 @@ const styles = StyleSheet.create({
   emptyWrap: { paddingVertical: SPACING.xl * 2, alignItems: 'center' },
   emptyText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
+  },
+  rowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   iconCircle: {
     width: 48,
@@ -614,6 +648,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.surface,
+  },
+  reorderProductsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.md,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primary + '10',
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+    gap: SPACING.sm,
+  },
+  reorderProductsBtnText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reorderProductsBtnTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
+  reorderProductsBtnSub: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
   },
   name: { color: COLORS.text, fontWeight: FONT_WEIGHTS.semiBold, fontSize: FONT_SIZES.md, marginBottom: 2 },
   slug: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, marginBottom: 2 },

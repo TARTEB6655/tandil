@@ -1260,6 +1260,56 @@ export const adminService = {
     return response.data;
   },
 
+  /** Fetch every product in a category (all pages) for drag-and-drop reorder. */
+  getAllProductsByCategory: async (categoryId: number | string): Promise<AdminProduct[]> => {
+    const perPage = 100;
+    let page = 1;
+    let lastPage = 1;
+    const all: AdminProduct[] = [];
+
+    do {
+      const response = await apiClient.get<{
+        status: boolean;
+        data: AdminProduct[];
+        pagination: { current_page: number; last_page: number; per_page: number; total: number };
+      }>('/admin/products', {
+        params: {
+          category_id: categoryId,
+          filter: 'all',
+          per_page: perPage,
+          page,
+        },
+      });
+      const body = response.data;
+      const list = Array.isArray(body?.data) ? body.data : [];
+      all.push(...list);
+      lastPage = Number(body?.pagination?.last_page ?? page);
+      page += 1;
+    } while (page <= lastPage);
+
+    return [...all].sort((a, b) => {
+      if (a.sort_order == null && b.sort_order == null) return 0;
+      if (a.sort_order == null) return 1;
+      if (b.sort_order == null) return -1;
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    });
+  },
+
+  /**
+   * POST /admin/products/reorder — bulk update product sort order within a category.
+   * Body: { category_id, products: [{ id, sort_order }, ...] }
+   */
+  reorderProducts: async (
+    categoryId: number,
+    products: Array<{ id: number; sort_order: number }>
+  ): Promise<{ success?: boolean; status?: boolean; message?: string }> => {
+    const response = await apiClient.post('/admin/products/reorder', {
+      category_id: categoryId,
+      products,
+    });
+    return response.data;
+  },
+
   // Admin product details (GET /admin/products/:id)
   // Response shape can vary across backends, so we keep it flexible.
   getProductById: async (
@@ -1395,6 +1445,7 @@ export const adminService = {
       product_type?: 'simple' | 'variable';
       option_groups_json?: string;
       customization?: ProductCustomizationConfig | null;
+      sort_order?: number;
     }
   ): Promise<{ status: boolean; message?: string; updated_fields?: string[]; data: AdminProductCreated }> => {
     const { customization, ...rest } = body;
@@ -1430,6 +1481,7 @@ export const adminService = {
       product_type?: 'simple' | 'variable';
       option_groups_json?: string;
       customization?: ProductCustomizationConfig | null;
+      sort_order?: number;
       mainImage?: { uri: string };
       extraImages?: { uri: string }[];
     }
@@ -1453,6 +1505,9 @@ export const adminService = {
     }
     if (params.job_duration !== undefined && params.job_duration !== null) {
       formData.append('job_duration', params.job_duration);
+    }
+    if (params.sort_order !== undefined && !Number.isNaN(params.sort_order)) {
+      formData.append('sort_order', String(params.sort_order));
     }
     if (params.image_urls?.length) {
       formData.append('image_urls', JSON.stringify(params.image_urls));
@@ -2187,6 +2242,8 @@ export interface AdminProduct {
   estimated_arrival?: string | null;
   job_duration?: string | null;
   option_groups?: AdminProductOptionGroup[];
+  /** Display order within category (lower = earlier). */
+  sort_order?: number;
 }
 
 // Admin product create response (POST /admin/products – JSON or multipart)

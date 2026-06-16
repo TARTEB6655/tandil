@@ -43,7 +43,8 @@
       },
       "apiBaseUrl": "https://phpstack-1180784-6050385.cloudwaysapps.com/api",
       "stripePublishableKey": "pk_live_51TObSk0dvmhfzUoqeXMFztTOzAQ366Y0ZaNvM6us9fvjswiUh80L13EtFAwgjwkH1klyZcagiYZ6MGcFYK7HrYAT00lH8Jrade",
-      "enableApplePay": false,
+      "enableApplePay": true,
+      "stripeMerchantIdentifier": "merchant.com.tandilapp.uae",
       "googleIosClientId": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com"
     },
     "plugins": [

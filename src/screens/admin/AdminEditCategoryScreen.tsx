@@ -315,6 +315,31 @@ const AdminEditCategoryScreen: React.FC = () => {
             )}
           </View>
 
+          <TouchableOpacity
+            style={styles.reorderProductsBtn}
+            onPress={() =>
+              navigation.navigate('AdminReorderCategoryProducts', {
+                categoryId,
+                categoryName: name.trim() || category.name,
+              })
+            }
+            activeOpacity={0.85}
+          >
+            <Ionicons name="reorder-four-outline" size={22} color={COLORS.primary} />
+            <View style={styles.reorderProductsBtnText}>
+              <Text style={styles.reorderProductsBtnTitle}>
+                {t('admin.categoriesAdmin.reorderProducts', 'Reorder products')}
+              </Text>
+              <Text style={styles.reorderProductsBtnSub}>
+                {t(
+                  'admin.categoriesAdmin.reorderProductsSub',
+                  'Set product order shown in client store'
+                )}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+
           <Button
             title={t('admin.categoryForm.submitUpdate')}
             onPress={handleUpdateCategory}
@@ -429,6 +454,32 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   submitButton: { marginTop: SPACING.md },
+  reorderProductsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.primary + '10',
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+    gap: SPACING.sm,
+  },
+  reorderProductsBtnText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reorderProductsBtnTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
+  reorderProductsBtnSub: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
   bottomPad: { height: SPACING.xl * 2 },
 });
 

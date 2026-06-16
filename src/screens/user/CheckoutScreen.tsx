@@ -32,10 +32,12 @@ import {
   type CreatePaymentIntentBody,
 } from '../../services/paymentService';
 import { getStripeMerchantIdentifier, getStripePublishableKey } from '../../config/api';
+import { isApplePayEnabled } from '../../config/payments';
 import {
   useStripe,
   AddressCollectionMode,
   CollectionMode,
+  PlatformPay,
   isPlatformPaySupported,
 } from '@stripe/stripe-react-native';
 import { countryToStripeAlpha2 } from '../../utils/stripeBillingCountry';
@@ -82,7 +84,7 @@ const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const user = useAppStore((s) => s.user);
-  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const { initPaymentSheet, presentPaymentSheet, confirmPlatformPayPayment } = useStripe();
   const route = useRoute<any>();
   const {
     cartItems = [],
@@ -130,6 +132,8 @@ const CheckoutScreen: React.FC = () => {
   const [walletApiBalance, setWalletApiBalance] = useState(0);
   const [applyWallet, setApplyWallet] = useState(false);
   const [walletSummaryLoading, setWalletSummaryLoading] = useState(false);
+  const [applePaySupported, setApplePaySupported] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'stripe' | 'apple_pay'>('stripe');
   const [couponCartLines, setCouponCartLines] = useState<CartLineForCoupons[]>([]);
   const walletRefreshRequestRef = useRef(0);
   const applyWalletPrevRef = useRef(false);
@@ -359,6 +363,20 @@ const CheckoutScreen: React.FC = () => {
     };
   }, [currentStep, applyWallet, walletApiBalance, total, orderSummaryApi]);
 
+  useEffect(() => {
+    if (currentStep !== 'payment' || Platform.OS !== 'ios' || !isApplePayEnabled()) {
+      setApplePaySupported(false);
+      return;
+    }
+    let cancelled = false;
+    isPlatformPaySupported().then((supported) => {
+      if (!cancelled) setApplePaySupported(supported);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentStep]);
+
   const showOrderPlacedAlert = () => {
     clearCoupon();
     Alert.alert(
@@ -374,6 +392,94 @@ const CheckoutScreen: React.FC = () => {
     );
   };
 
+  const getCheckoutPaymentPreview = () => {
+    const orderTotal = Number(total) || 0;
+    const apiApplied = Number(orderSummaryApi?.wallet_amount_applied ?? 0);
+    const appliedPreview = applyWallet
+      ? apiApplied > 0
+        ? apiApplied
+        : walletApiBalance > 0
+          ? Math.min(walletApiBalance, orderTotal)
+          : 0
+      : 0;
+    const dueNow = Math.max(0, Math.round((orderTotal - appliedPreview) * 100) / 100);
+    const isWalletOnlyCheckout = applyWallet && appliedPreview > 0 && dueNow <= 0;
+    return { appliedPreview, dueNow, isWalletOnlyCheckout };
+  };
+
+  const buildPaymentIntentBody = (appliedPreview: number): CreatePaymentIntentBody => {
+    const items: CartItem[] = (cartItems || []) as CartItem[];
+    const first = items[0];
+    const shippingPayload = {
+      full_name: shippingAddress.fullName.trim(),
+      phone: shippingAddress.phone.trim(),
+      street: shippingAddress.street.trim(),
+      city: shippingAddress.city.trim(),
+      state: shippingAddress.state.trim(),
+      zip_code: shippingAddress.zipCode.trim(),
+      country: shippingAddress.country.trim(),
+    };
+    const couponCode = useCouponStore.getState().appliedCode?.trim().toUpperCase() ?? '';
+    let paymentIntentBody: CreatePaymentIntentBody = {
+      is_buy_now: !!isBuyNow,
+      coupon_code: couponCode,
+      use_wallet: applyWallet,
+      wallet_amount: Math.max(0, Math.round(appliedPreview * 100) / 100),
+      shipping: shippingPayload,
+    };
+    if (isBuyNow && first) {
+      const pid = Number(first.productId);
+      const qty = Number(first.quantity);
+      if (Number.isFinite(pid)) {
+        paymentIntentBody = { ...paymentIntentBody, product_id: pid };
+      }
+      if (Number.isFinite(qty)) {
+        paymentIntentBody = { ...paymentIntentBody, quantity: qty };
+      }
+      if (Array.isArray(selectedOptionIds) && selectedOptionIds.length) {
+        paymentIntentBody = {
+          ...paymentIntentBody,
+          selected_option_ids: selectedOptionIds,
+        };
+      }
+    }
+    return paymentIntentBody;
+  };
+
+  const requestCheckoutPaymentIntent = async () => {
+    const { appliedPreview } = getCheckoutPaymentPreview();
+    const paymentIntentBody = buildPaymentIntentBody(appliedPreview);
+    if (__DEV__) {
+      console.log('[checkout] payment-intent payload', paymentIntentBody);
+    }
+    return createStripePaymentIntent(paymentIntentBody);
+  };
+
+  const finalizeOrderAfterStripe = async (clientSecret: string) => {
+    const paymentIntentId = extractPaymentIntentId(clientSecret);
+    if (paymentIntentId) {
+      if (__DEV__) {
+        console.log('[checkout] POST /shop/checkout/confirm payment_intent_id:', paymentIntentId);
+      }
+      const confirm = await confirmCheckoutAfterStripe(paymentIntentId);
+      if (!confirm.success) {
+        Alert.alert(
+          t('checkout.paymentSucceededTitle', 'Payment received'),
+          t(
+            'checkout.orderSyncPending',
+            'Your card was charged. If the order does not appear under Order History, contact support with your receipt.'
+          ),
+          [
+            { text: t('checkout.viewOrders'), onPress: () => navigation.navigate('OrderHistory') },
+            { text: t('common.ok', 'OK'), style: 'cancel' },
+          ]
+        );
+        return;
+      }
+    }
+    showOrderPlacedAlert();
+  };
+
   const handlePlaceOrder = async () => {
     if (Platform.OS === 'web') {
       Alert.alert(
@@ -387,16 +493,9 @@ const CheckoutScreen: React.FC = () => {
       return;
     }
 
-    const orderTotal = Number(total) || 0;
-    const apiApplied = Number(orderSummaryApi?.wallet_amount_applied ?? 0);
-    const appliedPreview = applyWallet
-      ? (apiApplied > 0 ? apiApplied : (walletApiBalance > 0 ? Math.min(walletApiBalance, orderTotal) : 0))
-      : 0;
-    const dueNow = Math.max(0, Math.round((orderTotal - appliedPreview) * 100) / 100);
-    const isWalletOnlyCheckout = applyWallet && appliedPreview > 0 && dueNow <= 0;
+    const { isWalletOnlyCheckout } = getCheckoutPaymentPreview();
 
     const stripePk = getStripePublishableKey();
-    const stripeMerchantIdentifier = getStripeMerchantIdentifier();
     if (!isWalletOnlyCheckout && !stripePk) {
       Alert.alert(
         t('common.error', 'Error'),
@@ -411,52 +510,8 @@ const CheckoutScreen: React.FC = () => {
 
     setLoading(true);
     try {
-      const items: CartItem[] = (cartItems || []) as CartItem[];
-      const first = items[0];
-
-      // Same shape as Postman: cart = { is_buy_now, shipping }; buy-now adds product_id + quantity.
-      const shippingPayload = {
-        full_name: shippingAddress.fullName.trim(),
-        phone: shippingAddress.phone.trim(),
-        street: shippingAddress.street.trim(),
-        city: shippingAddress.city.trim(),
-        state: shippingAddress.state.trim(),
-        zip_code: shippingAddress.zipCode.trim(),
-        country: shippingAddress.country.trim(),
-      };
-
-      const couponCode =
-        useCouponStore.getState().appliedCode?.trim().toUpperCase() ?? '';
-
-      let paymentIntentBody: CreatePaymentIntentBody = {
-        is_buy_now: !!isBuyNow,
-        coupon_code: couponCode,
-        use_wallet: applyWallet,
-        wallet_amount: Math.max(0, Math.round(appliedPreview * 100) / 100),
-        shipping: shippingPayload,
-      };
-      if (isBuyNow && first) {
-        const pid = Number(first.productId);
-        const qty = Number(first.quantity);
-        if (Number.isFinite(pid)) {
-          paymentIntentBody = { ...paymentIntentBody, product_id: pid };
-        }
-        if (Number.isFinite(qty)) {
-          paymentIntentBody = { ...paymentIntentBody, quantity: qty };
-        }
-        if (Array.isArray(selectedOptionIds) && selectedOptionIds.length) {
-          paymentIntentBody = {
-            ...paymentIntentBody,
-            selected_option_ids: selectedOptionIds,
-          };
-        }
-      }
-
-      if (__DEV__) {
-        console.log('[checkout] payment-intent payload', paymentIntentBody);
-      }
       const { data: pi, message: piMessage, walletOnlyComplete } =
-        await createStripePaymentIntent(paymentIntentBody);
+        await requestCheckoutPaymentIntent();
 
       if (walletOnlyComplete) {
         showOrderPlacedAlert();
@@ -470,7 +525,6 @@ const CheckoutScreen: React.FC = () => {
             'checkout.paymentIntentFailed',
             'Could not start payment. Ensure the server exposes POST /shop/checkout/stripe/payment-intent and try again.'
           );
-        // Text like "Stripe is not enabled…" is returned by Laravel, not the app — fix on server.
         if (/stripe is not enabled|not configured/i.test(piMessage || '')) {
           body +=
             '\n\n' +
@@ -480,7 +534,7 @@ const CheckoutScreen: React.FC = () => {
             );
         }
         if (__DEV__) {
-          console.warn('[checkout] payment-intent failed:', piMessage, paymentIntentBody);
+          console.warn('[checkout] payment-intent failed:', piMessage);
         }
         Alert.alert(t('common.error', 'Error'), body, [{ text: t('common.ok', 'OK') }]);
         return;
@@ -514,40 +568,19 @@ const CheckoutScreen: React.FC = () => {
         pi.customer && pi.ephemeral_key
           ? { customerId: pi.customer, customerEphemeralKeySecret: pi.ephemeral_key }
           : {};
-      // Merchant country is where Tandil is registered (UAE), not the customer's shipping country.
+      const hasCustomerSession = Boolean(
+        'customerId' in customerProps && 'customerEphemeralKeySecret' in customerProps
+      );
       const merchantCountryCode = 'AE';
       const currencyCode = String(currency || 'AED').toUpperCase();
       const isStripeTestMode = /pk_test_/i.test(String(stripePk));
 
-      if (Platform.OS === 'ios' && stripeMerchantIdentifier) {
-        const applePayAvailable = await isPlatformPaySupported();
-        if (__DEV__) {
-          console.log('[checkout] Apple Pay platform support:', applePayAvailable, {
-            merchantId: stripeMerchantIdentifier,
-            stripeMode: isStripeTestMode ? 'test' : 'live',
-          });
-        }
-        if (!applePayAvailable && !isStripeTestMode) {
-          console.warn(
-            '[checkout] Apple Pay not available with live key. Upload the live Apple Pay certificate in Stripe Dashboard → Settings → Payment methods → Apple Pay for merchant',
-            stripeMerchantIdentifier
-          );
-        }
-      }
-
-      const sheetBase = {
+      const sheetCore = {
         merchantDisplayName: 'Tandil',
         paymentIntentClientSecret: pi.client_secret,
         returnURL: getStripePaymentSheetReturnURL(),
         allowsDelayedPaymentMethods: false,
         defaultBillingDetails,
-        ...(Platform.OS === 'ios' && stripeMerchantIdentifier
-          ? {
-              applePay: {
-                merchantCountryCode,
-              },
-            }
-          : {}),
         ...(Platform.OS === 'android'
           ? {
               googlePay: {
@@ -557,32 +590,62 @@ const CheckoutScreen: React.FC = () => {
               },
             }
           : {}),
-        ...customerProps,
       };
 
-      // Prefer not re-asking for address; if that fails on some SDK/OS builds, fall back to a simpler sheet.
-      let { error: initError } = await initPaymentSheet({
-        ...sheetBase,
-        billingDetailsCollectionConfiguration: {
-          name: CollectionMode.NEVER,
-          phone: CollectionMode.NEVER,
-          email: CollectionMode.AUTOMATIC,
-          address: AddressCollectionMode.NEVER,
-          attachDefaultsToPaymentMethod: true,
-        },
+      const billingDetailsCollectionConfiguration = {
+        name: CollectionMode.NEVER,
+        phone: CollectionMode.NEVER,
+        email: CollectionMode.AUTOMATIC,
+        address: AddressCollectionMode.NEVER,
+        attachDefaultsToPaymentMethod: true,
+      };
+
+      // Payment Sheet uses customer + ephemeral_key (Apple Pay does not). If the server
+      // generated those with a mismatched Stripe secret, Stripe returns "No such payment_intent".
+      const initAttempts: Array<Record<string, unknown>> = [];
+      if (hasCustomerSession) {
+        initAttempts.push({
+          ...sheetCore,
+          ...customerProps,
+          billingDetailsCollectionConfiguration,
+        });
+      }
+      initAttempts.push({
+        ...sheetCore,
+        billingDetailsCollectionConfiguration,
       });
-      if (initError) {
-        if (__DEV__) {
-          console.warn('[checkout] initPaymentSheet (with billing rules) failed:', initError);
+      initAttempts.push({ ...sheetCore });
+
+      let initError: { message?: string; code?: string } | undefined;
+      for (const params of initAttempts) {
+        const result = await initPaymentSheet(params as Parameters<typeof initPaymentSheet>[0]);
+        if (!result.error) {
+          initError = undefined;
+          break;
         }
-        const retry = await initPaymentSheet(sheetBase);
-        initError = retry.error;
+        initError = result.error;
+        if (__DEV__) {
+          console.warn('[checkout] initPaymentSheet attempt failed:', result.error);
+        }
       }
 
       if (initError) {
+        const stripeModeHint = isStripeTestMode
+          ? t(
+              'checkout.stripeTestModeHint',
+              'App is using Stripe test mode (pk_test_…). Ask your backend developer to set STRIPE_SECRET_KEY=sk_test_… from the same Stripe account, and ensure customer/ephemeral_key (if returned) are also created in test mode.'
+            )
+          : t(
+              'checkout.stripeLiveModeHint',
+              'App is using Stripe live mode (pk_live_…). Laravel must use the matching sk_live_ secret from the same Stripe account.'
+            );
+        const isPaymentIntentMissing = /no such payment_intent|payment_intent/i.test(
+          initError.message || ''
+        );
         Alert.alert(
           t('common.error', 'Error'),
-          initError.message || t('checkout.paymentOpenFailed', 'Could not open payment screen.'),
+          (initError.message || t('checkout.paymentOpenFailed', 'Could not open payment screen.')) +
+            (isPaymentIntentMissing ? `\n\n${stripeModeHint}` : ''),
           [{ text: t('common.ok', 'OK') }]
         );
         return;
@@ -593,12 +656,121 @@ const CheckoutScreen: React.FC = () => {
         if (presentError.code === 'Canceled') {
           return;
         }
+        Alert.alert(
+          t('common.error', 'Error'),
+          presentError.message || t('checkout.paymentOpenFailed', 'Payment could not be completed.'),
+          [{ text: t('common.ok', 'OK') }]
+        );
+        return;
+      }
+
+      await finalizeOrderAfterStripe(pi.client_secret);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      captureException(err, { tags: { area: 'checkout_place_order' } });
+      Alert.alert(t('common.error', 'Error'), msg, [{ text: t('common.ok', 'OK') }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApplePay = async () => {
+    if (Platform.OS !== 'ios') return;
+
+    if (Platform.OS === 'web') {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t(
+          'checkout.stripeNativeOnly',
+          'Stripe card payments are available in the iOS or Android app, not in the browser.'
+        ),
+        [{ text: t('common.ok', 'OK') }]
+      );
+      return;
+    }
+
+    const { dueNow, isWalletOnlyCheckout } = getCheckoutPaymentPreview();
+    const stripePk = getStripePublishableKey();
+    const stripeMerchantIdentifier = getStripeMerchantIdentifier();
+
+    if (isWalletOnlyCheckout || dueNow <= 0) {
+      handlePlaceOrder();
+      return;
+    }
+
+    if (!stripePk || !stripeMerchantIdentifier) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t(
+          'checkout.stripeKeyMissing',
+          'Add your Stripe publishable key: set EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY or extra.stripePublishableKey in app config (pk_test_… or pk_live_…). Rebuild the native app after changing plugins.'
+        ),
+        [{ text: t('common.ok', 'OK') }]
+      );
+      return;
+    }
+
+    if (!applePaySupported) {
+      Alert.alert(
+        t('checkout.applePayUnavailableTitle', 'Apple Pay unavailable'),
+        t(
+          'checkout.applePayUnavailableBody',
+          'Install the latest iOS build (with Apple Pay enabled), use a real iPhone with a card in Wallet, and ensure the server uses the matching Stripe test secret key.'
+        ),
+        [{ text: t('common.ok', 'OK') }]
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data: pi, message: piMessage, walletOnlyComplete } =
+        await requestCheckoutPaymentIntent();
+
+      if (walletOnlyComplete) {
+        showOrderPlacedAlert();
+        return;
+      }
+
+      if (!pi?.client_secret) {
+        const body =
+          piMessage ||
+          t(
+            'checkout.paymentIntentFailed',
+            'Could not start payment. Ensure the server exposes POST /shop/checkout/stripe/payment-intent and try again.'
+          );
+        Alert.alert(t('common.error', 'Error'), body, [{ text: t('common.ok', 'OK') }]);
+        return;
+      }
+
+      const merchantCountryCode = 'AE';
+      const currencyCode = String(currency || 'AED').toUpperCase();
+      const chargeAmount =
+        currentStep === 'payment' && walletApplied > 0 ? payableTotal : Number(total) || dueNow;
+
+      const { error: applePayError } = await confirmPlatformPayPayment(pi.client_secret, {
+        applePay: {
+          cartItems: [
+            {
+              paymentType: PlatformPay.PaymentType.Immediate,
+              label: 'Tandil',
+              amount: chargeAmount.toFixed(2),
+            },
+          ],
+          merchantCountryCode,
+          currencyCode,
+        },
+      });
+
+      if (applePayError) {
+        if (applePayError.code === 'Canceled') {
+          return;
+        }
+        const isStripeTestMode = /pk_test_/i.test(String(stripePk));
         const applePayLiveHint =
-          Platform.OS === 'ios' &&
           !isStripeTestMode &&
-          stripeMerchantIdentifier &&
           /apple pay|platform pay|not available|incomplete|merchant/i.test(
-            `${presentError.message} ${presentError.code}`
+            `${applePayError.message} ${applePayError.code}`
           )
             ? '\n\n' +
               t(
@@ -609,39 +781,17 @@ const CheckoutScreen: React.FC = () => {
             : '';
         Alert.alert(
           t('common.error', 'Error'),
-          (presentError.message || t('checkout.paymentOpenFailed', 'Payment could not be completed.')) +
+          (applePayError.message || t('checkout.paymentOpenFailed', 'Payment could not be completed.')) +
             applePayLiveHint,
           [{ text: t('common.ok', 'OK') }]
         );
         return;
       }
 
-      const paymentIntentId = extractPaymentIntentId(pi.client_secret);
-      if (paymentIntentId) {
-        if (__DEV__) {
-          console.log('[checkout] POST /shop/checkout/confirm payment_intent_id:', paymentIntentId);
-        }
-        const confirm = await confirmCheckoutAfterStripe(paymentIntentId);
-        if (!confirm.success) {
-          Alert.alert(
-            t('checkout.paymentSucceededTitle', 'Payment received'),
-            t(
-              'checkout.orderSyncPending',
-              'Your card was charged. If the order does not appear under Order History, contact support with your receipt.'
-            ),
-            [
-              { text: t('checkout.viewOrders'), onPress: () => navigation.navigate('OrderHistory') },
-              { text: t('common.ok', 'OK'), style: 'cancel' },
-            ]
-          );
-          return;
-        }
-      }
-
-      showOrderPlacedAlert();
+      await finalizeOrderAfterStripe(pi.client_secret);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      captureException(err, { tags: { area: 'checkout_place_order' } });
+      captureException(err, { tags: { area: 'checkout_apple_pay' } });
       Alert.alert(t('common.error', 'Error'), msg, [{ text: t('common.ok', 'OK') }]);
     } finally {
       setLoading(false);
@@ -834,24 +984,81 @@ const CheckoutScreen: React.FC = () => {
     </View>
   );
 
-  const renderPaymentMethods = () => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{t('checkout.paymentMethod')}</Text>
-      <View style={[styles.paymentMethod, styles.selectedPaymentMethod]}>
-        <View style={styles.paymentMethodContent}>
-          <View style={styles.paymentMethodIcon}>
-            <Ionicons name="card-outline" size={24} color={COLORS.primary} />
+  const renderPaymentMethods = () => {
+    const { dueNow, isWalletOnlyCheckout } = getCheckoutPaymentPreview();
+    const showApplePay =
+      Platform.OS === 'ios' &&
+      isApplePayEnabled() &&
+      !isWalletOnlyCheckout &&
+      dueNow > 0;
+
+    const renderPaymentOption = (opts: {
+      id: 'stripe' | 'apple_pay';
+      icon: keyof typeof Ionicons.glyphMap;
+      iconColor: string;
+      iconBg: string;
+      title: string;
+      subtitle: string;
+    }) => {
+      const isSelected = selectedPaymentMethod === opts.id;
+      return (
+        <TouchableOpacity
+          key={opts.id}
+          style={[styles.paymentMethod, isSelected && styles.selectedPaymentMethod]}
+          onPress={() => setSelectedPaymentMethod(opts.id)}
+          activeOpacity={0.75}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: isSelected }}
+        >
+          <View style={styles.paymentMethodContent}>
+            <View style={[styles.paymentMethodIcon, { backgroundColor: opts.iconBg }]}>
+              <Ionicons name={opts.icon} size={22} color={opts.iconColor} />
+            </View>
+            <View style={styles.paymentMethodInfo}>
+              <Text style={[styles.paymentMethodName, isSelected && styles.paymentMethodNameSelected]}>
+                {opts.title}
+              </Text>
+              <Text style={styles.paymentMethodDetails}>{opts.subtitle}</Text>
+            </View>
           </View>
-          <View style={styles.paymentMethodInfo}>
-            <Text style={styles.paymentMethodName}>{t('checkout.stripeLabel')}</Text>
-            <Text style={styles.paymentMethodDetails}>
-              {t('checkout.stripeSubtitle')}
-            </Text>
+          <View style={[styles.paymentRadio, isSelected && styles.paymentRadioSelected]}>
+            {isSelected ? (
+              <Ionicons name="checkmark" size={14} color={COLORS.background} />
+            ) : null}
           </View>
+        </TouchableOpacity>
+      );
+    };
+
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{t('checkout.paymentMethod')}</Text>
+        <Text style={styles.paymentMethodHint}>
+          {t('checkout.selectPaymentHint', 'Select how you would like to pay')}
+        </Text>
+        <View style={styles.paymentMethodsList}>
+          {renderPaymentOption({
+            id: 'stripe',
+            icon: 'card-outline',
+            iconColor: COLORS.primary,
+            iconBg: COLORS.primary + '18',
+            title: t('checkout.stripeLabel'),
+            subtitle: t('checkout.stripeSubtitle'),
+          })}
+          {showApplePay
+            ? renderPaymentOption({
+                id: 'apple_pay',
+                icon: 'logo-apple',
+                iconColor: COLORS.text,
+                iconBg: '#E8E8ED',
+                title: t('checkout.applePayLabel', 'Apple Pay'),
+                subtitle: t('checkout.applePaySubtitle', 'Fast and secure checkout with Apple Pay'),
+              })
+            : null}
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderStepIndicator = () => (
     <View style={styles.stepIndicator}>
@@ -960,7 +1167,17 @@ const CheckoutScreen: React.FC = () => {
     if (nextStep) {
       setCurrentStep(nextStep as any);
     } else if (currentStep === 'payment') {
-      handlePlaceOrder();
+      const { dueNow, isWalletOnlyCheckout } = getCheckoutPaymentPreview();
+      const canUseApplePay =
+        Platform.OS === 'ios' &&
+        isApplePayEnabled() &&
+        !isWalletOnlyCheckout &&
+        dueNow > 0;
+      if (selectedPaymentMethod === 'apple_pay' && canUseApplePay) {
+        handleApplePay();
+      } else {
+        handlePlaceOrder();
+      }
     }
   };
 
@@ -1181,7 +1398,9 @@ const CheckoutScreen: React.FC = () => {
                 : loading
                   ? t('checkout.processing')
                   : currentStep === 'payment'
-                    ? t('checkout.placeOrder')
+                    ? selectedPaymentMethod === 'apple_pay'
+                      ? t('checkout.applePayPayWith', 'Pay with Apple Pay')
+                      : t('checkout.placeOrder')
                     : t('checkout.next')}
             </Text>
           {currentStep !== 'payment' && (
@@ -1342,27 +1561,38 @@ const styles = StyleSheet.create({
   paymentMethod: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.md + 2,
+    borderWidth: 2,
+    borderColor: '#D5DCE5',
+    borderRadius: BORDER_RADIUS.lg,
     marginBottom: SPACING.sm,
+    backgroundColor: COLORS.background,
   },
   selectedPaymentMethod: {
     borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '10',
+    backgroundColor: COLORS.primary + '12',
+  },
+  paymentMethodsList: {
+    marginTop: SPACING.xs,
+  },
+  paymentMethodHint: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.md,
+    marginTop: -SPACING.xs,
   },
   paymentMethodContent: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    paddingRight: SPACING.sm,
   },
   paymentMethodIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary + '20',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.md,
@@ -1372,13 +1602,30 @@ const styles = StyleSheet.create({
   },
   paymentMethodName: {
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
+  },
+  paymentMethodNameSelected: {
+    color: COLORS.primary,
   },
   paymentMethodDetails: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: 3,
+    lineHeight: 18,
+  },
+  paymentRadio: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#C5CED8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentRadioSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary,
   },
   cardFormSection: {
     marginTop: SPACING.md,

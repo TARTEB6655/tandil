@@ -57,6 +57,8 @@ export interface ShopProduct {
   job_duration?: string | null;
   created_at?: string;
   updated_at?: string;
+  /** Optional display order within category (lower = earlier). */
+  sort_order?: number;
   category?: ShopProductCategory | null;
   option_groups?: Array<{
     id?: number;
@@ -120,6 +122,15 @@ function normalizeShopProductList(list: unknown): ShopProduct[] {
   return list.map(normalizeShopProduct);
 }
 
+function sortShopProductsByOrder(products: ShopProduct[]): ShopProduct[] {
+  return [...products].sort((a, b) => {
+    if (a.sort_order == null && b.sort_order == null) return 0;
+    if (a.sort_order == null) return 1;
+    if (b.sort_order == null) return -1;
+    return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+  });
+}
+
 export { isShopProductInStock, resolveShopProductStock } from '../utils/shopProductStock';
 
 export const shopService = {
@@ -174,7 +185,7 @@ export const shopService = {
       );
       const data = (response?.data as any)?.data ?? null;
       if (data?.products) {
-        data.products = normalizeShopProductList(data.products);
+        data.products = sortShopProductsByOrder(normalizeShopProductList(data.products));
       }
       return data;
     } catch (_) {
