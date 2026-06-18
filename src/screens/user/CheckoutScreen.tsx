@@ -17,6 +17,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
+import { reverseGeocodeForApp } from '../../utils/localizedReverseGeocode';
 import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
 import {
   getCart,
@@ -48,6 +50,7 @@ import { resolveVisitArea } from '../../services/visitService';
 import {
   ensureForegroundLocationPermission,
   getDevicePositionForUserAction,
+  warmUpDeviceLocationCache,
 } from '../../utils/deviceLocation';
 import { getWalletSummary } from '../../services/walletService';
 import { useAppStore } from '../../store';
@@ -128,6 +131,11 @@ const CheckoutScreen: React.FC = () => {
       return { ...prev, fullName: nextName, phone: nextPhone };
     });
   }, [user?.name, user?.phone]);
+
+  useEffect(() => {
+    if (currentStep !== 'location') return;
+    warmUpDeviceLocationCache();
+  }, [currentStep]);
 
   const [walletApiBalance, setWalletApiBalance] = useState(0);
   const [applyWallet, setApplyWallet] = useState(false);
@@ -822,7 +830,10 @@ const CheckoutScreen: React.FC = () => {
         return;
       }
 
-      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      const [servicesEnabled, coords] = await Promise.all([
+        Location.hasServicesEnabledAsync(),
+        getDevicePositionForUserAction(),
+      ]);
       if (!servicesEnabled) {
         Alert.alert(
           t('common.error', 'Error'),
@@ -835,7 +846,6 @@ const CheckoutScreen: React.FC = () => {
         return;
       }
 
-      const coords = await getDevicePositionForUserAction();
       if (!coords) {
         Alert.alert(
           t('common.error', 'Error'),
@@ -847,11 +857,12 @@ const CheckoutScreen: React.FC = () => {
         );
         return;
       }
-      const places = await Location.reverseGeocodeAsync({
-        latitude: coords.coords.latitude,
-        longitude: coords.coords.longitude,
-      });
-      const place = places?.[0];
+
+      const place = await reverseGeocodeForApp(
+        coords.coords.latitude,
+        coords.coords.longitude,
+        i18n.language
+      );
 
       if (!place) {
         Alert.alert(
@@ -862,14 +873,14 @@ const CheckoutScreen: React.FC = () => {
         return;
       }
 
-      const streetParts = [place.name, place.street].filter(Boolean);
+      const streetParts = [place.street].filter(Boolean);
       const street = streetParts.join(', ');
       setShippingAddress((prev) => ({
         ...prev,
         street: street || prev.street,
-        city: place.city || place.subregion || prev.city,
-        state: place.region || place.subregion || prev.state,
-        zipCode: place.postalCode || prev.zipCode,
+        city: place.city || prev.city,
+        state: place.state || prev.state,
+        zipCode: place.zipCode || prev.zipCode,
         country: place.country || prev.country,
       }));
       setLocationCoords({

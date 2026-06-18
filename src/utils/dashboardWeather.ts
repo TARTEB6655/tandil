@@ -5,6 +5,8 @@ import {
   getDevicePositionWithTimeout,
   resolveLocationAccessForApp,
 } from './deviceLocation';
+import { reverseGeocodeLocationLabel } from './localizedReverseGeocode';
+import i18n from '../i18n';
 
 export type DashboardWeatherPermission = 'granted' | 'denied' | 'undetermined';
 
@@ -50,21 +52,6 @@ export async function reconcileWeatherCacheWithSystem(
   return live;
 }
 
-function formatExpoGeocode(place: Location.LocationGeocodedAddress): string | null {
-  const city =
-    place.city ??
-    place.subregion ??
-    place.district ??
-    place.region ??
-    place.name;
-  const country = place.country;
-  if (city && country) return `${city}, ${country}`;
-  if (city) return city;
-  if (country) return country;
-  if (place.formattedAddress?.trim()) return place.formattedAddress.trim();
-  return null;
-}
-
 function formatSavedAddressLabel(addr: UserAddress): string {
   const city = addr.city?.trim();
   const country = addr.country?.trim();
@@ -76,12 +63,10 @@ function formatSavedAddressLabel(addr: UserAddress): string {
 
 async function resolveLocationName(latitude: number, longitude: number): Promise<string | null> {
   try {
-    const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
-    if (place) return formatExpoGeocode(place);
+    return await reverseGeocodeLocationLabel(latitude, longitude, i18n.language);
   } catch {
-    // fall through — fetchWeather also tries Nominatim
+    return null;
   }
-  return null;
 }
 
 async function weatherFromGps(): Promise<WeatherData | null> {

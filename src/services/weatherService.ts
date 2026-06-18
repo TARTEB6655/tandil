@@ -2,6 +2,8 @@
  * Weather by current location using Open-Meteo (free, no API key).
  * Uses expo-location for coordinates; Open-Meteo for weather; Nominatim for location name.
  */
+import i18n from '../i18n';
+import { appLanguageToAcceptLanguage } from '../utils/localizedReverseGeocode';
 
 export interface WeatherData {
   temperature: number;
@@ -56,7 +58,11 @@ export async function fetchWeather(latitude: number, longitude: number): Promise
     const current = data?.current;
     if (!current) return null;
     const weatherCode = Number(current.weather_code) || 0;
-    const locationName = await fetchLocationName(latitude, longitude);
+    const locationName = await fetchLocationName(
+      latitude,
+      longitude,
+      appLanguageToAcceptLanguage(i18n.language)
+    );
     const coordinates = `${latitude.toFixed(2)}, ${longitude.toFixed(2)}`;
     return {
       temperature: Number(current.temperature_2m) ?? 0,
@@ -75,13 +81,17 @@ export async function fetchWeather(latitude: number, longitude: number): Promise
  * Reverse geocode lat/lon to a place name (Nominatim, free).
  * Uses multiple address fields so we get a name in more regions.
  */
-async function fetchLocationName(latitude: number, longitude: number): Promise<string | null> {
+async function fetchLocationName(
+  latitude: number,
+  longitude: number,
+  acceptLanguage = 'en'
+): Promise<string | null> {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`;
     const res = await fetch(url, {
       method: 'GET',
       headers: {
-        'Accept-Language': 'en',
+        'Accept-Language': acceptLanguage,
         'User-Agent': 'Tandil/1.0 (https://tandilapp.com; contact@tandilapp.com)',
       },
     });

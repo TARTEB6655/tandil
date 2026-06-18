@@ -1,8 +1,13 @@
 /**
- * Get address fields from current device location (expo-location + reverse geocode).
- * Used to pre-fill Address and City on Add/Edit Address forms.
+ * Get address fields from current device location (GPS + localized reverse geocode).
+ * Used to pre-fill Address and City on Add/Edit Address forms and checkout.
  */
-import * as Location from 'expo-location';
+import i18n from '../i18n';
+import {
+  ensureForegroundLocationPermission,
+  getDevicePositionForUserAction,
+} from './deviceLocation';
+import { reverseGeocodeForApp } from './localizedReverseGeocode';
 
 export interface AddressFromLocation {
   street_address: string;
@@ -16,43 +21,47 @@ export type AddressFromLocationResult =
   | { ok: true; address: AddressFromLocation }
   | { ok: false; error: string };
 
+function partsToAddress(
+  parts: {
+    street: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    country: string;
+  },
+  fallbackStreet: string
+): AddressFromLocation {
+  return {
+    street_address: parts.street.trim() || fallbackStreet,
+    city: parts.city.trim(),
+    state: parts.state.trim(),
+    country: parts.country.trim() || 'UAE',
+    zip_code: parts.zipCode.trim(),
+  };
+}
+
 /**
  * Request location permission, get current position, reverse geocode to address parts.
- * Returns address fields to pre-fill street_address and city (and optionally state, country, zip_code).
+ * Returns address fields in the app's selected language when possible.
  */
-export async function getAddressFromCurrentLocation(): Promise<AddressFromLocationResult> {
+export async function getAddressFromCurrentLocation(
+  languageCode?: string
+): Promise<AddressFromLocationResult> {
   try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
+    const permission = await ensureForegroundLocationPermission();
+    if (permission !== 'granted') {
       return { ok: false, error: 'Location permission denied' };
     }
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-    const { latitude, longitude } = position.coords;
-    const [first] = await Location.reverseGeocodeAsync({ latitude, longitude });
-    if (!first) {
-      return {
-        ok: false,
-        error: 'Could not get address for this location',
-      };
+
+    const position = await getDevicePositionForUserAction();
+    if (!position) {
+      return { ok: false, error: 'Failed to get location' };
     }
-    const streetParts = [first.streetNumber, first.street, first.name, first.district].filter(Boolean) as string[];
-    const street_address = streetParts.length > 0 ? streetParts.join(', ') : (first.formattedAddress ?? '');
-    const city = first.city ?? first.subregion ?? first.region ?? '';
-    const state = first.region ?? '';
-    const country = first.country ?? '';
-    const zip_code = first.postalCode ?? '';
-    return {
-      ok: true,
-      address: {
-        street_address: street_address.trim() || 'Current location',
-        city: city.trim(),
-        state: state.trim(),
-        country: country.trim() || 'UAE',
-        zip_code: zip_code.trim(),
-      },
-    };
+    return getAddressFromCoordinates(
+      position.coords.latitude,
+      position.coords.longitude,
+      languageCode
+    );
   } catch (e: any) {
     return {
       ok: false,
@@ -62,32 +71,23 @@ export async function getAddressFromCurrentLocation(): Promise<AddressFromLocati
 }
 
 /**
- * Reverse geocode given coordinates to address parts (e.g. when user picks a point on the map).
+ * Reverse geocode given coordinates (e.g. when user picks a point on the map).
+ * Uses the app language unless languageCode is passed explicitly.
  */
 export async function getAddressFromCoordinates(
   latitude: number,
-  longitude: number
+  longitude: number,
+  languageCode?: string
 ): Promise<AddressFromLocationResult> {
   try {
-    const [first] = await Location.reverseGeocodeAsync({ latitude, longitude });
-    if (!first) {
+    const lang = languageCode ?? i18n.language;
+    const parts = await reverseGeocodeForApp(latitude, longitude, lang);
+    if (!parts) {
       return { ok: false, error: 'Could not get address for this location' };
     }
-    const streetParts = [first.streetNumber, first.street, first.name, first.district].filter(Boolean) as string[];
-    const street_address = streetParts.length > 0 ? streetParts.join(', ') : (first.formattedAddress ?? '');
-    const city = first.city ?? first.subregion ?? first.region ?? '';
-    const state = first.region ?? '';
-    const country = first.country ?? '';
-    const zip_code = first.postalCode ?? '';
     return {
       ok: true,
-      address: {
-        street_address: street_address.trim() || 'Selected location',
-        city: city.trim(),
-        state: state.trim(),
-        country: country.trim() || 'UAE',
-        zip_code: zip_code.trim(),
-      },
+      address: partsToAddress(parts, 'Selected location'),
     };
   } catch (e: any) {
     return {

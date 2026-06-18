@@ -1,9 +1,11 @@
 import * as Location from 'expo-location';
 
 const DEFAULT_GPS_TIMEOUT_MS = 8000;
-const USER_ACTION_GPS_TIMEOUT_MS = 15000;
+const USER_ACTION_GPS_TIMEOUT_MS = 7000;
 const DEFAULT_LAST_KNOWN_MAX_AGE_MS = 300_000;
 const USER_ACTION_LAST_KNOWN_MAX_AGE_MS = 600_000;
+/** Recent cached fix — good enough for address autofill without waiting for GPS. */
+const QUICK_LAST_KNOWN_MAX_AGE_MS = 180_000;
 
 export type ForegroundLocationPermission = 'granted' | 'denied';
 export type ForegroundLocationPermissionStatus = 'granted' | 'denied' | 'undetermined';
@@ -95,29 +97,37 @@ export async function getDevicePositionWithTimeout(options?: {
 }
 
 /**
- * When the user taps "Use my location", prefer a fresh GPS fix with a longer timeout.
+ * Prime the OS location cache so a later "Use my location" tap is faster.
+ * Safe to call when checkout / address screens mount.
+ */
+export function warmUpDeviceLocationCache(): void {
+  Location.getLastKnownPositionAsync({ maxAge: USER_ACTION_LAST_KNOWN_MAX_AGE_MS }).catch(
+    () => {}
+  );
+}
+
+/**
+ * When the user taps "Use my location": return quickly using a recent cached fix,
+ * then balanced GPS with a short timeout, then older cache as fallback.
  */
 export async function getDevicePositionForUserAction(): Promise<Location.LocationObject | null> {
   const servicesEnabled = await Location.hasServicesEnabledAsync();
   if (!servicesEnabled) return null;
 
+  const quickLast = await Location.getLastKnownPositionAsync({
+    maxAge: QUICK_LAST_KNOWN_MAX_AGE_MS,
+  });
+  if (quickLast) return quickLast;
+
   try {
     const fresh = await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('GPS timeout')), USER_ACTION_GPS_TIMEOUT_MS)
-      ),
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), USER_ACTION_GPS_TIMEOUT_MS)),
     ]);
     if (fresh) return fresh;
   } catch {
     // fall through
   }
-
-  const balanced = await getDevicePositionWithTimeout({
-    timeoutMs: 12000,
-    maxLastKnownAgeMs: USER_ACTION_LAST_KNOWN_MAX_AGE_MS,
-  });
-  if (balanced) return balanced;
 
   return Location.getLastKnownPositionAsync({ maxAge: USER_ACTION_LAST_KNOWN_MAX_AGE_MS });
 }
