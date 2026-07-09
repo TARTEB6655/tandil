@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import { vendorService } from '../../services/vendorService';
 import { VendorProduct } from '../../types';
 
 const { width, height } = Dimensions.get('window');
@@ -83,15 +84,31 @@ const VendorProductDetailScreen: React.FC = () => {
   };
 
   const handleDeleteProduct = () => {
+    if (!productId) return;
     Alert.alert(
       'Delete Product',
       'Are you sure you want to delete this product? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => {
-          Alert.alert('Deleted', 'Product has been deleted successfully.');
-          navigation.goBack();
-        }},
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await vendorService.deleteProduct(String(productId));
+              Alert.alert('Deleted', 'Product has been deleted successfully.', [
+                { text: 'OK', onPress: () => navigation.goBack() },
+              ]);
+            } catch (err: unknown) {
+              const message =
+                (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data
+                  ?.message ||
+                (err as { message?: string })?.message ||
+                'Failed to delete product.';
+              Alert.alert('Error', message);
+            }
+          },
+        },
       ]
     );
   };

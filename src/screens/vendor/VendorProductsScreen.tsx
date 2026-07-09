@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,117 +11,84 @@ import {
   Dimensions,
   Alert,
   Modal,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
-import { VendorProduct } from '../../types';
+import { vendorService, VendorCatalogProduct } from '../../services/vendorService';
+import { VendorPageHeader, VENDOR_SCREEN_BG } from '../../components/vendor/VendorUi';
 import ModelViewer3D from '../../components/common/ModelViewer3D';
 
 const { width } = Dimensions.get('window');
 
 const VendorProductsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState('all');
-  // Only 3D panoramic viewer is used now
+  const [products, setProducts] = useState<VendorCatalogProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [show3DViewer, setShow3DViewer] = useState(false);
   const [selectedModelUrl, setSelectedModelUrl] = useState<string | null>(null);
   const [imageErrorMap, setImageErrorMap] = useState<Record<string, boolean>>({});
 
-  const getFallbackImageUrl = (product: VendorProduct): string => {
+  const loadProducts = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setLoadError(null);
+    try {
+      const result = await vendorService.getProductsPage({ page: 1, per_page: 50 });
+      setProducts(result.items);
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data
+          ?.message ||
+        (err as { message?: string })?.message ||
+        t('vendorProducts.loadFailed', { defaultValue: 'Failed to load products.' });
+      setLoadError(message);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [t]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProducts(false);
+    }, [loadProducts])
+  );
+
+  const getFallbackImageUrl = (product: VendorCatalogProduct): string => {
     switch (product.category) {
-      case 'shoes':
-        return 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400';
-      case 'accessories':
-        return 'https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=400';
-      case 'clothing':
-        return 'https://images.unsplash.com/photo-1520975916090-3105956dac38?w=400';
+      case 'Plants':
+        return 'https://images.unsplash.com/photo-1466781783364-36c667e55134?w=400';
+      case 'Irrigation':
+        return 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=400';
       default:
-        return 'https://images.unsplash.com/photo-1520975916090-3105956dac38?w=400';
+        return 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400';
     }
   };
 
-  // Demo products data
-  const demoProducts: VendorProduct[] = [
-    {
-      id: '1',
-      vendorId: 'vendor_001',
-      name: 'Premium Leather Sneakers',
-      description: 'High-quality leather sneakers with comfortable sole',
-      category: 'shoes',
-      images: [
-        'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400',
-        'https://images.unsplash.com/photo-1551107696-a4b0c5a0d9a2?w=400',
-        'https://images.unsplash.com/photo-1560769629-975ec94e6a86?w=400',
-      ],
-      threeSixtyImages: [
-        'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400',
-        'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&1',
-        'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&2',
-        'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&3',
-        'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&4',
-        'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&5',
-        'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&6',
-        'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&7',
-      ],
-      modelUrl: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/MaterialsVariantsShoe/glTF-Binary/MaterialsVariantsShoe.glb',
-      isAvailable: true,
-      createdAt: new Date('2024-01-15'),
-    },
-    {
-      id: '2',
-      vendorId: 'vendor_001',
-      name: 'Casual Canvas Shoes',
-      description: 'Lightweight canvas shoes perfect for daily wear',
-      category: 'shoes',
-      images: [
-        'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=400',
-        'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400',
-      ],
-      modelUrl: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/MaterialsVariantsShoe/glTF-Binary/MaterialsVariantsShoe.glb',
-      isAvailable: true,
-      createdAt: new Date('2024-01-10'),
-    },
-    {
-      id: '3',
-      vendorId: 'vendor_001',
-      name: 'Leather Wallet',
-      description: 'Genuine leather wallet with multiple card slots',
-      category: 'accessories',
-      images: [
-        'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400',
-        'https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=400',
-      ],
-      modelUrl: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/MaterialsVariantsShoe/glTF-Binary/MaterialsVariantsShoe.glb',
-      isAvailable: true,
-      createdAt: new Date('2024-01-08'),
-    },
-    {
-      id: '4',
-      vendorId: 'vendor_001',
-      name: 'Sports Socks Pack',
-      description: 'Comfortable sports socks for athletic activities',
-      category: 'accessories',
-      images: [
-        'https://images.unsplash.com/photo-1520975916090-3105956dac38?w=400',
-      ],
-      modelUrl: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/MaterialsVariantsShoe/glTF-Binary/MaterialsVariantsShoe.glb',
-      isAvailable: false,
-      createdAt: new Date('2024-01-05'),
-    },
-  ];
-
   const categories = [
-    { id: 'all', name: 'All Products', icon: 'grid-outline' },
-    { id: 'shoes', name: 'Shoes', icon: 'footsteps-outline' },
-    { id: 'accessories', name: 'Accessories', icon: 'bag-outline' },
-    { id: 'clothing', name: 'Clothing', icon: 'shirt-outline' },
+    { id: 'all', name: t('vendorProducts.all'), icon: 'grid-outline' },
+    ...Array.from(new Set(products.map((p) => p.category))).map((cat) => ({
+      id: cat,
+      name: cat,
+      icon: 'leaf-outline' as const,
+    })),
   ];
 
-  const filteredProducts = selectedCategory === 'all' 
-    ? demoProducts 
-    : demoProducts.filter(product => product.category === selectedCategory);
+  const filteredProducts =
+    selectedCategory === 'all'
+      ? products
+      : products.filter((product) => product.category === selectedCategory);
 
   const handleAddProduct = () => {
     navigation.navigate('AddProduct');
@@ -133,30 +100,63 @@ const VendorProductsScreen: React.FC = () => {
 
   // Vendor flow does not need a product detail page
 
-  const handleToggleAvailability = (productId: string) => {
+  const handleToggleAvailability = (productId: string, current: boolean) => {
     Alert.alert(
-      'Toggle Availability',
-      'Do you want to change the availability of this product?',
+      t('vendorProducts.toggleTitle'),
+      t('vendorProducts.toggleMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Confirm', onPress: () => {
-          // Here you would update the product availability in your backend
-          Alert.alert('Success', 'Product availability updated!');
-        }},
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.confirm', { defaultValue: 'Confirm' }),
+          onPress: async () => {
+            await vendorService.toggleProductAvailability(productId, !current);
+            await loadProducts(true);
+          },
+        },
       ]
     );
   };
 
-  // Clicking image opens 3D viewer directly
+  const handleDeleteProduct = (product: VendorCatalogProduct) => {
+    Alert.alert(
+      t('vendorProducts.deleteTitle', { defaultValue: 'Delete product' }),
+      t('vendorProducts.deleteMessage', {
+        defaultValue: 'Delete "{{name}}"? This cannot be undone.',
+        name: product.name,
+      }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete', { defaultValue: 'Delete' }),
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingId(product.id);
+            try {
+              const res = await vendorService.deleteProduct(product.id);
+              await loadProducts(true);
+              Alert.alert(
+                t('common.success'),
+                res.message ||
+                  t('vendorProducts.deleteSuccess', { defaultValue: 'Product deleted successfully.' })
+              );
+            } catch (err: unknown) {
+              const message =
+                (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data
+                  ?.message ||
+                (err as { message?: string })?.message ||
+                t('vendorProducts.deleteFailed', { defaultValue: 'Failed to delete product.' });
+              Alert.alert(t('common.error'), message);
+            } finally {
+              setDeletingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
-  const handleOpen3DViewer = (product: VendorProduct) => {
-    const url = product.modelUrl;
-    if (url) {
-      setSelectedModelUrl(url);
-      setShow3DViewer(true);
-    } else {
-      Alert.alert('3D Model Unavailable', 'This product does not have a 3D model yet.');
-    }
+  const handleOpen3DViewer = (_product: VendorCatalogProduct) => {
+    Alert.alert(t('vendorProducts.no3d'), t('vendorProducts.no3dMessage'));
   };
 
   const handleClose3DViewer = () => {
@@ -164,96 +164,107 @@ const VendorProductsScreen: React.FC = () => {
     setSelectedModelUrl(null);
   };
 
-  const renderProductCard = ({ item }: { item: VendorProduct }) => (
+  const getApprovalBadgeStyle = (status?: string) => {
+    switch ((status ?? '').toLowerCase()) {
+      case 'approved':
+        return { bg: COLORS.success + '22', color: COLORS.success, label: t('vendorProducts.approved', { defaultValue: 'Approved' }) };
+      case 'rejected':
+        return { bg: COLORS.error + '22', color: COLORS.error, label: t('vendorProducts.rejected', { defaultValue: 'Rejected' }) };
+      default:
+        return { bg: COLORS.warning + '22', color: COLORS.warning, label: t('vendorProducts.pending', { defaultValue: 'Pending' }) };
+    }
+  };
+
+  const renderProductCard = ({ item }: { item: VendorCatalogProduct }) => {
+    const approval = getApprovalBadgeStyle(item.approval_status);
+    return (
     <View style={styles.productCard}>
       <View style={styles.productImageContainer}>
         <TouchableOpacity activeOpacity={0.9} onPress={() => handleOpen3DViewer(item)} style={{ flex: 1 }}>
-          <Image 
+          <Image
             defaultSource={require('../../../assets/splash-icon.png')}
-            source={imageErrorMap[item.id] || !item.images[0] ? { uri: getFallbackImageUrl(item) } : { uri: item.images[0] }} 
+            source={
+              imageErrorMap[item.id] || !item.images[0]
+                ? { uri: getFallbackImageUrl(item) }
+                : { uri: item.images[0] }
+            }
             style={styles.productImage}
             resizeMode="cover"
-            onError={() => setImageErrorMap(prev => ({ ...prev, [item.id]: true }))}
+            onError={() => setImageErrorMap((prev) => ({ ...prev, [item.id]: true }))}
           />
         </TouchableOpacity>
-        <View style={styles.imageCountBadge}>
-          <Text style={styles.imageCountText}>{item.images.length}</Text>
+        <View style={[styles.approvalBadge, { backgroundColor: approval.bg }]}>
+          <Text style={[styles.approvalBadgeText, { color: approval.color }]}>{approval.label}</Text>
         </View>
-        {(item.modelUrl || (item.threeSixtyImages && item.threeSixtyImages.length >= 8)) ? (
-          <View style={styles.threeSixtyBadge}>
-            <Ionicons name="refresh" size={14} color="#fff" />
-            <Text style={styles.threeSixtyText}>360°</Text>
-          </View>
-        ) : null}
-        <View style={[styles.availabilityBadge, { 
-          backgroundColor: item.isAvailable ? COLORS.success : COLORS.error 
+        <View style={[styles.availabilityBadge, {
+          backgroundColor: item.is_available ? COLORS.success : COLORS.textSecondary,
         }]}>
           <Text style={styles.availabilityText}>
-            {item.isAvailable ? 'Available' : 'Out of Stock'}
+            {item.is_available
+              ? t('vendorProducts.active', { defaultValue: 'Active' })
+              : t('vendorProducts.inactive', { defaultValue: 'Inactive' })}
           </Text>
         </View>
       </View>
-      
+
       <View style={styles.productInfo}>
         <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-        <Text style={styles.productDescription} numberOfLines={2}>
-          {item.description}
-        </Text>
-        {/* 3D view opens on image tap; button removed for cleaner UI */}
+        <Text style={styles.productDescription} numberOfLines={2}>{item.description}</Text>
         <Text style={styles.productCategory}>
-          Category: {item.category.charAt(0).toUpperCase() + item.category.slice(1)}
+          {t('vendorProducts.category')}: {item.category}
         </Text>
-        <Text style={styles.productDate}>
-          Added: {item.createdAt.toLocaleDateString()}
-        </Text>
+        <Text style={styles.productPrice}>AED {item.price.toFixed(2)} · {t('vendorProducts.stock')}: {item.stock_quantity}</Text>
       </View>
 
       <View style={styles.productActions}>
-        {/* Removed View action for vendor */}
-        
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => handleEditProduct(item.id)}
-        >
+        <TouchableOpacity style={styles.actionButton} onPress={() => handleEditProduct(item.id)}>
           <Ionicons name="create-outline" size={20} color={COLORS.warning} />
-          <Text style={styles.actionText}>Edit</Text>
+          <Text style={styles.actionText}>{t('common.edit', { defaultValue: 'Edit' })}</Text>
         </TouchableOpacity>
-        
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => handleToggleAvailability(item.id)}
+          onPress={() => handleToggleAvailability(item.id, item.is_available)}
         >
-          <Ionicons 
-            name={item.isAvailable ? "close-circle-outline" : "checkmark-circle-outline"} 
-            size={20} 
-            color={item.isAvailable ? COLORS.error : COLORS.success} 
+          <Ionicons
+            name={item.is_available ? 'close-circle-outline' : 'checkmark-circle-outline'}
+            size={20}
+            color={item.is_available ? COLORS.error : COLORS.success}
           />
           <Text style={styles.actionText}>
-            {item.isAvailable ? 'Disable' : 'Enable'}
+            {item.is_available ? t('vendorProducts.disable') : t('vendorProducts.enable')}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => handleDeleteProduct(item)}
+          disabled={deletingId === item.id}
+        >
+          {deletingId === item.id ? (
+            <ActivityIndicator size="small" color={COLORS.error} />
+          ) : (
+            <Ionicons name="trash-outline" size={20} color={COLORS.error} />
+          )}
+          <Text style={[styles.actionText, styles.deleteActionText]}>
+            {t('common.delete', { defaultValue: 'Delete' })}
           </Text>
         </TouchableOpacity>
       </View>
     </View>
   );
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.title}>My Products</Text>
-          <Text style={styles.subtitle}>Manage your product catalog</Text>
-        </View>
-        
-        <TouchableOpacity style={styles.addButton} onPress={handleAddProduct}>
-          <Ionicons name="add" size={24} color={COLORS.background} />
-          <Text style={styles.addButtonText}>Add New Product</Text>
-        </TouchableOpacity>
-      </View>
 
-      {/* Category Filter */}
+      <VendorPageHeader
+        title={t('vendorTabs.products')}
+        subtitle={t('vendorDashboard.manageProducts')}
+        actionLabel={t('vendorDashboard.add')}
+        actionIcon="add"
+        onAction={handleAddProduct}
+      />
+
       <View style={styles.categoryContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {categories.map((category) => (
@@ -290,13 +301,25 @@ const VendorProductsScreen: React.FC = () => {
           <Text style={styles.productsCount}>{filteredProducts.length} products</Text>
         </View>
 
-        {filteredProducts.length > 0 ? (
+        {loading ? (
+          <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xl }} />
+        ) : loadError ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="alert-circle-outline" size={64} color={COLORS.error} />
+            <Text style={styles.emptyStateTitle}>{t('vendorProducts.loadFailed', { defaultValue: 'Failed to load products.' })}</Text>
+            <Text style={styles.emptyStateText}>{loadError}</Text>
+            <TouchableOpacity style={styles.emptyStateButton} onPress={() => loadProducts(true)}>
+              <Text style={styles.emptyStateButtonText}>{t('common.retry', { defaultValue: 'Retry' })}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : filteredProducts.length > 0 ? (
           <FlatList
             data={filteredProducts}
             renderItem={renderProductCard}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.productsList}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadProducts(true)} />}
           />
         ) : (
           <View style={styles.emptyState}>
@@ -327,50 +350,11 @@ const VendorProductsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.primary + '10',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  headerLeft: {
-    flex: 1,
-    marginRight: SPACING.lg,
-  },
-  title: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
-  subtitle: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    marginBottom: 0,
-  },
-  addButton: {
-    backgroundColor: COLORS.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
-  },
-  addButtonText: {
-    color: COLORS.background,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    marginLeft: SPACING.xs,
+    backgroundColor: VENDOR_SCREEN_BG,
   },
   categoryContainer: {
     paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    paddingHorizontal: SPACING.sm,
   },
   categoryButton: {
     flexDirection: 'row',
@@ -419,12 +403,17 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xl,
   },
   productCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
     marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   productImageContainer: {
     position: 'relative',
@@ -473,6 +462,18 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xs,
     borderRadius: BORDER_RADIUS.round,
   },
+  approvalBadge: {
+    position: 'absolute',
+    top: SPACING.sm,
+    right: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  approvalBadgeText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
   availabilityText: {
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.medium,
@@ -515,9 +516,10 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.medium,
     marginBottom: SPACING.xs,
   },
-  productDate: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
+  productPrice: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    fontWeight: FONT_WEIGHTS.medium,
   },
   productActions: {
     flexDirection: 'row',
@@ -536,6 +538,9 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.medium,
     marginLeft: SPACING.xs,
+  },
+  deleteActionText: {
+    color: COLORS.error,
   },
   emptyState: {
     flex: 1,

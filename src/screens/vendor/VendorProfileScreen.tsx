@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -6,94 +6,257 @@ import {
   StatusBar,
   ScrollView,
   TouchableOpacity,
-  Image,
-  Switch,
+  ActivityIndicator,
   Alert,
-  Dimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import { useAppStore } from '../../store';
+import { authService } from '../../services/authService';
+import {
+  vendorProfileService,
+  VendorProfileData,
+} from '../../services/vendorProfileService';
+import {
+  VENDOR_SCREEN_BG,
+  VendorHeroBanner,
+  VendorCard,
+  VendorMenuRow,
+  VendorStatTile,
+} from '../../components/vendor/VendorUi';
 
-const { width } = Dimensions.get('window');
+function buildSubtitle(profile: VendorProfileData | null): string {
+  if (!profile) return '';
+  if (profile.header_subtitle?.trim()) return profile.header_subtitle.trim();
+  if (profile.location_display?.trim()) {
+    return profile.business_name
+      ? `${profile.business_name} · ${profile.location_display}`
+      : profile.location_display;
+  }
+  const locationBits = [profile.city, profile.emirate].filter(Boolean);
+  const location = locationBits.join(', ');
+  if (profile.business_name && location) return `${profile.business_name} · ${location}`;
+  return profile.business_name || location || '';
+}
+
+function partnershipLabel(profile: VendorProfileData | null): string {
+  if (!profile) return '';
+  if (profile.partnership_badge_label?.trim()) return profile.partnership_badge_label.trim();
+  if (profile.partnership_tier?.trim()) {
+    const tier = profile.partnership_tier.trim();
+    return /partner/i.test(tier) ? tier : `${tier} Partner`;
+  }
+  return '';
+}
+
+const MENU_ICON_MAP: Record<string, string> = {
+  person: 'person-outline',
+  business: 'business-outline',
+  location: 'location-outline',
+  payment: 'card-outline',
+  diamond: 'diamond-outline',
+  analytics: 'analytics-outline',
+  document: 'document-text-outline',
+  support: 'people-outline',
+};
+
+function menuIcon(icon?: string, fallback = 'chevron-forward-outline'): string {
+  if (!icon) return fallback;
+  return MENU_ICON_MAP[icon] ?? `${icon}-outline`;
+}
+
+function menuAction(id: string): string {
+  switch (id) {
+    case 'edit_profile':
+      return 'editProfile';
+    case 'business_information':
+      return 'businessInfo';
+    case 'location_address':
+      return 'location';
+    case 'payment_methods':
+      return 'payment';
+    case 'partnership_status':
+      return 'partnership';
+    case 'performance_analytics':
+      return 'analytics';
+    case 'partnership_documents':
+      return 'documents';
+    case 'support_team':
+      return 'support';
+    default:
+      return id;
+  }
+}
 
 const VendorProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [marketingEmails, setMarketingEmails] = useState(false);
-  const [autoSync, setAutoSync] = useState(true);
+  const { t } = useTranslation();
+  const user = useAppStore((s) => s.user);
+  const logout = useAppStore((s) => s.logout);
 
-  // Demo vendor profile data
-  const vendorProfile = {
-    name: 'Ahmed Al Mansouri',
-    email: 'ahmed@luxuryshoes.ae',
-    phone: '+971 50 123 4567',
-    businessName: 'Luxury Shoes & Accessories',
-    businessType: 'Retail Store',
-    location: 'Dubai Marina, Dubai, UAE',
-    partnershipTier: 'Silver',
-    memberSince: 'January 2024',
-    totalProducts: 45,
-    productsDelivered: 23,
-    rating: 4.8,
-    reviews: 156,
-    profileImage: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
-  };
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<VendorProfileData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadProfile = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await vendorProfileService.getProfile();
+      setProfile(data);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to load vendor profile.';
+      console.error('Vendor profile load error:', err);
+      setProfile(null);
+      setLoadError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [loadProfile])
+  );
+
+  const displayName =
+    profile?.header_name ||
+    profile?.authorized_person_name ||
+    user?.name ||
+    t('vendorProfile.vendorFallback', { defaultValue: 'Vendor' });
+  const subtitle = buildSubtitle(profile);
+  const category =
+    profile?.professional_category ||
+    profile?.vendor_type_label ||
+    profile?.vendor_type ||
+    '';
+  const badge = partnershipLabel(profile);
+  const memberSince = profile?.member_since || '';
+  const avatarUrl = profile?.profile_picture_url || profile?.logo_url;
+  const products = profile?.stats_products ?? 0;
+  const delivered = profile?.stats_delivered ?? 0;
+  const rating = profile?.stats_rating ?? 0;
+  const reviews = profile?.stats_reviews ?? 0;
 
   const profileSections = [
     {
-      title: 'Account Settings',
-      items: [
-        { icon: 'person-outline', label: 'Edit Profile', action: 'editProfile' },
-        { icon: 'business-outline', label: 'Business Information', action: 'businessInfo' },
-        { icon: 'location-outline', label: 'Location & Address', action: 'location' },
-        { icon: 'card-outline', label: 'Payment Methods', action: 'payment' },
-      ]
+      title: t('vendorProfile.accountSettings', { defaultValue: 'Account Settings' }),
+      items:
+        profile?.account_settings?.length
+          ? profile.account_settings.map((item) => ({
+              icon: menuIcon(item.icon, 'person-outline'),
+              label: item.title,
+              action: menuAction(item.id),
+            }))
+          : [
+              {
+                icon: 'person-outline',
+                label: t('vendorProfile.editProfile', { defaultValue: 'Edit Profile' }),
+                action: 'editProfile',
+              },
+              {
+                icon: 'business-outline',
+                label: t('vendorProfile.businessInfo', { defaultValue: 'Business Information' }),
+                action: 'businessInfo',
+              },
+              {
+                icon: 'location-outline',
+                label: t('vendorProfile.locationAddress', { defaultValue: 'Location & Address' }),
+                action: 'location',
+              },
+              {
+                icon: 'card-outline',
+                label: t('vendorProfile.paymentMethods', { defaultValue: 'Payment Methods' }),
+                action: 'payment',
+              },
+            ],
     },
     {
-      title: 'Partnership',
-      items: [
-        { icon: 'diamond-outline', label: 'Partnership Status', action: 'partnership' },
-        { icon: 'analytics-outline', label: 'Performance Analytics', action: 'analytics' },
-        { icon: 'document-text-outline', label: 'Partnership Documents', action: 'documents' },
-        { icon: 'people-outline', label: 'Support Team', action: 'support' },
-      ]
+      title: t('vendorProfile.partnership', { defaultValue: 'Partnership' }),
+      items:
+        profile?.partnership_menu?.length
+          ? profile.partnership_menu.map((item) => ({
+              icon: menuIcon(item.icon, 'diamond-outline'),
+              label: item.title,
+              action: menuAction(item.id),
+            }))
+          : [
+              {
+                icon: 'diamond-outline',
+                label: t('vendorProfile.partnershipStatus', { defaultValue: 'Partnership Status' }),
+                action: 'partnership',
+              },
+              {
+                icon: 'analytics-outline',
+                label: t('vendorProfile.analytics', { defaultValue: 'Performance Analytics' }),
+                action: 'analytics',
+              },
+              {
+                icon: 'document-text-outline',
+                label: t('vendorProfile.documents', { defaultValue: 'Partnership Documents' }),
+                action: 'documents',
+              },
+              {
+                icon: 'people-outline',
+                label: t('vendorProfile.supportTeam', { defaultValue: 'Support Team' }),
+                action: 'support',
+              },
+            ],
     },
     {
-      title: 'Preferences',
+      title: t('vendorProfile.supportHelp', { defaultValue: 'Support & Help' }),
       items: [
-        { icon: 'notifications-outline', label: 'Notifications', action: 'notifications', toggle: true },
-        { icon: 'mail-outline', label: 'Marketing Emails', action: 'marketing', toggle: true },
-        { icon: 'sync-outline', label: 'Auto Sync', action: 'sync', toggle: true },
-        { icon: 'language-outline', label: 'Language', action: 'language' },
-      ]
+        {
+          icon: 'help-circle-outline',
+          label: t('vendorProfile.helpCenter', { defaultValue: 'Help Center' }),
+          action: 'help',
+        },
+        {
+          icon: 'chatbubble-outline',
+          label: t('vendorProfile.liveChat', { defaultValue: 'Live Chat' }),
+          action: 'chat',
+        },
+        {
+          icon: 'call-outline',
+          label: t('vendorProfile.contactUs', { defaultValue: 'Contact Us' }),
+          action: 'contact',
+        },
+        {
+          icon: 'document-outline',
+          label: t('vendorProfile.terms', { defaultValue: 'Terms & Conditions' }),
+          action: 'terms',
+        },
+        {
+          icon: 'shield-outline',
+          label: t('vendorProfile.privacy', { defaultValue: 'Privacy Policy' }),
+          action: 'privacy',
+        },
+      ],
     },
-    {
-      title: 'Support & Help',
-      items: [
-        { icon: 'help-circle-outline', label: 'Help Center', action: 'help' },
-        { icon: 'chatbubble-outline', label: 'Live Chat', action: 'chat' },
-        { icon: 'call-outline', label: 'Contact Us', action: 'contact' },
-        { icon: 'document-outline', label: 'Terms & Conditions', action: 'terms' },
-        { icon: 'shield-outline', label: 'Privacy Policy', action: 'privacy' },
-      ]
-    }
   ];
 
   const handleProfileAction = (action: string) => {
     switch (action) {
       case 'editProfile':
-        Alert.alert('Edit Profile', 'Profile editing feature coming soon!');
+        navigation.navigate('EditProfile');
         break;
       case 'businessInfo':
-        Alert.alert('Business Information', 'Business info editing feature coming soon!');
+        navigation.navigate('BusinessInfo');
         break;
       case 'location':
-        Alert.alert('Location', 'Location editing feature coming soon!');
+        navigation.navigate('LocationAddress');
         break;
       case 'payment':
-        Alert.alert('Payment Methods', 'Payment methods management coming soon!');
+        Alert.alert(
+          t('vendorProfile.paymentMethods', { defaultValue: 'Payment Methods' }),
+          t('vendorProfile.comingSoon', { defaultValue: 'Coming soon!' })
+        );
         break;
       case 'partnership':
         navigation.navigate('Partnership');
@@ -102,165 +265,181 @@ const VendorProfileScreen: React.FC = () => {
         navigation.navigate('Analytics');
         break;
       case 'documents':
-        Alert.alert('Documents', 'Partnership documents feature coming soon!');
+        Alert.alert(
+          t('vendorProfile.documents', { defaultValue: 'Partnership Documents' }),
+          t('vendorProfile.comingSoon', { defaultValue: 'Coming soon!' })
+        );
         break;
       case 'support':
-        Alert.alert('Support', 'Support team contact feature coming soon!');
+        Alert.alert(
+          t('vendorProfile.supportTeam', { defaultValue: 'Support Team' }),
+          t('vendorProfile.comingSoon', { defaultValue: 'Coming soon!' })
+        );
         break;
       case 'help':
-        Alert.alert('Help Center', 'Help center feature coming soon!');
+        Alert.alert(
+          t('vendorProfile.helpCenter', { defaultValue: 'Help Center' }),
+          t('vendorProfile.comingSoon', { defaultValue: 'Coming soon!' })
+        );
         break;
       case 'chat':
-        Alert.alert('Live Chat', 'Live chat feature coming soon!');
+        navigation.navigate('LiveChat');
         break;
       case 'contact':
-        Alert.alert('Contact Us', 'Contact feature coming soon!');
+        navigation.navigate('ContactUs');
         break;
       case 'terms':
-        Alert.alert('Terms & Conditions', 'Terms and conditions feature coming soon!');
+        navigation.navigate('LegalDocument', { document: 'terms' });
         break;
       case 'privacy':
-        Alert.alert('Privacy Policy', 'Privacy policy feature coming soon!');
-        break;
-      case 'language':
-        Alert.alert('Language', 'Language selection feature coming soon!');
+        navigation.navigate('LegalDocument', { document: 'privacy' });
         break;
     }
   };
 
+  const resetToRoleSelection = () => {
+    let rootNavigator = navigation;
+    while (rootNavigator.getParent()) {
+      rootNavigator = rootNavigator.getParent() as typeof navigation;
+    }
+    rootNavigator.reset({
+      index: 0,
+      routes: [{ name: 'RoleSelection' }],
+    });
+  };
+
   const handleLogout = () => {
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
+      t('technician.logout', { defaultValue: 'Logout' }),
+      t('technician.logoutConfirm', { defaultValue: 'Are you sure you want to logout?' }),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: () => {
-          Alert.alert('Logged Out', 'You have been successfully logged out.');
-          navigation.navigate('RoleSelection');
-        }},
+        { text: t('technician.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('technician.logout', { defaultValue: 'Logout' }),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await logout();
+            } catch (error) {
+              console.error('Vendor logout error:', error);
+              await authService.clearLocalSession();
+            } finally {
+              resetToRoleSelection();
+            }
+          },
+        },
       ]
     );
   };
 
-  const renderProfileHeader = () => (
-    <View style={styles.profileHeader}>
-      <View style={styles.profileImageContainer}>
-        <Image source={{ uri: vendorProfile.profileImage }} style={styles.profileImage} />
-        <TouchableOpacity style={styles.editImageButton}>
-          <Ionicons name="camera" size={20} color={COLORS.background} />
-        </TouchableOpacity>
-      </View>
-      
-      <View style={styles.profileInfo}>
-        <Text style={styles.profileName}>{vendorProfile.name}</Text>
-        <Text style={styles.businessName}>{vendorProfile.businessName}</Text>
-        <Text style={styles.businessType}>{vendorProfile.businessType}</Text>
-        
-        <View style={styles.partnershipBadge}>
-          <Ionicons name="diamond-outline" size={16} color={COLORS.primary} />
-          <Text style={styles.partnershipText}>{vendorProfile.partnershipTier} Partner</Text>
-        </View>
-        
-        <Text style={styles.memberSince}>Member since {vendorProfile.memberSince}</Text>
-      </View>
-    </View>
-  );
-
-  const renderStats = () => (
-    <View style={styles.statsContainer}>
-      <View style={styles.statCard}>
-        <Text style={styles.statNumber}>{vendorProfile.totalProducts}</Text>
-        <Text style={styles.statLabel}>Total Products</Text>
-      </View>
-      
-      <View style={styles.statCard}>
-        <Text style={styles.statNumber}>{vendorProfile.productsDelivered}</Text>
-        <Text style={styles.statLabel}>Delivered</Text>
-      </View>
-      
-      <View style={styles.statCard}>
-        <Text style={styles.statNumber}>{vendorProfile.rating}</Text>
-        <Text style={styles.statLabel}>Rating</Text>
-      </View>
-      
-      <View style={styles.statCard}>
-        <Text style={styles.statNumber}>{vendorProfile.reviews}</Text>
-        <Text style={styles.statLabel}>Reviews</Text>
-      </View>
-    </View>
-  );
-
-  const renderProfileSection = (section: any) => (
-    <View key={section.title} style={styles.section}>
-      <Text style={styles.sectionTitle}>{section.title}</Text>
-      
-      {section.items.map((item: any, index: number) => (
-        <TouchableOpacity
-          key={index}
-          style={styles.sectionItem}
-          onPress={() => handleProfileAction(item.action)}
-        >
-          <View style={styles.sectionItemLeft}>
-            <View style={styles.itemIcon}>
-              <Ionicons name={item.icon as any} size={20} color={COLORS.primary} />
-            </View>
-            <Text style={styles.itemLabel}>{item.label}</Text>
-          </View>
-          
-          {item.toggle ? (
-            <Switch
-              value={
-                item.action === 'notifications' ? notificationsEnabled :
-                item.action === 'marketing' ? marketingEmails :
-                item.action === 'sync' ? autoSync : false
-              }
-              onValueChange={(value) => {
-                if (item.action === 'notifications') setNotificationsEnabled(value);
-                else if (item.action === 'marketing') setMarketingEmails(value);
-                else if (item.action === 'sync') setAutoSync(value);
-              }}
-              trackColor={{ false: COLORS.border, true: COLORS.primary + '40' }}
-              thumbColor={COLORS.primary}
-            />
-          ) : (
-            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-          )}
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Profile</Text>
-        <Text style={styles.subtitle}>Manage your vendor profile</Text>
-      </View>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-        {/* Profile Header */}
-        {renderProfileHeader()}
-        
-        {/* Stats */}
-        {renderStats()}
-        
-        {/* Profile Sections */}
-        {profileSections.map(renderProfileSection)}
-        
-        {/* Logout Button */}
+        <VendorHeroBanner
+          badge={t('vendorDashboard.vendorPortal')}
+          title={displayName}
+          subtitle={subtitle || undefined}
+        />
+
+        <View style={styles.profileCardWrap}>
+          {loading && !profile ? (
+            <View style={styles.cardLoading}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            </View>
+          ) : loadError ? (
+            <View style={styles.errorCard}>
+              <Ionicons name="cloud-offline-outline" size={28} color={COLORS.error} />
+              <Text style={styles.errorText}>{loadError}</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={loadProfile}>
+                <Text style={styles.retryBtnText}>
+                  {t('common.retry', { defaultValue: 'Retry' })}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.avatarRow}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.profileImage} contentFit="cover" />
+              ) : (
+                <View style={[styles.profileImage, styles.profileImagePlaceholder]}>
+                  <Ionicons name="person" size={32} color={COLORS.textSecondary} />
+                </View>
+              )}
+              <View style={styles.profileMeta}>
+                {category ? <Text style={styles.businessType}>{category}</Text> : null}
+                {badge ? (
+                  <View style={styles.partnershipBadge}>
+                    <Ionicons name="leaf-outline" size={14} color={COLORS.primary} />
+                    <Text style={styles.partnershipText}>{badge}</Text>
+                  </View>
+                ) : null}
+                {memberSince ? (
+                  <Text style={styles.memberSince}>
+                    {t('vendorProfile.memberSince', {
+                      defaultValue: 'Member since {{date}}',
+                      date: memberSince,
+                    })}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.statsGrid}>
+          <VendorStatTile
+            label={t('vendorProfile.products', { defaultValue: 'Products' })}
+            value={products}
+            icon="cube-outline"
+            accent={COLORS.primary}
+          />
+          <VendorStatTile
+            label={t('vendorProfile.delivered', { defaultValue: 'Delivered' })}
+            value={delivered}
+            icon="checkmark-done-outline"
+            accent={COLORS.success}
+          />
+          <VendorStatTile
+            label={t('vendorProfile.rating', { defaultValue: 'Rating' })}
+            value={profile?.rating_available === false ? '—' : rating}
+            icon="star-outline"
+            accent="#D4A017"
+          />
+          <VendorStatTile
+            label={t('vendorProfile.reviews', { defaultValue: 'Reviews' })}
+            value={reviews}
+            icon="chatbubbles-outline"
+            accent={COLORS.info}
+          />
+        </View>
+
+        {profileSections.map((section) => (
+          <VendorCard key={section.title} style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            {section.items.map((item, index) => (
+              <VendorMenuRow
+                key={`${section.title}-${index}`}
+                icon={item.icon}
+                title={item.label}
+                onPress={() => handleProfileAction(item.action)}
+              />
+            ))}
+          </VendorCard>
+        ))}
+
         <View style={styles.logoutSection}>
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={24} color={COLORS.error} />
-            <Text style={styles.logoutText}>Logout</Text>
+            <Ionicons name="log-out-outline" size={22} color={COLORS.error} />
+            <Text style={styles.logoutText}>
+              {t('technician.logout', { defaultValue: 'Logout' })}
+            </Text>
           </TouchableOpacity>
         </View>
-        
-        {/* App Version */}
+
         <View style={styles.versionContainer}>
-          <Text style={styles.versionText}>Shozy Vendor App v1.0.0</Text>
+          <Text style={styles.versionText}>Tandil Vendor v1.0.0</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -270,161 +449,117 @@ const VendorProfileScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.primary + '10',
-  },
-  title: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  subtitle: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
+    backgroundColor: VENDOR_SCREEN_BG,
   },
   scrollView: {
     flex: 1,
   },
-  profileHeader: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    alignItems: 'center',
-  },
-  profileImageContainer: {
-    position: 'relative',
+  profileCardWrap: {
+    marginTop: -SPACING.lg,
+    marginHorizontal: SPACING.lg,
     marginBottom: SPACING.md,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  cardLoading: {
+    minHeight: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorCard: {
+    minHeight: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.md,
+    gap: SPACING.sm,
+  },
+  errorText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: SPACING.xs,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  retryBtnText: {
+    color: '#fff',
+    fontWeight: FONT_WEIGHTS.semibold,
+    fontSize: FONT_SIZES.sm,
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     borderWidth: 3,
     borderColor: COLORS.primary,
+    marginRight: SPACING.md,
   },
-  editImageButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: COLORS.primary,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  profileImagePlaceholder: {
+    backgroundColor: COLORS.surfaceLight,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.background,
   },
-  profileInfo: {
-    alignItems: 'center',
-  },
-  profileName: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  businessName: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.primary,
-    marginBottom: SPACING.xs,
-  },
+  profileMeta: { flex: 1 },
   businessType: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   partnershipBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary + '20',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.primary + '12',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
     borderRadius: BORDER_RADIUS.round,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
+    gap: 4,
   },
   partnershipText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.primary,
-    marginLeft: SPACING.xs,
   },
   memberSince: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.lg,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
-    alignItems: 'center',
-    marginHorizontal: SPACING.xs,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  statNumber: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.primary,
-    marginBottom: SPACING.xs,
-  },
-  statLabel: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
-    textAlign: 'center',
   },
-  section: {
-    marginBottom: SPACING.lg,
-  },
-  sectionTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.text,
-    marginBottom: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-  },
-  sectionItem: {
+  statsGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    backgroundColor: COLORS.surface,
+    marginBottom: SPACING.sm,
+  },
+  sectionCard: {
     marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.xs,
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    paddingHorizontal: 0,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xs,
   },
-  sectionItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  itemIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary + '20',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  itemLabel: {
+  sectionTitle: {
     fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
-    fontWeight: FONT_WEIGHTS.medium,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.xs,
   },
   logoutSection: {
     paddingHorizontal: SPACING.lg,

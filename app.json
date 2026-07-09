@@ -18,7 +18,7 @@
       "bundleIdentifier": "com.tandilapp.tandil",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "Allow access to your photos to add product images.",
+        "NSPhotoLibraryUsageDescription": "Allow access to your photos to upload product and maintenance images.",
         "NSCameraUsageDescription": "Allow access to the camera to take photos for your profile, products, and service documentation when you choose that option."
       }
     },

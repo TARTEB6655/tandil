@@ -3,170 +3,174 @@ import {
   View,
   Text,
   StyleSheet,
-  StatusBar,
-  ScrollView,
   TouchableOpacity,
-  TextInput,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import { Input } from '../../components/common/Input';
+import { Button } from '../../components/common/Button';
+import { authService } from '../../services/authService';
+import { useAppStore } from '../../store';
+import { roleMatchesPortal } from '../../utils/sessionRestore';
 
 const VendorLoginScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
+  const { setUser, setAuthenticated } = useAppStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    // Simple validation for demo purposes
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Demo Mode', 'Please enter any email and password to continue');
+      Alert.alert(t('common.error'), t('vendorLogin.fillAllFields'));
       return;
     }
 
     setIsLoading(true);
+    setError(null);
 
     try {
-      // Simulate brief loading for better UX
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Navigate directly to vendor app (no real authentication)
-      navigation.navigate('VendorApp');
-    } catch (error) {
-      Alert.alert('Error', 'Navigation failed. Please try again.');
+      const response = await authService.login({
+        email: email.trim(),
+        password,
+        roles: 'vendor',
+      });
+
+      const userRole =
+        response.data?.role ||
+        response.data?.user?.role ||
+        response.data?.user?.roles?.[0]?.name;
+
+      if (!roleMatchesPortal(userRole, 'vendor')) {
+        await authService.clearLocalSession();
+        Alert.alert(t('vendorLogin.accessDenied'), t('vendorLogin.notVendorAccount'));
+        return;
+      }
+
+      const appUser = await authService.getStoredUser();
+      if (appUser) {
+        setUser(appUser);
+        setAuthenticated(true);
+        navigation.replace('Main');
+        return;
+      }
+
+      throw new Error('Failed to retrieve user data after login');
+    } catch (err: unknown) {
+      console.error('Vendor login error:', err);
+      const axiosErr = err as {
+        response?: { data?: { message?: string; error?: string } };
+        message?: string;
+      };
+      const errorMessage =
+        axiosErr.response?.data?.message ||
+        axiosErr.response?.data?.error ||
+        axiosErr.message ||
+        t('vendorLogin.loginFailed');
+
+      setError(errorMessage);
+      Alert.alert(t('common.error'), errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleForgotPassword = () => {
-    Alert.alert(
-      'Forgot Password',
-      'Password reset feature coming soon! Please contact support.',
-      [{ text: 'OK' }]
-    );
-  };
-
-  const handleBackToRoleSelection = () => {
-    navigation.goBack();
+  const handleBack = () => {
+    const root = navigation.getParent();
+    if (root?.canGoBack?.()) {
+      root.goBack();
+      return;
+    }
+    root?.navigate?.('RoleSelection');
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      
-      <KeyboardAvoidingView 
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={handleBack}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back', { defaultValue: 'Back' })}
+        >
+          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
+        </TouchableOpacity>
+        <Text style={styles.topBarTitle}>{t('vendorLogin.title')}</Text>
+        <View style={styles.backBtn} />
+      </View>
+
+      <KeyboardAvoidingView
+        style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
       >
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={handleBackToRoleSelection}
-            >
-              <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-            </TouchableOpacity>
-            
-            <View style={styles.logoContainer}>
-              <View style={styles.logo}>
-                <Ionicons name="business" size={48} color={COLORS.primary} />
+          <View style={styles.hero}>
+            <View style={styles.logoRing}>
+              <View style={styles.logoContainer}>
+                <Ionicons name="storefront" size={40} color={COLORS.primary} />
               </View>
-              <Text style={styles.title}>Vendor Login</Text>
-              <Text style={styles.subtitle}>Access your Tandil vendor panel</Text>
             </View>
+            <Text style={styles.heroTitle}>{t('vendorLogin.welcome')}</Text>
+            <Text style={styles.subtitle}>{t('vendorLogin.subtitle')}</Text>
           </View>
 
-          {/* Login Form */}
-          <View style={styles.formContainer}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Email Address</Text>
-              <View style={styles.inputContainer}>
-                <Ionicons name="mail-outline" size={20} color={COLORS.textSecondary} />
-                <TextInput
-                  style={styles.textInput}
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="Enter your email address"
-                  placeholderTextColor={COLORS.textSecondary}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
+          <View style={styles.formCard}>
+            {error ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
               </View>
-            </View>
+            ) : null}
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Password</Text>
-              <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} />
-                <TextInput
-                  style={styles.textInput}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Enter your password"
-                  placeholderTextColor={COLORS.textSecondary}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() => setShowPassword(!showPassword)}
-                >
-                  <Ionicons 
-                    name={showPassword ? "eye-off-outline" : "eye-outline"} 
-                    size={20} 
-                    color={COLORS.textSecondary} 
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
+            <Input
+              label={t('auth.emailLabel')}
+              placeholder={t('auth.emailPlaceholder')}
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                setError(null);
+              }}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              leftIcon="mail-outline"
+            />
 
-            <TouchableOpacity 
-              style={styles.forgotPasswordButton}
-              onPress={handleForgotPassword}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
+            <Input
+              label={t('auth.passwordLabel')}
+              placeholder={t('auth.passwordPlaceholder')}
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                setError(null);
+              }}
+              secureTextEntry
+              leftIcon="lock-closed-outline"
+            />
+
+            <Button title={t('auth.login')} onPress={handleLogin} loading={isLoading} />
 
             <TouchableOpacity
-              style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
-              onPress={handleLogin}
-              disabled={isLoading}
+              style={styles.signupLink}
+              onPress={() => navigation.navigate('VendorSignup')}
             >
-              {isLoading ? (
-                <View style={styles.loadingContainer}>
-                  <Ionicons name="hourglass-outline" size={24} color={COLORS.background} />
-                  <Text style={styles.loginButtonText}>Logging in...</Text>
-                </View>
-              ) : (
-                <>
-                  <Ionicons name="log-in-outline" size={24} color={COLORS.background} />
-                  <Text style={styles.loginButtonText}>Login</Text>
-                </>
-              )}
+              <Text style={styles.signupText}>
+                {t('vendorLogin.noAccount')}{' '}
+                <Text style={styles.signupTextBold}>{t('vendorSignup.title')}</Text>
+              </Text>
             </TouchableOpacity>
-
-
-          </View>
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Don't have a vendor account?{' '}
-              <Text style={styles.contactText}>Contact our partnership team</Text>
-            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -175,127 +179,81 @@ const VendorLoginScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  safe: { flex: 1, backgroundColor: COLORS.surfaceLight },
+  flex: { flex: 1 },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     backgroundColor: COLORS.background,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  keyboardView: {
-    flex: 1,
+  backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  topBarTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: SPACING.xl,
-  },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.lg,
-    paddingBottom: SPACING.xl,
-  },
-  backButton: {
-    alignSelf: 'flex-start',
-    padding: SPACING.sm,
+  content: { flexGrow: 1, padding: SPACING.lg, paddingBottom: SPACING.xxl },
+  hero: {
+    alignItems: 'center',
     marginBottom: SPACING.lg,
+    paddingTop: SPACING.md,
+  },
+  logoRing: {
+    padding: 4,
+    borderRadius: 999,
+    backgroundColor: COLORS.primary + '18',
+    marginBottom: SPACING.md,
   },
   logoContainer: {
-    alignItems: 'center',
-  },
-  logo: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: COLORS.background,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.lg,
+    borderWidth: 2,
+    borderColor: COLORS.primary + '30',
   },
-  title: {
-    fontSize: FONT_SIZES.xxl,
+  heroTitle: {
+    fontSize: FONT_SIZES.xl,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
   subtitle: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  formContainer: {
-    paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.xl,
-  },
-  inputGroup: {
-    marginBottom: SPACING.lg,
-  },
-  inputLabel: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.lg,
-    paddingHorizontal: SPACING.md,
-  },
-  textInput: {
-    flex: 1,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.sm,
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-  },
-  eyeButton: {
-    padding: SPACING.xs,
-  },
-  forgotPasswordButton: {
-    alignSelf: 'flex-end',
-    marginBottom: SPACING.xl,
-  },
-  forgotPasswordText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.medium,
-  },
-  loginButton: {
-    backgroundColor: COLORS.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
-    marginBottom: SPACING.xl,
-  },
-  loginButtonDisabled: {
-    backgroundColor: COLORS.textSecondary,
-  },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  loginButtonText: {
-    color: COLORS.background,
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    marginLeft: SPACING.sm,
-  },
-
-  footer: {
-    paddingHorizontal: SPACING.lg,
-    alignItems: 'center',
-  },
-  footerText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
+    paddingHorizontal: SPACING.md,
   },
-  contactText: {
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.medium,
+  formCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    gap: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 3,
   },
+  errorContainer: {
+    backgroundColor: COLORS.error + '15',
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  errorText: { color: COLORS.error, fontSize: FONT_SIZES.sm },
+  signupLink: { alignItems: 'center', marginTop: SPACING.xs },
+  signupText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
+  signupTextBold: { color: COLORS.primary, fontWeight: FONT_WEIGHTS.semiBold },
 });
 
 export default VendorLoginScreen;

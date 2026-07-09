@@ -8,6 +8,7 @@ import {
   FlatList,
   ActivityIndicator,
   Modal,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -15,6 +16,11 @@ import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { Image } from 'expo-image';
 import { adminService, AdminActivity, AdminDashboardProfile, AdminTopSellingProduct } from '../../services/adminService';
+import { adminVendorService, mergeVendorPreview, resolveVendorId } from '../../services/adminVendorService';
+import type { VendorSignupRequest } from '../../types/vendorSignup';
+import VendorSignupRequestDetailModal from '../../components/admin/VendorSignupRequestDetailModal';
+import RecentVendorRequestCard from '../../components/admin/RecentVendorRequestCard';
+import VendorRejectModal from '../../components/admin/VendorRejectModal';
 
 function getGreetingKey(): 'admin.dashboard.greetingMorning' | 'admin.dashboard.greetingAfternoon' | 'admin.dashboard.greetingEvening' {
   const hour = new Date().getHours();
@@ -67,6 +73,14 @@ const AdminDashboardScreen: React.FC = () => {
   const [newOrdersCount, setNewOrdersCount] = useState(0);
   const [supportTicketsCount, setSupportTicketsCount] = useState(0);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [recentVendorRequests, setRecentVendorRequests] = useState<VendorSignupRequest[]>([]);
+  const [vendorRequestsLoading, setVendorRequestsLoading] = useState(true);
+  const [vendorActioningId, setVendorActioningId] = useState<number | string | null>(null);
+  const [selectedVendorRequest, setSelectedVendorRequest] = useState<VendorSignupRequest | null>(null);
+  const [vendorDetailLoading, setVendorDetailLoading] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState<VendorSignupRequest | null>(null);
+  const [rejectLoading, setRejectLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [profile, setProfile] = useState<AdminDashboardProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [topProducts, setTopProducts] = useState<AdminTopSellingProduct[]>([]);
@@ -212,6 +226,18 @@ const AdminDashboardScreen: React.FC = () => {
     }
   }, []);
 
+  const fetchRecentVendorRequests = useCallback(async () => {
+    try {
+      setVendorRequestsLoading(true);
+      const res = await adminVendorService.getRecentRequests(3);
+      setRecentVendorRequests(res.items);
+    } catch (_) {
+      setRecentVendorRequests([]);
+    } finally {
+      setVendorRequestsLoading(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       fetchStatistics();
@@ -222,7 +248,8 @@ const AdminDashboardScreen: React.FC = () => {
       fetchUnreadNotificationsCount();
       fetchDashboardProfile();
       fetchTopSellingProducts();
-    }, [fetchStatistics, fetchRecentActivities, fetchPendingReportsCount, fetchNewOrdersCount, fetchSupportTicketsCount, fetchUnreadNotificationsCount, fetchDashboardProfile, fetchTopSellingProducts])
+      fetchRecentVendorRequests();
+    }, [fetchStatistics, fetchRecentActivities, fetchPendingReportsCount, fetchNewOrdersCount, fetchSupportTicketsCount, fetchUnreadNotificationsCount, fetchDashboardProfile, fetchTopSellingProducts, fetchRecentVendorRequests])
   );
 
   const greetingText = profile?.greeting?.trim() || t(getGreetingKey());
@@ -292,6 +319,172 @@ const AdminDashboardScreen: React.FC = () => {
         {item.revenue_formatted || item.revenue_display || String(item.revenue ?? 0)}
       </Text>
     </View>
+  );
+
+  const openVendorDetail = useCallback(
+    async (item: VendorSignupRequest) => {
+      setSelectedVendorRequest(item);
+      setVendorDetailLoading(true);
+      try {
+        const detail = await adminVendorService.getApplicationDetail(item.id);
+        setSelectedVendorRequest(mergeVendorPreview(detail, item));
+      } catch (err: unknown) {
+        Alert.alert(
+          t('common.error'),
+          err instanceof Error
+            ? err.message
+            : t('adminVendorRequests.detailLoadFailed', {
+                defaultValue: 'Could not load vendor application details.',
+              })
+        );
+      } finally {
+        setVendorDetailLoading(false);
+      }
+    },
+    [t]
+  );
+
+  const closeVendorDetail = useCallback(() => {
+    setSelectedVendorRequest(null);
+    setVendorDetailLoading(false);
+  }, []);
+
+  const runVendorApprove = useCallback(
+    async (item: VendorSignupRequest) => {
+      const vendorId = resolveVendorId(item);
+      setVendorActioningId(vendorId);
+      try {
+        const res = await adminVendorService.approve(vendorId);
+        setRecentVendorRequests((prev) => prev.filter((r) => resolveVendorId(r) !== vendorId));
+        setSelectedVendorRequest(null);
+        Alert.alert(
+          t('common.success'),
+          res.message || t('adminVendorRequests.approvedSuccess')
+        );
+        fetchRecentVendorRequests();
+      } catch (err: unknown) {
+        Alert.alert(
+          t('common.error'),
+          err instanceof Error ? err.message : t('adminVendorRequests.approveFailed', { defaultValue: 'Could not approve vendor.' })
+        );
+      } finally {
+        setVendorActioningId(null);
+      }
+    },
+    [fetchRecentVendorRequests, t]
+  );
+
+  const runVendorReject = useCallback(
+    async (item: VendorSignupRequest, reason?: string) => {
+      const vendorId = resolveVendorId(item);
+      setRejectLoading(true);
+      setVendorActioningId(vendorId);
+      try {
+        const res = await adminVendorService.reject(vendorId, reason);
+        setRecentVendorRequests((prev) => prev.filter((r) => resolveVendorId(r) !== vendorId));
+        setSelectedVendorRequest(null);
+        setRejectTarget(null);
+        Alert.alert(
+          t('common.success'),
+          res.message || t('adminVendorRequests.rejectedSuccess')
+        );
+        fetchRecentVendorRequests();
+      } catch (err: unknown) {
+        Alert.alert(
+          t('common.error'),
+          err instanceof Error ? err.message : t('adminVendorRequests.rejectFailed', { defaultValue: 'Could not reject application.' })
+        );
+      } finally {
+        setRejectLoading(false);
+        setVendorActioningId(null);
+      }
+    },
+    [fetchRecentVendorRequests, t]
+  );
+
+  const runVendorDelete = useCallback(
+    async (item: VendorSignupRequest) => {
+      const vendorId = resolveVendorId(item);
+      setDeleteLoading(true);
+      setVendorActioningId(vendorId);
+      try {
+        const res = await adminVendorService.remove(vendorId);
+        setRecentVendorRequests((prev) => prev.filter((r) => resolveVendorId(r) !== vendorId));
+        setSelectedVendorRequest(null);
+        Alert.alert(
+          t('common.success'),
+          res.message || t('adminVendorRequests.deletedSuccess', { defaultValue: 'Vendor deleted successfully.' })
+        );
+        fetchRecentVendorRequests();
+      } catch (err: unknown) {
+        Alert.alert(
+          t('common.error'),
+          err instanceof Error ? err.message : t('adminVendorRequests.deleteFailed', { defaultValue: 'Could not delete vendor.' })
+        );
+      } finally {
+        setDeleteLoading(false);
+        setVendorActioningId(null);
+      }
+    },
+    [fetchRecentVendorRequests, t]
+  );
+
+  const onVendorApprove = useCallback(
+    (item: VendorSignupRequest) => {
+      Alert.alert(
+        t('adminVendorRequests.approveTitle'),
+        t('adminVendorRequests.approveMessage', { name: item.company_name }),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('adminVendorRequests.approve'), onPress: () => runVendorApprove(item) },
+        ]
+      );
+    },
+    [runVendorApprove, t]
+  );
+
+  const onVendorReject = useCallback((item: VendorSignupRequest) => {
+    setRejectTarget(item);
+  }, []);
+
+  const onVendorDelete = useCallback(
+    (item: VendorSignupRequest) => {
+      Alert.alert(
+        t('adminVendorRequests.deleteTitle', { defaultValue: 'Delete vendor' }),
+        t('adminVendorRequests.deleteMessage', {
+          defaultValue: 'Delete {{name}} permanently? This action cannot be undone.',
+          name: item.company_name || item.authorized_person_name,
+        }),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('common.delete', { defaultValue: 'Delete' }),
+            style: 'destructive',
+            onPress: () => runVendorDelete(item),
+          },
+        ]
+      );
+    },
+    [runVendorDelete, t]
+  );
+
+  const confirmVendorReject = useCallback(
+    (reason: string) => {
+      if (!rejectTarget) return;
+      runVendorReject(rejectTarget, reason);
+    },
+    [rejectTarget, runVendorReject]
+  );
+
+  const renderRecentVendorRequest = (item: VendorSignupRequest) => (
+    <RecentVendorRequestCard
+      key={String(item.id)}
+      item={item}
+      actioningId={vendorActioningId}
+      onPress={openVendorDetail}
+      onApprove={onVendorApprove}
+      onCancel={onVendorReject}
+    />
   );
 
   return (
@@ -681,6 +874,35 @@ const AdminDashboardScreen: React.FC = () => {
           )}
         </View>
 
+        {/* Recent Vendor Requests */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t('admin.dashboard.recentVendorRequests')}</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('AdminVendorSignupRequests' as never)}>
+              <Text style={styles.viewAllText}>{t('admin.dashboard.viewAll')}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.vendorRequestsList}>
+            {vendorRequestsLoading ? (
+              <View style={styles.activitiesLoading}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.activitiesLoadingText}>
+                  {t('common.loading', { defaultValue: 'Loading...' })}
+                </Text>
+              </View>
+            ) : recentVendorRequests.length > 0 ? (
+              recentVendorRequests.map(renderRecentVendorRequest)
+            ) : (
+              <View style={styles.vendorRequestsEmpty}>
+                <Text style={styles.vendorRequestsEmptyText}>
+                  {t('adminVendorRequests.empty', { defaultValue: 'No pending vendor requests.' })}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
         {/* Top Products */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -782,6 +1004,25 @@ const AdminDashboardScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+
+      <VendorSignupRequestDetailModal
+        visible={selectedVendorRequest != null}
+        request={selectedVendorRequest}
+        loading={vendorDetailLoading}
+        actioningId={vendorActioningId}
+        onClose={closeVendorDetail}
+        onApprove={onVendorApprove}
+        onReject={onVendorReject}
+        onDelete={onVendorDelete}
+      />
+
+      <VendorRejectModal
+        visible={rejectTarget != null}
+        request={rejectTarget}
+        loading={rejectLoading}
+        onClose={() => setRejectTarget(null)}
+        onConfirm={confirmVendorReject}
+      />
 
       {/* Time Range Selection Modal */}
       <Modal
@@ -1270,6 +1511,20 @@ const styles = StyleSheet.create({
   modalOptionTextSelected: {
     color: COLORS.primary,
     fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  vendorRequestsList: {
+    gap: SPACING.sm,
+    paddingTop: SPACING.xs,
+  },
+  vendorRequestsEmpty: {
+    alignItems: 'center',
+    paddingVertical: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  vendorRequestsEmptyText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
 });
 

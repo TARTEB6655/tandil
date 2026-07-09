@@ -284,6 +284,7 @@ export type UserStackParamList = {
   EditAddress: { addressId: number };
   PaymentMethods: undefined;
   AppInfoContent: { pageKey: AppInfoPageKey };
+  VendorCompare: { productId: string; productName?: string };
 };
 
 export type TechnicianStackParamList = {
@@ -330,6 +331,8 @@ export type DeliveryStackParamList = {
 };
 
 export type VendorStackParamList = {
+  Login: undefined;
+  VendorSignup: undefined;
   Main: undefined;
   Dashboard: undefined;
   Products: undefined;
@@ -340,6 +343,15 @@ export type VendorStackParamList = {
   AddProduct: undefined;
   EditProduct: { productId: string };
   OrderDetail: { orderId: string };
+  OrderContact: { orderId: string };
   Analytics: undefined;
+  Inventory: undefined;
+  Pricing: undefined;
   Settings: undefined;
+  EditProfile: undefined;
+  BusinessInfo: undefined;
+  LocationAddress: undefined;
+  LiveChat: undefined;
+  ContactUs: undefined;
+  LegalDocument: { document: 'terms' | 'privacy' };
 }; 

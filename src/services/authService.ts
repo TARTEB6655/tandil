@@ -174,7 +174,7 @@ export const authService = {
         password: credentials.password,
         roles: credentials.roles,
       };
-      const response = await apiClient.post<LoginResponse>('/auth/login', body);
+      const response = await publicApiClient.post<LoginResponse>('/auth/login', body);
       const responseData = response.data;
       await persistAuthPayload(responseData);
       return responseData;
@@ -201,6 +201,17 @@ export const authService = {
       await apiClient.post('/auth/logout');
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      await clearAuthStorage();
+    }
+  },
+
+  /** POST /vendor/auth/logout — Bearer token (vendor portal). */
+  vendorLogout: async () => {
+    try {
+      await apiClient.post('/vendor/auth/logout');
+    } catch (error) {
+      console.error('Vendor logout error:', error);
     } finally {
       await clearAuthStorage();
     }

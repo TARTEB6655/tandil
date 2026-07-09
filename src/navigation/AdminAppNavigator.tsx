@@ -32,6 +32,7 @@ import AdminAddServiceScreen from '../screens/admin/AdminAddServiceScreen';
 import AdminEditServiceScreen from '../screens/admin/AdminEditServiceScreen';
 import AdminBannersScreen from '../screens/admin/AdminBannersScreen';
 import AdminProductSettingsScreen from '../screens/admin/AdminProductSettingsScreen';
+import AdminMaintenancePhotosScreen from '../screens/admin/AdminMaintenancePhotosScreen';
 import AdminProfileEditScreen from '../screens/admin/AdminProfileEditScreen';
 import AdminSupportTicketsScreen from '../screens/admin/AdminSupportTicketsScreen';
 import AdminSupportTicketChatScreen from '../screens/admin/AdminSupportTicketChatScreen';
@@ -58,6 +59,11 @@ import AdminOrderStatisticsScreen from '../screens/admin/AdminOrderStatisticsScr
 import AdminWalletMonitoringScreen from '../screens/admin/AdminWalletMonitoringScreen';
 import AdminWalletClientDetailScreen from '../screens/admin/AdminWalletClientDetailScreen';
 import AdminTopSellingProductsScreen from '../screens/admin/AdminTopSellingProductsScreen';
+import AdminVendorSignupRequestsScreen from '../screens/admin/AdminVendorSignupRequestsScreen';
+import AdminVendorLiveChatSessionsScreen from '../screens/admin/AdminVendorLiveChatSessionsScreen';
+import AdminVendorLiveChatScreen from '../screens/admin/AdminVendorLiveChatScreen';
+import AdminVendorPartnershipTiersScreen from '../screens/admin/AdminVendorPartnershipTiersScreen';
+import AdminVendorPartnershipTierFormScreen from '../screens/admin/AdminVendorPartnershipTierFormScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -173,6 +179,7 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminEditService" component={AdminEditServiceScreen} />
         <Stack.Screen name="AdminBanners" component={AdminBannersScreen} />
         <Stack.Screen name="AdminProductSettings" component={AdminProductSettingsScreen} />
+        <Stack.Screen name="AdminMaintenancePhotos" component={AdminMaintenancePhotosScreen} />
         <Stack.Screen name="AdminProfileEdit" component={AdminProfileEditScreen} />
         <Stack.Screen name="AdminSupportTickets" component={AdminSupportTicketsScreen} />
         <Stack.Screen name="SupportTicketChat" component={AdminSupportTicketChatScreen} />
@@ -198,6 +205,11 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminWalletMonitoring" component={AdminWalletMonitoringScreen} />
         <Stack.Screen name="AdminWalletClientDetail" component={AdminWalletClientDetailScreen} />
         <Stack.Screen name="AdminTopSellingProducts" component={AdminTopSellingProductsScreen} />
+        <Stack.Screen name="AdminVendorSignupRequests" component={AdminVendorSignupRequestsScreen} />
+        <Stack.Screen name="AdminVendorLiveChatSessions" component={AdminVendorLiveChatSessionsScreen} />
+        <Stack.Screen name="AdminVendorLiveChat" component={AdminVendorLiveChatScreen} />
+        <Stack.Screen name="AdminVendorPartnershipTiers" component={AdminVendorPartnershipTiersScreen} />
+        <Stack.Screen name="AdminVendorPartnershipTierForm" component={AdminVendorPartnershipTierFormScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

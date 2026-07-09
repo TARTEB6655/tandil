@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, User, Order, CartItem, Notification, MembershipPackage, MembershipTier } from '../types';
 import { mockUser, mockOrders, mockProducts } from '../data/mockData';
 import { authService } from '../services/authService';
+import { normalizeAuthRole } from '../utils/sessionRestore';
 
 interface AppStore extends AppState {
   // Actions
@@ -288,7 +289,12 @@ export const useAppStore = create<AppStore>()(
           await authService.clearLocalSession();
         } else {
           try {
-            await authService.logout();
+            const role = await authService.getStoredRole();
+            if (normalizeAuthRole(role) === 'vendor') {
+              await authService.vendorLogout();
+            } else {
+              await authService.logout();
+            }
           } catch (error) {
             console.error('Logout API error:', error);
             await authService.clearLocalSession();

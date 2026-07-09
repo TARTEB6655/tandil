@@ -5,7 +5,8 @@ export type LoginApiRole =
   | 'hr'
   | 'area_manager'
   | 'supervisor'
-  | 'technician';
+  | 'technician'
+  | 'vendor';
 
 export interface LoginCredentials {
   email: string;

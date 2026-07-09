@@ -528,6 +528,20 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
             )}
           </View>
 
+          <TouchableOpacity
+            style={styles.compareVendorsBtn}
+            onPress={() =>
+              navigation.navigate('VendorCompare', {
+                productId: product.id,
+                productName: product.name,
+              })
+            }
+          >
+            <Ionicons name="git-compare-outline" size={20} color={COLORS.primary} />
+            <Text style={styles.compareVendorsText}>{t('vendorCompare.compareButton')}</Text>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+
           {/* Quantity Selection */}
           <View style={styles.quantitySection}>
             <Text style={styles.sectionTitle}>{t('product.quantity')}</Text>
@@ -833,6 +847,24 @@ const styles = StyleSheet.create({
     color: COLORS.background,
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.medium,
+  },
+  compareVendorsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.lg,
+    backgroundColor: COLORS.primary + '10',
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+  },
+  compareVendorsText: {
+    flex: 1,
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
   },
   sizeSection: {
     marginBottom: SPACING.lg,

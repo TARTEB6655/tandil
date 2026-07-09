@@ -2059,6 +2059,148 @@ export const adminService = {
     return response.data;
   },
 
+  /** GET /admin/maintenance-photos?per_page=20 – list before/after pairs (paginated). */
+  getMaintenancePhotos: async (params?: {
+    per_page?: number;
+    page?: number;
+  }): Promise<{
+    success?: boolean;
+    message?: string;
+    data: AdminMaintenancePhoto[];
+    meta?: {
+      current_page?: number;
+      last_page?: number;
+      per_page?: number;
+      total?: number;
+    };
+  }> => {
+    const response = await apiClient.get('/admin/maintenance-photos', {
+      params: {
+        per_page: params?.per_page ?? 20,
+        ...(params?.page != null ? { page: params.page } : {}),
+      },
+      timeout: 15000,
+    });
+    const body = response?.data ?? response;
+    const rawData = (body as { data?: unknown })?.data;
+    const list = Array.isArray(rawData)
+      ? rawData
+      : rawData && typeof rawData === 'object' && Array.isArray((rawData as { data?: AdminMaintenancePhoto[] }).data)
+        ? (rawData as { data: AdminMaintenancePhoto[] }).data
+        : Array.isArray((body as { maintenance_photos?: AdminMaintenancePhoto[] }).maintenance_photos)
+          ? (body as { maintenance_photos: AdminMaintenancePhoto[] }).maintenance_photos
+          : [];
+    const meta =
+      (body as { meta?: { current_page?: number; last_page?: number; per_page?: number; total?: number } }).meta ??
+      (rawData && typeof rawData === 'object' && !Array.isArray(rawData)
+        ? {
+            current_page: (rawData as { current_page?: number }).current_page,
+            last_page: (rawData as { last_page?: number }).last_page,
+            per_page: (rawData as { per_page?: number }).per_page,
+            total: (rawData as { total?: number }).total,
+          }
+        : undefined);
+    return {
+      success: (body as { success?: boolean }).success,
+      message: (body as { message?: string }).message,
+      data: list,
+      meta,
+    };
+  },
+
+  /** POST /admin/maintenance-photos – create pair (multipart per Postman: title, before_image, after_image, priority, active). */
+  createMaintenancePhoto: async (params: {
+    title?: string;
+    priority?: number | string;
+    active?: boolean | number | string;
+    before_image: { uri: string };
+    after_image: { uri: string };
+  }): Promise<{ success?: boolean; message?: string; data?: AdminMaintenancePhoto }> => {
+    const formData = new FormData();
+    if (params.title != null && String(params.title).trim()) {
+      formData.append('title', String(params.title).trim());
+    }
+    if (params.priority != null && String(params.priority).trim() !== '') {
+      formData.append('priority', String(params.priority));
+    }
+    if (params.active != null) {
+      const v =
+        typeof params.active === 'boolean'
+          ? params.active
+            ? '1'
+            : '0'
+          : String(params.active);
+      formData.append('active', v === '1' || v.toLowerCase?.() === 'true' ? '1' : '0');
+    }
+    formData.append('before_image', {
+      uri: params.before_image.uri,
+      type: 'image/jpeg',
+      name: 'before-image.jpg',
+    } as any);
+    formData.append('after_image', {
+      uri: params.after_image.uri,
+      type: 'image/jpeg',
+      name: 'after-image.jpg',
+    } as any);
+    const response = await apiClient.post('/admin/maintenance-photos', formData, { timeout: 300000 });
+    return response.data;
+  },
+
+  /** PUT /admin/maintenance-photos/:id – update pair (form-data; images optional on update). */
+  updateMaintenancePhoto: async (
+    photoId: number,
+    params: {
+      title?: string;
+      priority?: number | string;
+      active?: boolean | number | string;
+      before_image?: { uri: string };
+      after_image?: { uri: string };
+    }
+  ): Promise<{ success?: boolean; message?: string; data?: AdminMaintenancePhoto }> => {
+    const formData = new FormData();
+    if (params.title != null) {
+      formData.append('title', String(params.title).trim());
+    }
+    if (params.priority != null && String(params.priority).trim() !== '') {
+      formData.append('priority', String(params.priority));
+    }
+    if (params.active != null) {
+      const v =
+        typeof params.active === 'boolean'
+          ? params.active
+            ? '1'
+            : '0'
+          : String(params.active);
+      formData.append('active', v === '1' || v.toLowerCase?.() === 'true' ? '1' : '0');
+    }
+    if (params.before_image?.uri) {
+      formData.append('before_image', {
+        uri: params.before_image.uri,
+        type: 'image/jpeg',
+        name: 'before-image.jpg',
+      } as any);
+    }
+    if (params.after_image?.uri) {
+      formData.append('after_image', {
+        uri: params.after_image.uri,
+        type: 'image/jpeg',
+        name: 'after-image.jpg',
+      } as any);
+    }
+    const response = await apiClient.put(`/admin/maintenance-photos/${photoId}`, formData, {
+      timeout: 300000,
+    });
+    return response.data;
+  },
+
+  /** DELETE /admin/maintenance-photos/:id – remove maintenance photo pair. */
+  deleteMaintenancePhoto: async (
+    photoId: number
+  ): Promise<{ success?: boolean; message?: string }> => {
+    const response = await apiClient.delete(`/admin/maintenance-photos/${photoId}`, { timeout: 15000 });
+    return response.data;
+  },
+
   /** Shop settings (shipping & tax). GET /api/admin/settings/shop */
   getShopSettings: async (): Promise<{
     success?: boolean;
@@ -2096,6 +2238,31 @@ export interface AdminBanner {
   is_active?: boolean;
   created_at?: string;
   updated_at?: string;
+}
+
+/** Before/after maintenance photo pair (admin CRUD + Home slider). */
+export interface AdminMaintenancePhoto {
+  id: number;
+  title?: string | null;
+  before_image?: string | null;
+  before_image_url?: string | null;
+  after_image?: string | null;
+  after_image_url?: string | null;
+  priority?: number;
+  /** API field: 1 = active on client app */
+  active?: boolean | number | null;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export function isMaintenancePhotoActive(photo: {
+  active?: boolean | number | null;
+  is_active?: boolean;
+}): boolean {
+  if (photo.active === 0 || photo.active === '0' || photo.active === false) return false;
+  if (photo.is_active === false) return false;
+  return true;
 }
 
 /** Exclusive offer (GET /admin/exclusive-offers and GET /admin/exclusive-offers/:id) */

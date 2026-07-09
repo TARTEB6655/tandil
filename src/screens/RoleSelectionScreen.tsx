@@ -31,7 +31,7 @@ const RoleSelectionScreen: React.FC = () => {
     console.log('RoleSelectionScreen: Component mounted successfully');
   }, []);
 
-  const handleRoleSelection = (role: 'user' | 'technician' | 'supervisor' | 'areaManager' | 'hrManager' | 'admin') => {
+  const handleRoleSelection = (role: 'user' | 'technician' | 'supervisor' | 'areaManager' | 'hrManager' | 'admin' | 'vendor') => {
     if (isLoading) return; // Prevent multiple taps
     
     console.log('RoleSelectionScreen: Selected role:', role);
@@ -64,6 +64,10 @@ const RoleSelectionScreen: React.FC = () => {
         case 'admin':
           console.log('RoleSelectionScreen: Navigating to Admin Panel...');
           navigation.replace('AdminApp');
+          break;
+        case 'vendor':
+          console.log('RoleSelectionScreen: Navigating to Vendor Panel...');
+          navigation.replace('VendorApp');
           break;
       }
     }, 100);
@@ -181,6 +185,20 @@ const RoleSelectionScreen: React.FC = () => {
           <View style={styles.roleContent}>
             <Text style={styles.roleTitle}>{t('roleSelection.admin.title')}</Text>
             <Text style={styles.roleDescription}>{t('roleSelection.admin.description')}</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Vendor Panel */}
+        <TouchableOpacity
+          style={styles.roleCard}
+          onPress={() => handleRoleSelection('vendor')}
+        >
+          <View style={styles.roleIcon}>
+            <Ionicons name="storefront-outline" size={32} color={COLORS.primary} />
+          </View>
+          <View style={styles.roleContent}>
+            <Text style={styles.roleTitle}>{t('roleSelection.vendor.title')}</Text>
+            <Text style={styles.roleDescription}>{t('roleSelection.vendor.description')}</Text>
           </View>
         </TouchableOpacity>
         </View>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -7,450 +7,295 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
-  Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
-import { PartnerTierInfo } from '../../types';
+import { vendorService, VendorDashboardStats } from '../../services/vendorService';
+import { useAppStore } from '../../store';
+import {
+  VENDOR_SCREEN_BG,
+  VendorHeroBanner,
+  VendorSectionTitle,
+  VendorCard,
+  VendorMenuRow,
+  VendorStatTile,
+  VendorQuickAction,
+} from '../../components/vendor/VendorUi';
 
 const { width } = Dimensions.get('window');
 
 const VendorDashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
+  const user = useAppStore((s) => s.user);
+  const [stats, setStats] = useState<VendorDashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const partnerTiers: PartnerTierInfo[] = [
-    {
-      tier: 'Basic',
-      requirement: '10-20 free products',
-      adminFee: 200,
-      duration: '1 month',
-      benefits: [
-        'Partner logo + 1 product image in Partners section',
-        'Mention of the shop when gifts are distributed',
-        'Monthly report with number of gifts delivered'
-      ],
-      color: '#FF6B00'
-    },
-    {
-      tier: 'Silver',
-      requirement: '25-50 free products',
-      adminFee: 400,
-      duration: '2 months',
-      benefits: [
-        'All Basic benefits',
-        'Small banner inside the app',
-        'Up to 3 product images in Partners section',
-        '1 social media post per month on Shozy\'s official accounts'
-      ],
-      color: '#C0C0C0'
-    },
-    {
-      tier: 'Gold',
-      requirement: '51-100 free products',
-      adminFee: 700,
-      duration: '3 months',
-      benefits: [
-        'All Silver benefits',
-        'Medium banner on the home page of the app',
-        'Short video (Reel/Story) about partner products',
-        'Special discount code for Shozy customers'
-      ],
-      color: '#FFD700'
-    },
-    {
-      tier: 'Platinum',
-      requirement: '101-200 free products',
-      adminFee: 1200,
-      duration: '6 months',
-      benefits: [
-        'All Gold benefits',
-        'Full banner on the app\'s home page',
-        'Special social media campaign dedicated to the partner',
-        'Products listed under "Exclusive Offers" section',
-        'Partner logo featured in app notifications'
-      ],
-      color: '#E5E4E2'
-    },
-    {
-      tier: 'Diamond',
-      requirement: '200+ free products',
-      adminFee: 2000,
-      duration: '12 months (1 year)',
-      benefits: [
-        'All Platinum benefits',
-        'Permanent "Featured Partner" status inside the app',
-        'Dedicated partner page showcasing products',
-        'Joint marketing content (photos/videos) with Shozy',
-        'Priority access for any future events, offers, or promotions'
-      ],
-      color: '#B9F2FF'
+  const storeName = user?.name || t('vendorDashboard.demoStore');
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    try {
+      setStats(await vendorService.getDashboardStats());
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  ];
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load(false);
+    }, [load])
+  );
 
   const quickActions = [
     {
-      title: 'Upload Products',
-      description: 'Add new products to your catalog',
-      icon: 'cube-outline',
+      title: t('vendorDashboard.addProduct'),
+      icon: 'add-circle',
+      color: COLORS.primary,
       action: () => navigation.navigate('AddProduct'),
-      color: COLORS.primary
     },
     {
-      title: 'View Orders',
-      description: 'Check product distribution orders',
-      icon: 'list-outline',
+      title: t('vendorDashboard.inventory'),
+      icon: 'layers',
+      color: COLORS.warning,
+      action: () => navigation.navigate('Inventory'),
+    },
+    {
+      title: t('vendorDashboard.pricing'),
+      icon: 'pricetag',
+      color: COLORS.info,
+      action: () => navigation.navigate('Pricing'),
+    },
+    {
+      title: t('vendorDashboard.orders'),
+      icon: 'receipt',
+      color: '#2E7D4F',
       action: () => navigation.navigate('Orders'),
-      color: COLORS.success
     },
-    {
-      title: 'Partnership',
-      description: 'Manage your partnership tier',
-      icon: 'business-outline',
-      action: () => navigation.navigate('Partnership'),
-      color: COLORS.info
-    },
-    {
-      title: 'Analytics',
-      description: 'View your performance metrics',
-      icon: 'analytics-outline',
-      action: () => navigation.navigate('Analytics'),
-      color: COLORS.warning
-    }
   ];
 
-  const handleSelectPlan = (tier: PartnerTierInfo) => {
-    Alert.alert(
-      `Select ${tier.tier} Partnership`,
-      `You've selected the ${tier.tier} partnership plan.\n\nRequirement: ${tier.requirement}\nFee: AED ${tier.adminFee}/${tier.duration}\n\nWould you like to proceed to payment?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Proceed to Payment', 
-          onPress: () => navigation.navigate('Partnership')
-        }
-      ]
-    );
-  };
+  const manageOptions = [
+    {
+      icon: 'cube-outline',
+      color: COLORS.primary,
+      title: t('vendorTabs.products'),
+      subtitle: t('vendorDashboard.manageProducts'),
+      onPress: () => navigation.navigate('Products'),
+    },
+    {
+      icon: 'analytics-outline',
+      color: COLORS.info,
+      title: t('vendorDashboard.analytics'),
+      subtitle: t('vendorDashboard.analyticsHint'),
+      onPress: () => navigation.navigate('Analytics'),
+    },
+    {
+      icon: 'business-outline',
+      color: '#8B6914',
+      title: t('vendorTabs.partnership'),
+      subtitle: t('vendorDashboard.partnershipHint'),
+      onPress: () => navigation.navigate('Partnership'),
+    },
+    {
+      icon: 'settings-outline',
+      color: COLORS.textSecondary,
+      title: t('vendorDashboard.settings'),
+      subtitle: t('vendorDashboard.settingsHint'),
+      onPress: () => navigation.navigate('Settings'),
+    },
+  ];
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Vendor Dashboard</Text>
-        <Text style={styles.subtitle}>Manage your partnership with Shozy</Text>
-      </View>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
 
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickActionsGrid}>
-            {quickActions.map((action, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.actionCard}
-                onPress={action.action}
-              >
-                <View style={[styles.actionIcon, { backgroundColor: action.color + '20' }]}>
-                  <Ionicons name={action.icon as any} size={24} color={action.color} />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <VendorHeroBanner
+          badge={t('vendorDashboard.vendorPortal')}
+          title={t('vendorDashboard.greeting', { name: storeName })}
+          subtitle={t('vendorDashboard.subtitle')}
+        />
+
+        {loading ? (
+          <ActivityIndicator style={styles.loader} color={COLORS.primary} />
+        ) : stats ? (
+          <>
+            <View style={styles.highlightRow}>
+              <View style={[styles.highlightCard, styles.highlightPrimary]}>
+                <Ionicons name="cash-outline" size={28} color={COLORS.background} />
+                <Text style={styles.highlightValue}>AED {stats.revenue.toFixed(0)}</Text>
+                <Text style={styles.highlightLabel}>{t('vendorDashboard.revenue')}</Text>
+              </View>
+              <View style={[styles.highlightCard, styles.highlightAccent]}>
+                <Ionicons name="time-outline" size={28} color={COLORS.primary} />
+                <Text style={[styles.highlightValue, styles.highlightValueDark]}>
+                  {stats.pendingOrders}
+                </Text>
+                <Text style={[styles.highlightLabel, styles.highlightLabelDark]}>
+                  {t('vendorDashboard.pendingOrders')}
+                </Text>
+              </View>
+            </View>
+
+            <VendorSectionTitle title={t('vendorDashboard.overview')} />
+            <View style={styles.statsWrap}>
+              <VendorStatTile
+                label={t('vendorDashboard.totalProducts')}
+                value={stats.totalProducts}
+                icon="cube-outline"
+              />
+              <VendorStatTile
+                label={t('vendorDashboard.activeProducts')}
+                value={stats.activeProducts}
+                icon="checkmark-circle-outline"
+                accent="#2E7D4F"
+              />
+              <VendorStatTile
+                label={t('vendorDashboard.lowStock')}
+                value={stats.lowStockCount}
+                icon="warning-outline"
+                accent={COLORS.warning}
+              />
+              <VendorStatTile
+                label={t('vendorDashboard.totalOrders')}
+                value={stats.totalOrders}
+                icon="receipt-outline"
+                accent={COLORS.info}
+              />
+            </View>
+
+            <VendorSectionTitle title={t('vendorDashboard.quickActions')} />
+            <View style={styles.quickGrid}>
+              {quickActions.map((action) => (
+                <VendorQuickAction
+                  key={action.title}
+                  title={action.title}
+                  icon={action.icon}
+                  color={action.color}
+                  onPress={action.action}
+                />
+              ))}
+            </View>
+
+            <VendorSectionTitle title={t('vendorDashboard.manageStore')} />
+            <VendorCard style={styles.menuCard}>
+              {manageOptions.map((opt, i) => (
+                <View key={opt.title}>
+                  <VendorMenuRow {...opt} />
+                  {i < manageOptions.length - 1 ? null : (
+                    <View style={{ height: 0 }} />
+                  )}
                 </View>
-                <Text style={styles.actionTitle}>{action.title}</Text>
-                <Text style={styles.actionDescription}>{action.description}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+              ))}
+            </VendorCard>
 
-        {/* Partnership Tiers */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Partnership Tiers</Text>
-          <Text style={styles.sectionDescription}>
-            Choose your partnership level and unlock exclusive benefits
-          </Text>
-          
-          {partnerTiers.map((tier, index) => (
-            <View key={index} style={styles.tierCard}>
-              <View style={styles.tierHeader}>
-                <View style={[styles.tierBadge, { backgroundColor: tier.color + '20' }]}>
-                  <Text style={[styles.tierName, { color: tier.color }]}>{tier.tier}</Text>
-                </View>
-                <View style={styles.tierPricing}>
-                  <Text style={styles.adminFee}>AED {tier.adminFee}</Text>
-                  <Text style={styles.duration}>/{tier.duration}</Text>
-                </View>
+            <VendorCard style={styles.tipCard}>
+              <View style={styles.tipIcon}>
+                <Ionicons name="bulb-outline" size={22} color={COLORS.primary} />
               </View>
-              
-              <View style={styles.tierDetails}>
-                <Text style={styles.requirement}>Requirement: {tier.requirement}</Text>
-                <Text style={styles.benefitsTitle}>Benefits:</Text>
-                {tier.benefits.map((benefit, benefitIndex) => (
-                  <View key={benefitIndex} style={styles.benefitItem}>
-                    <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-                    <Text style={styles.benefitText}>{benefit}</Text>
-                  </View>
-                ))}
+              <View style={styles.tipBody}>
+                <Text style={styles.tipTitle}>{t('vendorDashboard.gettingStarted')}</Text>
+                <Text style={styles.tipText}>{t('vendorDashboard.tipText')}</Text>
               </View>
-              
-              {/* Payment Button */}
-              <TouchableOpacity
-                style={styles.selectPlanButton}
-                onPress={() => handleSelectPlan(tier)}
-              >
-                <Ionicons name="card-outline" size={20} color={COLORS.background} />
-                <Text style={styles.selectPlanButtonText}>Select & Pay</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-
-        {/* How It Works */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>How It Works</Text>
-          <View style={styles.howItWorks}>
-            <View style={styles.stepCard}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>1</Text>
-              </View>
-              <Text style={styles.stepTitle}>Provide Free Products</Text>
-              <Text style={styles.stepDescription}>
-                Supply 10-200+ free products (shoes, accessories, etc.) based on your chosen tier
-              </Text>
-            </View>
-            
-            <View style={styles.stepCard}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>2</Text>
-              </View>
-              <Text style={styles.stepTitle}>Pay Administrative Fee</Text>
-              <Text style={styles.stepDescription}>
-                Pay a small monthly fee (AED 200-2,000) depending on your partnership level
-              </Text>
-            </View>
-            
-            <View style={styles.stepCard}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>3</Text>
-              </View>
-              <Text style={styles.stepTitle}>Get Marketing Exposure</Text>
-              <Text style={styles.stepDescription}>
-                Receive in-app banners, social media promotion, and customer exposure
-              </Text>
-            </View>
-            
-            <View style={styles.stepCard}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>4</Text>
-              </View>
-              <Text style={styles.stepTitle}>Grow Your Business</Text>
-              <Text style={styles.stepDescription}>
-                Build customer loyalty and increase brand awareness through Shozy's platform
-              </Text>
-            </View>
-          </View>
-        </View>
-
-
+            </VendorCard>
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: VENDOR_SCREEN_BG },
+  scrollContent: { paddingBottom: SPACING.xxl },
+  loader: { marginVertical: SPACING.xxl },
+  highlightRow: {
+    flexDirection: 'row',
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.md,
+    marginTop: -SPACING.lg,
+    marginBottom: SPACING.lg,
+  },
+  highlightCard: {
     flex: 1,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  highlightPrimary: { backgroundColor: COLORS.primary },
+  highlightAccent: {
     backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.primary + '10',
-  },
-  title: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  subtitle: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  section: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  sectionTitle: {
+  highlightValue: {
     fontSize: FONT_SIZES.xl,
     fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
-  sectionDescription: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.lg,
-    lineHeight: 22,
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.md,
-  },
-  actionCard: {
-    width: (width - SPACING.lg * 3) / 2,
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  actionIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-  },
-  actionTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-    textAlign: 'center',
-  },
-  actionDescription: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  tierCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  tierHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  tierBadge: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.round,
-  },
-  tierName: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.bold,
-  },
-  tierPricing: {
-    alignItems: 'flex-end',
-  },
-  adminFee: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.primary,
-  },
-  duration: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  tierDetails: {
-    gap: SPACING.sm,
-  },
-  requirement: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.text,
-  },
-  benefitsTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.text,
+    color: COLORS.background,
     marginTop: SPACING.sm,
   },
-  benefitItem: {
+  highlightValueDark: { color: COLORS.text },
+  highlightLabel: {
+    fontSize: FONT_SIZES.xs,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 4,
+  },
+  highlightLabelDark: { color: COLORS.textSecondary },
+  statsWrap: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: SPACING.xs,
-    marginTop: SPACING.xs,
-  },
-  benefitText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    flex: 1,
-    lineHeight: 20,
-  },
-  howItWorks: {
-    gap: SPACING.md,
-  },
-  stepCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-  },
-  stepNumber: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.md,
   },
-  stepNumberText: {
-    color: COLORS.background,
+  quickGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+  },
+  menuCard: { paddingVertical: SPACING.xs },
+  tipCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.md,
+    backgroundColor: COLORS.primary + '10',
+    borderColor: COLORS.primary + '25',
+  },
+  tipIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tipBody: { flex: 1 },
+  tipTitle: {
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.bold,
-  },
-  stepTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
-    marginBottom: SPACING.sm,
-    textAlign: 'center',
+    marginBottom: 4,
   },
-  stepDescription: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  // Payment Button Styles
-  selectPlanButton: {
-    backgroundColor: COLORS.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
-    marginTop: SPACING.md,
-  },
-  selectPlanButtonText: {
-    color: COLORS.background,
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    marginLeft: SPACING.xs,
-  },
+  tipText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, lineHeight: 20 },
 });
 
 export default VendorDashboardScreen;

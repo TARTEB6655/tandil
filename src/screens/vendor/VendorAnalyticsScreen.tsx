@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -6,299 +6,589 @@ import {
   StatusBar,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
+  ActivityIndicator,
+  Alert,
+  Share,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
+import * as Sharing from 'expo-sharing';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import { VendorPageHeader, VENDOR_SCREEN_BG } from '../../components/vendor/VendorUi';
+import {
+  vendorAnalyticsService,
+  VendorAnalyticsPayload,
+  VendorAnalyticsMetric,
+  VendorAnalyticsDataPoint,
+} from '../../services/vendorAnalyticsService';
 
-const { width } = Dimensions.get('window');
+function formatMetricValue(metric?: VendorAnalyticsMetric, fallback = '0'): string {
+  if (!metric) return fallback;
+  if (metric.display?.trim()) return metric.display.trim();
+  if (metric.currency) return `${metric.currency} ${metric.value}`;
+  if (metric.unit) return `${metric.value}${metric.unit}`;
+  return String(metric.value ?? fallback);
+}
+
+function isNegativeGrowth(growth?: string): boolean {
+  if (!growth) return false;
+  return growth.trim().startsWith('-');
+}
+
+function SimpleBarChart({
+  title,
+  points,
+  valueKey,
+}: {
+  title: string;
+  points: VendorAnalyticsDataPoint[];
+  valueKey: 'orders' | 'revenue';
+}) {
+  const values = points.map((p) => Number(p[valueKey] ?? 0));
+  const max = Math.max(...values, 1);
+
+  return (
+    <View style={styles.chartCard}>
+      <Text style={styles.chartTitle}>{title}</Text>
+      {points.length === 0 ? (
+        <View style={styles.chartEmpty}>
+          <Ionicons name="analytics-outline" size={36} color={COLORS.textSecondary} />
+          <Text style={styles.chartEmptyText}>No trend data</Text>
+        </View>
+      ) : (
+        <View style={styles.barsRow}>
+          {points.map((point, index) => {
+            const value = Number(point[valueKey] ?? 0);
+            const barHeight = Math.max(4, Math.round((value / max) * 96));
+            return (
+              <View key={`${point.label}-${index}`} style={styles.barCol}>
+                <View style={styles.barTrack}>
+                  <View style={[styles.barFill, { height: barHeight }]} />
+                </View>
+                <Text style={styles.barLabel} numberOfLines={1}>
+                  {point.label}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
 
 const VendorAnalyticsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const [selectedPeriod, setSelectedPeriod] = useState('month');
+  const { t } = useTranslation();
 
-  // Demo analytics data
-  const analyticsData = {
-    overview: {
-          totalProducts: 45,
-    totalOrders: 156,
-    totalRevenue: 'AED 23,450',
-    totalViews: 12847,
-    growthRate: '+12.5%',
-    period: 'This Month',
-    },
-    performance: {
-      conversionRate: 3.2,
-      averageOrderValue: 'AED 150',
-      customerSatisfaction: 4.8,
-      returnRate: 2.1,
-    },
-    topProducts: [
-      { name: 'Premium Leather Sneakers', orders: 23, revenue: 'AED 6,900', growth: '+15%' },
-      { name: 'Designer Handbag', orders: 18, revenue: 'AED 5,400', growth: '+8%' },
-      { name: 'Luxury Watch', orders: 15, revenue: 'AED 4,500', growth: '+22%' },
-      { name: 'Silk Scarf', orders: 12, revenue: 'AED 1,200', growth: '+5%' },
-    ],
-    recentActivity: [
-      { type: 'order', message: 'New order received for Premium Sneakers', time: '2 hours ago', value: '+AED 299' },
-      { type: 'view', message: 'Product viewed 45 times today', time: '4 hours ago', value: '+45 views' },
-      { type: 'review', message: '5-star review received', time: '6 hours ago', value: '+5.0 rating' },
-      { type: 'revenue', message: 'Daily revenue target achieved', time: '8 hours ago', value: '+AED 1,200' },
-    ],
-    trends: {
-      daily: [120, 145, 132, 167, 189, 156, 178],
-      weekly: [890, 1020, 1150, 980, 1200, 1350, 1100],
-      monthly: [3200, 3800, 4200, 3900, 4500, 4800, 5200],
-    },
+  const [selectedPeriod, setSelectedPeriod] = useState('month');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<VendorAnalyticsPayload | null>(null);
+
+  const loadAnalytics = useCallback(async (period: string, isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+    try {
+      const payload = await vendorAnalyticsService.getPerformance(period);
+      setData(payload);
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data
+          ?.message ||
+        (err as { message?: string })?.message ||
+        t('vendorAnalytics.loadFailed', { defaultValue: 'Failed to load analytics.' });
+      setError(message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [t]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadAnalytics(selectedPeriod);
+    }, [loadAnalytics, selectedPeriod])
+  );
+
+  const onSelectPeriod = (periodId: string) => {
+    if (periodId === selectedPeriod) return;
+    setSelectedPeriod(periodId);
   };
 
-  const periods = [
-    { id: 'week', name: 'Week', icon: 'calendar-outline' },
-    { id: 'month', name: 'Month', icon: 'calendar-outline' },
-    { id: 'quarter', name: 'Quarter', icon: 'calendar-outline' },
-    { id: 'year', name: 'Year', icon: 'calendar-outline' },
-  ];
+  const handleExportReport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const fileUri = await vendorAnalyticsService.exportPerformanceCsv(selectedPeriod);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          dialogTitle: t('vendorAnalytics.exportReport', { defaultValue: 'Export Report' }),
+          UTI: 'public.comma-separated-values-text',
+        });
+      } else {
+        Alert.alert(
+          t('common.success', { defaultValue: 'Success' }),
+          t('vendorAnalytics.exportSaved', {
+            defaultValue: 'Report downloaded successfully.',
+          })
+        );
+      }
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data
+          ?.message ||
+        (err as { message?: string })?.message ||
+        t('vendorAnalytics.exportFailed', {
+          defaultValue: 'Failed to export performance report.',
+        });
+      Alert.alert(t('common.error', { defaultValue: 'Error' }), message);
+    } finally {
+      setExporting(false);
+    }
+  };
 
-  const renderMetricCard = (title: string, value: string, subtitle: string, icon: string, color: string, trend?: string) => (
-    <View style={styles.metricCard}>
-      <View style={styles.metricHeader}>
-        <View style={[styles.metricIcon, { backgroundColor: color + '20' }]}>
-          <Ionicons name={icon as any} size={24} color={color} />
-        </View>
-        {trend && (
-          <View style={[styles.trendBadge, { backgroundColor: color + '20' }]}>
-            <Text style={[styles.trendText, { color }]}>{trend}</Text>
-          </View>
-        )}
-      </View>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricTitle}>{title}</Text>
-      <Text style={styles.metricSubtitle}>{subtitle}</Text>
-    </View>
+  const handleShareAnalytics = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      const share = await vendorAnalyticsService.sharePerformance(selectedPeriod);
+      const periodLabel = data?.period_label || selectedPeriod;
+      const expiryNote =
+        share.expires_in_days != null
+          ? `\n\n${t('vendorAnalytics.shareExpires', {
+              defaultValue: 'Link expires in {{days}} days.',
+              days: share.expires_in_days,
+            })}`
+          : '';
+
+      await Share.share({
+        message: `${data?.title || 'Analytics'} — ${periodLabel}\n${share.share_url}${expiryNote}`,
+        url: share.share_url,
+        title: t('vendorAnalytics.shareAnalytics', { defaultValue: 'Share Analytics' }),
+      });
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data
+          ?.message ||
+        (err as { message?: string })?.message ||
+        t('vendorAnalytics.shareFailed', {
+          defaultValue: 'Failed to create analytics share link.',
+        });
+      Alert.alert(t('common.error', { defaultValue: 'Error' }), message);
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const handleAction = async (actionId: string, available?: boolean) => {
+    if (actionId === 'export_report') {
+      await handleExportReport();
+      return;
+    }
+
+    if (actionId === 'share_analytics') {
+      await handleShareAnalytics();
+      return;
+    }
+
+    if (available === false) {
+      Alert.alert(
+        t('vendorAnalytics.unavailable', { defaultValue: 'Unavailable' }),
+        t('vendorAnalytics.actionUnavailable', {
+          defaultValue: 'This action is not available yet.',
+        })
+      );
+    }
+  };
+
+  const filters =
+    data?.filters?.length
+      ? data.filters
+      : [
+          { id: 'week', label: 'Week' },
+          { id: 'month', label: 'Month', selected: true },
+          { id: 'quarter', label: 'Quarter' },
+          { id: 'year', label: 'Year' },
+        ];
+
+  const overview = data?.overview;
+  const performance = data?.performance_metrics;
+  const dailyPoints = data?.trends.daily_performance?.data_points ?? [];
+  const weeklyPoints = data?.trends.weekly_revenue?.data_points ?? [];
+  const topProducts = data?.top_products ?? [];
+  const activity = data?.recent_activity ?? [];
+  const actions = (data?.actions?.length
+    ? data.actions
+    : [
+        { id: 'export_report', label: 'Export Report', available: true },
+        { id: 'share_analytics', label: 'Share Analytics', available: true },
+      ]
+  ).map((action) =>
+    action.id === 'export_report' ? { ...action, available: true } : action
   );
 
-  const renderTopProduct = (product: any, index: number) => (
-    <View key={index} style={styles.topProductCard}>
-      <View style={styles.productRank}>
-        <Text style={styles.rankNumber}>{index + 1}</Text>
-      </View>
-      <View style={styles.productInfo}>
-        <Text style={styles.productName} numberOfLines={1}>{product.name}</Text>
-        <Text style={styles.productStats}>
-          {product.orders} orders • {product.revenue}
-        </Text>
-      </View>
-      <View style={styles.productGrowth}>
-        <Text style={styles.growthText}>{product.growth}</Text>
-      </View>
-    </View>
-  );
-
-  const renderActivityItem = (activity: any, index: number) => {
-    const getActivityIcon = (type: string) => {
-      switch (type) {
-        case 'order': return 'bag-outline';
-        case 'view': return 'eye-outline';
-        case 'review': return 'star-outline';
-        case 'revenue': return 'trending-up-outline';
-        default: return 'notifications-outline';
-      }
-    };
-
-    const getActivityColor = (type: string) => {
-      switch (type) {
-        case 'order': return COLORS.success;
-        case 'view': return COLORS.info;
-        case 'review': return COLORS.warning;
-        case 'revenue': return COLORS.primary;
-        default: return COLORS.textSecondary;
-      }
-    };
+  const renderMetricCard = (
+    title: string,
+    metric: VendorAnalyticsMetric | undefined,
+    icon: string,
+    color: string
+  ) => {
+    const growth = metric?.growth_display;
+    const negative = isNegativeGrowth(growth);
+    const trendColor = negative ? COLORS.error : color;
 
     return (
-      <View key={index} style={styles.activityItem}>
-        <View style={[styles.activityIcon, { backgroundColor: getActivityColor(activity.type) + '20' }]}>
-          <Ionicons name={getActivityIcon(activity.type) as any} size={20} color={getActivityColor(activity.type)} />
+      <View style={styles.metricCard}>
+        <View style={styles.metricHeader}>
+          <View style={[styles.metricIcon, { backgroundColor: color + '20' }]}>
+            <Ionicons name={icon as any} size={24} color={color} />
+          </View>
+          {growth ? (
+            <View style={[styles.trendBadge, { backgroundColor: trendColor + '20' }]}>
+              <Text style={[styles.trendText, { color: trendColor }]}>{growth}</Text>
+            </View>
+          ) : null}
         </View>
-        <View style={styles.activityContent}>
-          <Text style={styles.activityMessage}>{activity.message}</Text>
-          <Text style={styles.activityTime}>{activity.time}</Text>
-        </View>
-        <Text style={[styles.activityValue, { color: getActivityColor(activity.type) }]}>
-          {activity.value}
-        </Text>
+        <Text style={styles.metricValue}>{formatMetricValue(metric)}</Text>
+        <Text style={styles.metricTitle}>{title}</Text>
+        {metric?.subtitle ? <Text style={styles.metricSubtitle}>{metric.subtitle}</Text> : null}
       </View>
     );
   };
 
-  const renderChartPlaceholder = (title: string, data: number[]) => (
-    <View style={styles.chartCard}>
-      <Text style={styles.chartTitle}>{title}</Text>
-      <View style={styles.chartContainer}>
-        <View style={styles.chartPlaceholder}>
-          <Ionicons name="analytics-outline" size={48} color={COLORS.textSecondary} />
-          <Text style={styles.chartPlaceholderText}>Chart Visualization</Text>
-          <Text style={styles.chartPlaceholderSubtext}>
-            {data.length} data points available
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Analytics</Text>
-        <Text style={styles.subtitle}>View your performance metrics</Text>
-        
-        {/* Period Selector */}
-        <View style={styles.periodSelector}>
-          {periods.map((period) => (
-            <TouchableOpacity
-              key={period.id}
-              style={[
-                styles.periodButton,
-                selectedPeriod === period.id && styles.periodButtonActive
-              ]}
-              onPress={() => setSelectedPeriod(period.id)}
-            >
-              <Ionicons 
-                name={period.icon as any} 
-                size={16} 
-                color={selectedPeriod === period.id ? COLORS.background : COLORS.primary} 
-              />
-              <Text style={[
-                styles.periodButtonText,
-                selectedPeriod === period.id && styles.periodButtonTextActive
-              ]}>
-                {period.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+
+      <VendorPageHeader
+        title={data?.title || t('vendorDashboard.analytics', { defaultValue: 'Analytics' })}
+        subtitle={
+          data?.subtitle ||
+          t('vendorDashboard.analyticsHint', { defaultValue: 'Sales, orders & performance' })
+        }
+        onBack={() => navigation.goBack()}
+      />
+
+      <View style={styles.periodSelectorWrap}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.periodSelector}
+        >
+          {filters.map((period) => {
+            const active = selectedPeriod === period.id || Boolean(period.selected && !data);
+            return (
+              <TouchableOpacity
+                key={period.id}
+                style={[styles.periodButton, active && styles.periodButtonActive]}
+                onPress={() => onSelectPeriod(period.id)}
+                disabled={loading}
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={16}
+                  color={active ? COLORS.background : COLORS.primary}
+                />
+                <Text
+                  style={[styles.periodButtonText, active && styles.periodButtonTextActive]}
+                >
+                  {period.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-        {/* Overview Metrics */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Overview - {analyticsData.overview.period}</Text>
-          <View style={styles.metricsGrid}>
-            {renderMetricCard(
-              'Total Products',
-              analyticsData.overview.totalProducts.toString(),
-              'Active in catalog',
-              'cube-outline',
-              COLORS.primary,
-              analyticsData.overview.growthRate
-            )}
-            {renderMetricCard(
-              'Total Orders',
-              analyticsData.overview.totalOrders.toString(),
-              'Completed orders',
-              'bag-outline',
-              COLORS.success
-            )}
-            {renderMetricCard(
-              'Total Revenue',
-              analyticsData.overview.totalRevenue,
-              'Gross earnings',
-              'trending-up-outline',
-              COLORS.warning
-            )}
-            {renderMetricCard(
-              'Total Views',
-              analyticsData.overview.totalViews.toLocaleString(),
-              'Product impressions',
-              'eye-outline',
-              COLORS.info
-            )}
-          </View>
+      {loading && !data ? (
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollView}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadAnalytics(selectedPeriod, true)}
+              tintColor={COLORS.primary}
+            />
+          }
+        >
+          {error ? (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle-outline" size={20} color={COLORS.error} />
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity onPress={() => loadAnalytics(selectedPeriod)}>
+                <Text style={styles.retryText}>
+                  {t('common.retry', { defaultValue: 'Retry' })}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
-        {/* Performance Metrics */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Performance Metrics</Text>
-          <View style={styles.performanceGrid}>
-            <View style={styles.performanceCard}>
-              <View style={styles.performanceHeader}>
-                <Ionicons name="trending-up-outline" size={20} color={COLORS.success} />
-                <Text style={styles.performanceTitle}>Conversion Rate</Text>
-              </View>
-              <Text style={styles.performanceValue}>{analyticsData.performance.conversionRate}%</Text>
-              <Text style={styles.performanceSubtitle}>View to Order ratio</Text>
-            </View>
-            
-            <View style={styles.performanceCard}>
-              <View style={styles.performanceHeader}>
-                <Ionicons name="cash-outline" size={20} color={COLORS.warning} />
-                <Text style={styles.performanceTitle}>Avg Order Value</Text>
-              </View>
-              <Text style={styles.performanceValue}>{analyticsData.performance.averageOrderValue}</Text>
-              <Text style={styles.performanceSubtitle}>Per transaction</Text>
-            </View>
-            
-            <View style={styles.performanceCard}>
-              <View style={styles.performanceHeader}>
-                <Ionicons name="star-outline" size={20} color={COLORS.primary} />
-                <Text style={styles.performanceTitle}>Satisfaction</Text>
-              </View>
-              <Text style={styles.performanceValue}>{analyticsData.performance.customerSatisfaction}/5</Text>
-              <Text style={styles.performanceSubtitle}>Customer rating</Text>
-            </View>
-            
-            <View style={styles.performanceCard}>
-              <View style={styles.performanceHeader}>
-                <Ionicons name="refresh-outline" size={20} color={COLORS.error} />
-                <Text style={styles.performanceTitle}>Return Rate</Text>
-              </View>
-              <Text style={styles.performanceValue}>{analyticsData.performance.returnRate}%</Text>
-              <Text style={styles.performanceSubtitle}>Product returns</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {overview?.title || 'Overview'}
+              {data?.period_label || overview?.period_label
+                ? ` — ${data?.period_label || overview?.period_label}`
+                : ''}
+            </Text>
+            <View style={styles.metricsGrid}>
+              {renderMetricCard(
+                'Total Products',
+                overview?.total_products,
+                'cube-outline',
+                COLORS.primary
+              )}
+              {renderMetricCard(
+                'Total Orders',
+                overview?.total_orders,
+                'bag-outline',
+                COLORS.success
+              )}
+              {renderMetricCard(
+                'Total Revenue',
+                overview?.total_revenue,
+                'trending-up-outline',
+                COLORS.warning
+              )}
+              {renderMetricCard(
+                'Total Views',
+                overview?.total_views,
+                'eye-outline',
+                COLORS.info
+              )}
             </View>
           </View>
-        </View>
 
-        {/* Charts */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Trends & Insights</Text>
-          {renderChartPlaceholder('Daily Performance', analyticsData.trends.daily)}
-          {renderChartPlaceholder('Weekly Revenue', analyticsData.trends.weekly)}
-        </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Performance Metrics</Text>
+            <View style={styles.performanceGrid}>
+              <View style={styles.performanceCard}>
+                <View style={styles.performanceHeader}>
+                  <Ionicons name="trending-up-outline" size={20} color={COLORS.success} />
+                  <Text style={styles.performanceTitle}>Conversion Rate</Text>
+                </View>
+                <Text style={styles.performanceValue}>
+                  {formatMetricValue(performance?.conversion_rate, '0%')}
+                </Text>
+                <Text style={styles.performanceSubtitle}>
+                  {performance?.conversion_rate?.subtitle || 'View to Order ratio'}
+                </Text>
+              </View>
 
-        {/* Top Products */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Top Performing Products</Text>
-          <View style={styles.topProductsContainer}>
-            {analyticsData.topProducts.map(renderTopProduct)}
+              <View style={styles.performanceCard}>
+                <View style={styles.performanceHeader}>
+                  <Ionicons name="cash-outline" size={20} color={COLORS.warning} />
+                  <Text style={styles.performanceTitle}>Avg Order Value</Text>
+                </View>
+                <Text style={styles.performanceValue}>
+                  {formatMetricValue(performance?.avg_order_value, 'AED 0')}
+                </Text>
+                <Text style={styles.performanceSubtitle}>
+                  {performance?.avg_order_value?.subtitle || 'Per transaction'}
+                </Text>
+              </View>
+
+              <View style={styles.performanceCard}>
+                <View style={styles.performanceHeader}>
+                  <Ionicons name="star-outline" size={20} color={COLORS.primary} />
+                  <Text style={styles.performanceTitle}>Satisfaction</Text>
+                </View>
+                <Text style={styles.performanceValue}>
+                  {performance?.satisfaction?.available === false
+                    ? '—'
+                    : formatMetricValue(performance?.satisfaction, '0/5')}
+                </Text>
+                <Text style={styles.performanceSubtitle}>
+                  {performance?.satisfaction?.subtitle || 'Customer rating'}
+                </Text>
+              </View>
+
+              <View style={styles.performanceCard}>
+                <View style={styles.performanceHeader}>
+                  <Ionicons name="refresh-outline" size={20} color={COLORS.error} />
+                  <Text style={styles.performanceTitle}>Return Rate</Text>
+                </View>
+                <Text style={styles.performanceValue}>
+                  {formatMetricValue(performance?.return_rate, '0%')}
+                </Text>
+                <Text style={styles.performanceSubtitle}>
+                  {performance?.return_rate?.subtitle || 'Product returns'}
+                </Text>
+              </View>
+            </View>
           </View>
-        </View>
 
-        {/* Recent Activity */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <View style={styles.activityContainer}>
-            {analyticsData.recentActivity.map(renderActivityItem)}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Trends & Insights</Text>
+            <SimpleBarChart
+              title={data?.trends.daily_performance?.title || 'Daily Performance'}
+              points={dailyPoints}
+              valueKey="orders"
+            />
+            <SimpleBarChart
+              title={data?.trends.weekly_revenue?.title || 'Weekly Revenue'}
+              points={weeklyPoints}
+              valueKey="revenue"
+            />
           </View>
-        </View>
 
-        {/* Export & Actions */}
-        <View style={styles.actionsSection}>
-          <TouchableOpacity style={styles.exportButton}>
-            <Ionicons name="download-outline" size={24} color={COLORS.primary} />
-            <Text style={styles.exportButtonText}>Export Report</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.shareButton}>
-            <Ionicons name="share-outline" size={24} color={COLORS.background} />
-            <Text style={styles.shareButtonText}>Share Analytics</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Top Performing Products</Text>
+            <View style={styles.topProductsContainer}>
+              {topProducts.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  {t('vendorAnalytics.noTopProducts', {
+                    defaultValue: 'No top products for this period.',
+                  })}
+                </Text>
+              ) : (
+                topProducts.map((product, index) => (
+                  <View key={`${product.name}-${index}`} style={styles.topProductCard}>
+                    <View style={styles.productRank}>
+                      <Text style={styles.rankNumber}>{index + 1}</Text>
+                    </View>
+                    <View style={styles.productInfo}>
+                      <Text style={styles.productName} numberOfLines={1}>
+                        {product.name || product.title || 'Product'}
+                      </Text>
+                      <Text style={styles.productStats}>
+                        {product.orders ?? 0} orders •{' '}
+                        {product.revenue_display ||
+                          (typeof product.revenue === 'number'
+                            ? `AED ${product.revenue}`
+                            : product.revenue || '—')}
+                      </Text>
+                    </View>
+                    {product.growth_display || product.growth ? (
+                      <View style={styles.productGrowth}>
+                        <Text style={styles.growthText}>
+                          {product.growth_display || product.growth}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ))
+              )}
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <View style={styles.activityContainer}>
+              {activity.length === 0 ? (
+                <Text style={styles.emptyText}>
+                  {t('vendorAnalytics.noActivity', {
+                    defaultValue: 'No recent activity for this period.',
+                  })}
+                </Text>
+              ) : (
+                activity.map((item, index) => {
+                  const type = item.type || 'notifications';
+                  const color =
+                    type === 'order'
+                      ? COLORS.success
+                      : type === 'view'
+                        ? COLORS.info
+                        : type === 'review'
+                          ? COLORS.warning
+                          : COLORS.primary;
+                  const icon =
+                    type === 'order'
+                      ? 'bag-outline'
+                      : type === 'view'
+                        ? 'eye-outline'
+                        : type === 'review'
+                          ? 'star-outline'
+                          : 'trending-up-outline';
+                  return (
+                    <View key={`${item.message}-${index}`} style={styles.activityItem}>
+                      <View style={[styles.activityIcon, { backgroundColor: color + '20' }]}>
+                        <Ionicons name={icon as any} size={20} color={color} />
+                      </View>
+                      <View style={styles.activityContent}>
+                        <Text style={styles.activityMessage}>{item.message || '—'}</Text>
+                        <Text style={styles.activityTime}>
+                          {item.time || item.time_ago || ''}
+                        </Text>
+                      </View>
+                      {item.value || item.value_display ? (
+                        <Text style={[styles.activityValue, { color }]}>
+                          {item.value_display || item.value}
+                        </Text>
+                      ) : null}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </View>
+
+          <View style={styles.actionsSection}>
+            {actions.map((action) => {
+              const isExport = action.id === 'export_report';
+              const isShare = action.id === 'share_analytics';
+              const busy = (isExport && exporting) || (isShare && sharing);
+              const disabled = busy || (!isExport && !isShare && action.available === false);
+              return (
+                <TouchableOpacity
+                  key={action.id}
+                  style={[
+                    isExport ? styles.exportButton : styles.shareButton,
+                    disabled && styles.actionDisabled,
+                  ]}
+                  onPress={() => handleAction(action.id, action.available)}
+                  activeOpacity={0.85}
+                  disabled={disabled}
+                >
+                  {busy ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={isExport ? COLORS.primary : COLORS.background}
+                    />
+                  ) : (
+                    <Ionicons
+                      name={isExport ? 'download-outline' : 'share-outline'}
+                      size={24}
+                      color={
+                        disabled
+                          ? COLORS.textSecondary
+                          : isExport
+                            ? COLORS.primary
+                            : COLORS.background
+                      }
+                    />
+                  )}
+                  <Text
+                    style={[
+                      isExport ? styles.exportButtonText : styles.shareButtonText,
+                      disabled && styles.actionDisabledText,
+                    ]}
+                  >
+                    {busy
+                      ? isExport
+                        ? t('vendorAnalytics.exporting', { defaultValue: 'Exporting...' })
+                        : t('vendorAnalytics.sharing', { defaultValue: 'Sharing...' })
+                      : action.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -306,27 +596,19 @@ const VendorAnalyticsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: VENDOR_SCREEN_BG,
   },
-  header: {
+  periodSelectorWrap: {
+    paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.primary + '10',
-  },
-  title: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  subtitle: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.lg,
+    backgroundColor: COLORS.background,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
   periodSelector: {
     flexDirection: 'row',
     gap: SPACING.sm,
+    paddingRight: SPACING.lg,
   },
   periodButton: {
     flexDirection: 'row',
@@ -354,30 +636,57 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.error + '12',
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.error + '33',
+  },
+  errorText: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+  },
+  retryText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
   section: {
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    paddingTop: SPACING.lg,
   },
   sectionTitle: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
   },
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.md,
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
   },
   metricCard: {
-    width: (width - SPACING.lg * 3) / 2,
-    backgroundColor: COLORS.surface,
-    padding: SPACING.md,
+    width: '48%',
+    backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
+    marginBottom: SPACING.sm,
   },
   metricHeader: {
     flexDirection: 'row',
@@ -389,8 +698,8 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   trendBadge: {
     paddingHorizontal: SPACING.xs,
@@ -399,36 +708,37 @@ const styles = StyleSheet.create({
   },
   trendText: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.bold,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   metricValue: {
     fontSize: FONT_SIZES.xl,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: 2,
   },
   metricTitle: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
-    marginBottom: SPACING.xs,
   },
   metricSubtitle: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
+    marginTop: 2,
   },
   performanceGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.md,
+    justifyContent: 'space-between',
   },
   performanceCard: {
-    width: (width - SPACING.lg * 3) / 2,
-    backgroundColor: COLORS.surface,
-    padding: SPACING.md,
+    width: '48%',
+    backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
+    marginBottom: SPACING.sm,
   },
   performanceHeader: {
     flexDirection: 'row',
@@ -440,21 +750,22 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.text,
+    flex: 1,
   },
   performanceValue: {
     fontSize: FONT_SIZES.lg,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: 2,
   },
   performanceSubtitle: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
   },
   chartCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
+    padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
     marginBottom: SPACING.md,
@@ -465,127 +776,153 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: SPACING.md,
   },
-  chartContainer: {
-    height: 200,
+  chartEmpty: {
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
+    paddingVertical: SPACING.lg,
+    gap: SPACING.xs,
   },
-  chartPlaceholder: {
-    alignItems: 'center',
-  },
-  chartPlaceholderText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.sm,
-  },
-  chartPlaceholderSubtext: {
+  chartEmptyText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
+  },
+  barsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 130,
+    gap: 4,
+  },
+  barCol: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  barTrack: {
+    width: '70%',
+    height: 100,
+    justifyContent: 'flex-end',
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  barFill: {
+    width: '100%',
+    backgroundColor: COLORS.primary,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+  },
+  barLabel: {
+    marginTop: 6,
+    fontSize: 10,
+    color: COLORS.textSecondary,
   },
   topProductsContainer: {
-    gap: SPACING.sm,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
   },
   topProductCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
     padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
   productRank: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary + '20',
-    justifyContent: 'center',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary + '18',
     alignItems: 'center',
-    marginRight: SPACING.md,
+    justifyContent: 'center',
+    marginRight: SPACING.sm,
   },
   rankNumber: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.primary,
   },
-  productInfo: {
-    flex: 1,
-  },
+  productInfo: { flex: 1, minWidth: 0 },
   productName: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
-    marginBottom: SPACING.xs,
   },
   productStats: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
+    marginTop: 2,
   },
   productGrowth: {
-    backgroundColor: COLORS.success + '20',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.round,
+    marginLeft: SPACING.sm,
   },
   growthText: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.bold,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.success,
   },
   activityContainer: {
-    gap: SPACING.sm,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
   },
   activityItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
     padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    gap: SPACING.sm,
   },
   activityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
-    marginRight: SPACING.md,
+    justifyContent: 'center',
   },
-  activityContent: {
-    flex: 1,
-  },
+  activityContent: { flex: 1, minWidth: 0 },
   activityMessage: {
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    fontWeight: FONT_WEIGHTS.medium,
   },
   activityTime: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
+    marginTop: 2,
   },
   activityValue: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  emptyText: {
+    padding: SPACING.lg,
+    textAlign: 'center',
+    color: COLORS.textSecondary,
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.bold,
   },
   actionsSection: {
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.xl,
-    gap: SPACING.md,
+    paddingVertical: SPACING.lg,
+    gap: SPACING.sm,
+    paddingBottom: SPACING.xl,
   },
   exportButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
     gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.background,
   },
   exportButtonText: {
     fontSize: FONT_SIZES.md,
@@ -596,15 +933,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
     gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.primary,
   },
   shareButtonText: {
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.background,
+  },
+  actionDisabled: {
+    opacity: 0.5,
+  },
+  actionDisabledText: {
+    color: COLORS.textSecondary,
   },
 });
 

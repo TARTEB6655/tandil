@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Switch,
+  TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -109,6 +110,32 @@ const AdminProductSettingsScreen: React.FC = () => {
                 <Text style={styles.settingSubtitle}>AED</Text>
               </View>
             </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            {t('admin.settings.productSettings.maintenancePhotosSection')}
+          </Text>
+          <View style={styles.sectionContent}>
+            <TouchableOpacity
+              style={[styles.settingItem, styles.settingItemLast]}
+              onPress={() => navigation.navigate('AdminMaintenancePhotos')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingIcon}>
+                <Ionicons name="images-outline" size={24} color={COLORS.primary} />
+              </View>
+              <View style={styles.settingContent}>
+                <Text style={styles.settingTitle}>
+                  {t('admin.settings.productSettings.maintenancePhotos.title')}
+                </Text>
+                <Text style={styles.settingSubtitle}>
+                  {t('admin.settings.productSettings.maintenancePhotos.subtitle')}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>

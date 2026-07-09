@@ -26,7 +26,7 @@ const DEFAULT_REGION: Region = {
 interface MapPickerModalProps {
   visible: boolean;
   onClose: () => void;
-  onSelect: (address: AddressFromLocation) => void;
+  onSelect: (address: AddressFromLocation, coords?: { latitude: number; longitude: number }) => void;
   loadingMessage?: string;
   confirmMessage?: string;
 }
@@ -85,7 +85,10 @@ export default function MapPickerModal({
     try {
       const result = await getAddressFromCoordinates(region.latitude, region.longitude);
       if (result.ok) {
-        onSelect(result.address);
+        onSelect(result.address, {
+          latitude: region.latitude,
+          longitude: region.longitude,
+        });
         onClose();
       } else {
         Alert.alert('Error', result.error);

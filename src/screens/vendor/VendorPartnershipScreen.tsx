@@ -13,13 +13,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { PartnerTierInfo } from '../../types';
+import { VendorHeroBanner, VENDOR_SCREEN_BG } from '../../components/vendor/VendorUi';
 
 const { width } = Dimensions.get('window');
 
 const VendorPartnershipScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const [currentTier, setCurrentTier] = useState<PartnerTierInfo | null>(null); // Changed to null for demo
   const [showApplicationForm, setShowApplicationForm] = useState(false);
   const [selectedTierForApplication, setSelectedTierForApplication] = useState<string>('');
@@ -54,7 +57,7 @@ const VendorPartnershipScreen: React.FC = () => {
         'All Basic benefits',
         'Small banner inside the app',
         'Up to 3 product images in Partners section',
-        '1 social media post per month on Shozy\'s official accounts'
+        '1 social media post per month on Tandil\'s official accounts'
       ],
       color: '#C0C0C0'
     },
@@ -67,7 +70,7 @@ const VendorPartnershipScreen: React.FC = () => {
         'All Silver benefits',
         'Medium banner on the home page of the app',
         'Short video (Reel/Story) about partner products',
-        'Special discount code for Shozy customers'
+        'Special discount code for Tandil customers'
       ],
       color: '#FFD700'
     },
@@ -94,7 +97,7 @@ const VendorPartnershipScreen: React.FC = () => {
         'All Platinum benefits',
         'Permanent "Featured Partner" status inside the app',
         'Dedicated partner page showcasing products',
-        'Joint marketing content (photos/videos) with Shozy',
+        'Joint marketing content (photos/videos) with Tandil',
         'Priority access for any future events, offers, or promotions'
       ],
       color: '#B9F2FF'
@@ -233,17 +236,16 @@ const VendorPartnershipScreen: React.FC = () => {
     (selectedPaymentMethod !== 'card' || (cardNumber && cardExpiry && cardCvv));
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Partnership</Text>
-        <Text style={styles.subtitle}>Manage your Shozy partnership</Text>
-      </View>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-        {/* Current Partnership Status */}
+        <VendorHeroBanner
+          badge={t('vendorTabs.partnership')}
+          title={t('vendorTabs.partnership')}
+          subtitle={t('vendorDashboard.partnershipHint')}
+        />
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Current Partnership</Text>
           
@@ -412,7 +414,7 @@ const VendorPartnershipScreen: React.FC = () => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Start Your Partnership</Text>
             <Text style={styles.sectionDescription}>
-              Don't have a partnership yet? Apply now to get started with Shozy!
+              Don't have a partnership yet? Apply now to get started with Tandil!
             </Text>
             
             <View style={styles.newPartnershipCard}>
@@ -745,22 +747,7 @@ const VendorPartnershipScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.primary + '10',
-  },
-  title: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  subtitle: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
+    backgroundColor: VENDOR_SCREEN_BG,
   },
   scrollView: {
     flex: 1,
@@ -784,11 +771,16 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   currentTierCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.lg,
     borderWidth: 2,
     borderColor: COLORS.primary,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   tierHeader: {
     flexDirection: 'row',

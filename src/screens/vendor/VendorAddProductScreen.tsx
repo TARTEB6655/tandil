@@ -1,757 +1,1145 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  StatusBar,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Alert,
-  Image,
-  Dimensions,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Switch,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import { buildFullImageUrl } from '../../config/api';
+import { Input } from '../../components/common/Input';
+import { Button } from '../../components/common/Button';
+import {
+  VendorCard,
+  VendorHeroBanner,
+  VendorPageHeader,
+  VENDOR_SCREEN_BG,
+} from '../../components/vendor/VendorUi';
+import { vendorService } from '../../services/vendorService';
+import { setPendingProductImage } from '../admin/pendingProductImage';
+import { compressImageForUpload, compressImagesForUpload } from '../../utils/compressImage';
+import ProductCustomizationBuilder from '../../components/admin/ProductCustomizationBuilder';
+import type { ProductCustomizationConfig } from '../../types/productCustomization';
+import { setProductCustomization } from '../../services/productCustomizationService';
 
-const { width } = Dimensions.get('window');
+const STATUS_VALUES = ['active', 'draft', 'archived'] as const;
+const WEIGHT_UNITS = ['kg', 'g', 'lb', 'oz'] as const;
 
-const VendorAddProductScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const [productData, setProductData] = useState({
-    name: '',
-    description: '',
-    category: '',
-    price: '',
-    brand: '',
-    material: '',
-    size: '',
-    color: '',
-    condition: 'new',
-    quantity: '',
-  });
+function isSuccessCreateMessage(message?: string): boolean {
+  if (!message?.trim()) return false;
+  return /product created|created successfully|successfully created/i.test(message.trim());
+}
 
-  const [selectedImages, setSelectedImages] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [modelUrl, setModelUrl] = useState('');
-  // Removed background analyzer to avoid layout issues
+type CategoryOption = { id: number; name: string };
+type ServiceOption = { id: number; name: string };
 
-  const categories = [
-    { id: 'shoes', name: 'Shoes', icon: 'footsteps-outline' },
-    { id: 'accessories', name: 'Accessories', icon: 'bag-outline' },
-    { id: 'clothing', name: 'Clothing', icon: 'shirt-outline' },
-    { id: 'bags', name: 'Bags & Wallets', icon: 'briefcase-outline' },
-    { id: 'jewelry', name: 'Jewelry', icon: 'diamond-outline' },
-  ];
-
-  const conditions = [
-    { id: 'new', name: 'New', description: 'Never used, original packaging' },
-    { id: 'like_new', name: 'Like New', description: 'Used once or twice, excellent condition' },
-    { id: 'good', name: 'Good', description: 'Used but well maintained' },
-    { id: 'fair', name: 'Fair', description: 'Some wear but functional' },
-  ];
-
-  const handleInputChange = (field: string, value: string) => {
-    setProductData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleAddImage = () => {
-    if (selectedImages.length >= 8) {
-      Alert.alert('Maximum Images', 'You can upload up to 8 images for 360° view');
-      return;
-    }
-
-    // Simulate image picker - in real app, use expo-image-picker
-    Alert.alert(
-      'Add Image',
-      'Select image source',
-      [
-        { text: 'Camera', onPress: () => simulateImagePick('camera') },
-        { text: 'Gallery', onPress: () => simulateImagePick('gallery') },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
-
-  const simulateImagePick = (source: string) => {
-    // Demo images for demonstration
-    const demoImages = [
-      'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400',
-      'https://images.unsplash.com/photo-1551107696-a4b0c5a0d9a2?w=400',
-      'https://images.unsplash.com/photo-1560769629-975ec94e6a86?w=400',
-      'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=400',
-    ];
-
-    const randomImage = demoImages[Math.floor(Math.random() * demoImages.length)];
-    setSelectedImages(prev => [...prev, randomImage]);
-  };
-
-  const handleRemoveImage = (index: number) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const moveImage = (index: number, direction: 'left' | 'right') => {
-    setSelectedImages(prev => {
-      const next = [...prev];
-      const target = direction === 'left' ? index - 1 : index + 1;
-      if (target < 0 || target >= next.length) return next;
-      const temp = next[index];
-      next[index] = next[target];
-      next[target] = temp;
-      return next;
-    });
-  };
-
-  const handleSubmit = async () => {
-    // Validation
-    if (!productData.name.trim()) {
-      Alert.alert('Error', 'Product name is required');
-      return;
-    }
-    if (!productData.category) {
-      Alert.alert('Error', 'Please select a category');
-      return;
-    }
-    if (selectedImages.length === 0) {
-      Alert.alert('Error', 'Please add at least one product image');
-      return;
-    }
-    // 360° guideline: recommend 24–36 frames; enforce minimum of 8
-    if (selectedImages.length < 8) {
-      Alert.alert('More Images Recommended', 'Please upload at least 8 images taken around the product for a smooth 360° view (recommended 24–36).');
-      return;
-    }
-
-    // Skipping automated whiteness/resolution checks in demo
-
-    setUploading(true);
-
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      Alert.alert(
-        'Success!',
-        'Product uploaded successfully. It will be reviewed by our team within 24 hours.',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to upload product. Please try again.');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const renderImageItem = (image: string, index: number) => (
-    <View key={index} style={styles.imageItem}>
-      <Image source={{ uri: image }} style={styles.imagePreview} />
-      {/* Quality hints removed in demo to keep UI clean */}
-      {/* Reorder controls removed for now */}
-      <TouchableOpacity
-        style={styles.removeImageButton}
-        onPress={() => handleRemoveImage(index)}
-      >
-        <Ionicons name="close-circle" size={24} color={COLORS.error} />
-      </TouchableOpacity>
-      <View style={styles.imageNumber}>
-        <Text style={styles.imageNumberText}>{index + 1}</Text>
+function SectionHeader({
+  icon,
+  title,
+  subtitle,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle?: string;
+}) {
+  return (
+    <View style={sectionStyles.header}>
+      <View style={sectionStyles.iconWrap}>
+        <Ionicons name={icon} size={18} color={COLORS.primary} />
+      </View>
+      <View style={sectionStyles.textWrap}>
+        <Text style={sectionStyles.title}>{title}</Text>
+        {subtitle ? <Text style={sectionStyles.subtitle}>{subtitle}</Text> : null}
       </View>
     </View>
   );
+}
 
-  // 360° quick preview player
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playIndex, setPlayIndex] = useState(0);
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
-    if (isPlaying && selectedImages.length > 0) {
-      timer = setInterval(() => {
-        setPlayIndex((p) => (p + 1) % selectedImages.length);
-      }, 80);
+const sectionStyles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primary + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textWrap: { flex: 1 },
+  title: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+  },
+  subtitle: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    lineHeight: 18,
+  },
+});
+
+const VendorAddProductScreen: React.FC = () => {
+  const { t } = useTranslation();
+  const navigation = useNavigation<any>();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [price, setPrice] = useState('');
+  const [stock, setStock] = useState('');
+  const [status, setStatus] = useState('active');
+  const [categoryId, setCategoryId] = useState('');
+  const [serviceId, setServiceId] = useState('');
+  const [weightUnit, setWeightUnit] = useState('kg');
+  const [isFeatured, setIsFeatured] = useState(false);
+  const [sku, setSku] = useState('');
+  const [handle, setHandle] = useState('');
+  const [estimatedArrival, setEstimatedArrival] = useState('');
+  const [jobDuration, setJobDuration] = useState('');
+  const [mainImage, setMainImage] = useState<{ uri: string } | null>(null);
+  const [extraImages, setExtraImages] = useState<{ uri: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const scrollRef = useRef<ScrollView>(null);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showWeightUnitDropdown, setShowWeightUnitDropdown] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [services, setServices] = useState<ServiceOption[]>([]);
+  const [pickingMain, setPickingMain] = useState(false);
+  const [pickingExtra, setPickingExtra] = useState(false);
+  const [customizationConfig, setCustomizationConfig] = useState<ProductCustomizationConfig>({ groups: [] });
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const list = await vendorService.getProductCategories();
+      setCategories(list);
+    } catch {
+      setCategories([]);
     }
-    return () => { if (timer) clearInterval(timer); };
-  }, [isPlaying, selectedImages.length]);
+  }, []);
 
+  const fetchServices = useCallback(async () => {
+    try {
+      const list = await vendorService.getProductServices();
+      setServices(list);
+    } catch {
+      setServices([]);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { fetchCategories(); fetchServices(); }, [fetchCategories, fetchServices]));
+
+  const categoryOptions = useMemo(
+    () => [
+      { value: '', label: t('vendorAddProduct.selectCategory', { defaultValue: 'Select category' }) },
+      ...categories.map((c) => ({ value: String(c.id), label: c.name })),
+    ],
+    [categories, t]
+  );
+
+  const serviceOptions = useMemo(
+    () => [
+      { value: '', label: t('admin.addProduct.noService') },
+      ...services.map((s) => ({ value: String(s.id), label: s.name })),
+    ],
+    [services, t]
+  );
+
+  const statusOptions = useMemo(
+    () =>
+      STATUS_VALUES.map((v) => ({
+        value: v,
+        label: t(`admin.addProduct.status.${v}`),
+      })),
+    [t]
+  );
+
+  const weightUnitOptions = useMemo(
+    () =>
+      WEIGHT_UNITS.map((v) => ({
+        value: v,
+        label: t(`admin.addProduct.weightUnits.${v}`),
+      })),
+    [t]
+  );
+
+  const pickMainImageFromDevice = async () => {
+    if (pickingMain) return;
+    setPickingMain(true);
+    try {
+      const { status: perm } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm !== 'granted') {
+        Alert.alert(
+          'Permission needed',
+          'Allow access to your photos to add the main image. You can enable it in Settings.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      if (typeof ImagePicker.launchImageLibraryAsync !== 'function') {
+        Alert.alert(
+          'Not available',
+          'Image picker is not available in this environment. Try running in Expo Go or a development build.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: false,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        const uri = await compressImageForUpload(result.assets[0].uri);
+        setMainImage({ uri });
+      }
+    } catch (err: unknown) {
+      const message = (err as { message?: string; code?: string })?.message || (err as { code?: string })?.code || 'Could not open photo library.';
+      Alert.alert('Unable to open photos', message, [{ text: 'OK' }]);
+    } finally {
+      setPickingMain(false);
+    }
+  };
+
+  const pickExtraImagesFromDevice = async () => {
+    if (pickingExtra) return;
+    setPickingExtra(true);
+    try {
+      const { status: perm } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm !== 'granted') {
+        Alert.alert(
+          'Permission needed',
+          'Allow access to your photos to add extra images. You can enable it in Settings.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      if (typeof ImagePicker.launchImageLibraryAsync !== 'function') {
+        Alert.alert(
+          'Not available',
+          'Image picker is not available in this environment. Try running in Expo Go or a development build.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets?.length) {
+        const uris = await compressImagesForUpload(result.assets.map((a) => a.uri));
+        setExtraImages((prev) => [...prev, ...uris.map((uri) => ({ uri }))]);
+      }
+    } catch (err: unknown) {
+      const message = (err as { message?: string; code?: string })?.message || (err as { code?: string })?.code || 'Could not open photo library.';
+      Alert.alert('Unable to open photos', message, [{ text: 'OK' }]);
+    } finally {
+      setPickingExtra(false);
+    }
+  };
+
+  const removeMainImage = () => setMainImage(null);
+  const removeExtraImage = (index: number) => {
+    setExtraImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const showValidationErrors = (newErrors: { [key: string]: string }) => {
+    setErrors(newErrors);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    const messages = Object.values(newErrors).filter(Boolean);
+    Alert.alert(
+      t('admin.addProduct.missingFieldsTitle'),
+      messages.length > 0
+        ? `• ${messages.join('\n• ')}`
+        : t('admin.addProduct.missingFieldsMessage'),
+      [{ text: t('common.ok', { defaultValue: 'OK' }) }]
+    );
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors: { [key: string]: string } = {};
+    if (!name.trim()) newErrors.name = t('admin.addProduct.errorNameRequired');
+    const priceNum = parseFloat(price);
+    if (!price.trim()) newErrors.price = t('admin.addProduct.errorPriceRequired');
+    else if (isNaN(priceNum) || priceNum < 0) newErrors.price = t('admin.addProduct.errorPriceInvalid');
+    const stockNum = parseInt(stock, 10);
+    if (!stock.trim()) newErrors.stock = t('admin.addProduct.errorStockRequired');
+    else if (isNaN(stockNum) || stockNum < 0) newErrors.stock = t('admin.addProduct.errorStockInvalid');
+    if (!status) newErrors.status = t('admin.addProduct.errorStatusRequired');
+    if (!sku.trim()) newErrors.sku = t('admin.addProduct.errorSkuRequired');
+    if (!handle.trim()) newErrors.handle = t('admin.addProduct.errorHandleRequired');
+    if (!categoryId.trim()) {
+      newErrors.category_id = t('vendorAddProduct.errorCategoryRequired', {
+        defaultValue: 'Please select a category',
+      });
+    }
+    if (Object.keys(newErrors).length > 0) {
+      showValidationErrors(newErrors);
+      return false;
+    }
+    return true;
+  };
+
+  const handleCreateProduct = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const categoryIdNum = parseInt(categoryId, 10);
+      if (!Number.isFinite(categoryIdNum) || categoryIdNum <= 0) {
+        showValidationErrors({
+          category_id: t('vendorAddProduct.errorCategoryRequired', {
+            defaultValue: 'Please select a category',
+          }),
+        });
+        return;
+      }
+
+      const serviceIdNum = serviceId.trim() ? parseInt(serviceId, 10) : undefined;
+      const timingFields = {
+        ...(estimatedArrival.trim() ? { estimated_arrival: estimatedArrival.trim() } : {}),
+        ...(jobDuration.trim() ? { job_duration: jobDuration.trim() } : {}),
+      };
+
+      const mainFile = mainImage ?? (extraImages[0] ? { uri: extraImages[0].uri } : undefined);
+      const extraFiles = mainImage ? extraImages : extraImages.slice(1);
+
+      const res = await vendorService.createProduct({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        price: parseFloat(price),
+        stock: parseInt(stock, 10),
+        status,
+        category_id: categoryIdNum,
+        service_id: serviceIdNum ?? null,
+        weight_unit: weightUnit,
+        is_featured: isFeatured ? 1 : 0,
+        sku: sku.trim(),
+        handle: handle.trim(),
+        product_type: customizationConfig.groups.length > 0 ? 'variable' : 'simple',
+        customization: customizationConfig,
+        ...timingFields,
+        mainImage: mainFile,
+        extraImages: extraFiles.map((i) => ({ uri: i.uri })),
+      });
+
+      const createdData = res.data;
+
+      const rawImageUrl =
+        (typeof createdData?.image_url === 'string' && createdData.image_url.trim() ? createdData.image_url : null) ??
+        (typeof createdData?.primary_image?.image_url === 'string' && createdData.primary_image.image_url.trim()
+          ? createdData.primary_image.image_url
+          : null) ??
+        (createdData?.images?.length && typeof createdData.images[0]?.image_url === 'string'
+          ? createdData.images[0].image_url
+          : null) ??
+        (typeof createdData?.image === 'string' && createdData.image.trim() ? createdData.image : null) ??
+        (typeof createdData?.primary_image?.image_path === 'string' ? createdData.primary_image.image_path : null) ??
+        (createdData?.images?.[0]?.image_path ?? null);
+      if (rawImageUrl) {
+        const fullUrl = buildFullImageUrl(rawImageUrl);
+        Image.prefetch(fullUrl, { cachePolicy: 'disk' }).catch(() => {});
+      }
+
+      const createdProductId = createdData?.id;
+      if (createdProductId != null && Number(createdProductId) > 0 && mainImage) {
+        setPendingProductImage(createdProductId, mainImage.uri);
+      }
+      if (createdProductId != null && Number(createdProductId) > 0) {
+        try {
+          await setProductCustomization(createdProductId, customizationConfig);
+        } catch {
+          // Product was created; customization cache is optional.
+        }
+      }
+
+      Alert.alert(
+        t('common.success', { defaultValue: 'Success' }),
+        res.message || t('admin.addProduct.success'),
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setName('');
+              setDescription('');
+              setPrice('');
+              setStock('');
+              setStatus('active');
+              setCategoryId('');
+              setServiceId('');
+              setWeightUnit('kg');
+              setIsFeatured(false);
+              setSku('');
+              setHandle('');
+              setEstimatedArrival('');
+              setJobDuration('');
+              setMainImage(null);
+              setExtraImages([]);
+              setCustomizationConfig({ groups: [] });
+              setErrors({});
+              navigation.goBack();
+            },
+          },
+        ]
+      );
+    } catch (err: unknown) {
+      const axiosErr = err as {
+        response?: { data?: { message?: string; error?: string; errors?: Record<string, string[]> } };
+        message?: string;
+      };
+      const errorMessage =
+        axiosErr.response?.data?.message ||
+        axiosErr.response?.data?.error ||
+        axiosErr.message ||
+        t('admin.addProduct.createFailed');
+
+      if (isSuccessCreateMessage(errorMessage)) {
+        Alert.alert(
+          t('common.success', { defaultValue: 'Success' }),
+          errorMessage,
+          [{ text: t('common.ok', { defaultValue: 'OK' }), onPress: () => navigation.goBack() }]
+        );
+        return;
+      }
+
+      if (axiosErr.response?.data?.errors) {
+        const apiErrors: { [key: string]: string } = {};
+        Object.keys(axiosErr.response.data.errors).forEach((key) => {
+          apiErrors[key] = axiosErr.response!.data!.errors![key][0];
+        });
+        showValidationErrors(apiErrors);
+      } else {
+        Alert.alert(t('common.error', { defaultValue: 'Error' }), errorMessage);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderDropdown = (
+    label: string,
+    value: string,
+    options: Array<{ value: string; label: string }>,
+    show: boolean,
+    onToggle: () => void,
+    onSelect: (v: string) => void,
+    icon: keyof typeof Ionicons.glyphMap,
+    error?: string
+  ) => (
+    <View style={styles.dropdownWrapper}>
+      <Text style={styles.label}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.dropdown, show && styles.dropdownOpen, error && styles.dropdownError]}
+        onPress={onToggle}
+        activeOpacity={0.85}
+      >
+        <View style={styles.dropdownLeft}>
+          <View style={styles.dropdownIconWrap}>
+            <Ionicons name={icon} size={16} color={COLORS.primary} />
+          </View>
+          <Text style={[styles.dropdownText, !value && styles.dropdownPlaceholder]} numberOfLines={1}>
+            {options.find((o) => o.value === value)?.label || t('admin.addUser.selectStatus')}
+          </Text>
+        </View>
+        <Ionicons name={show ? 'chevron-up' : 'chevron-down'} size={18} color={COLORS.textSecondary} />
+      </TouchableOpacity>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {show ? (
+        <Modal transparent visible={show} animationType="fade" onRequestClose={onToggle}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onToggle}>
+            <View style={styles.dropdownListWrap} onStartShouldSetResponder={() => true}>
+              <View style={styles.dropdownList}>
+                <View style={styles.dropdownListHeader}>
+                  <Ionicons name={icon} size={18} color={COLORS.primary} />
+                  <Text style={styles.dropdownListTitle} numberOfLines={1}>
+                    {label}
+                  </Text>
+                </View>
+                <ScrollView
+                  style={styles.dropdownScroll}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator
+                >
+                  {options.map((opt) => (
+                    <TouchableOpacity
+                      key={opt.value || '__empty'}
+                      style={[styles.dropdownItem, value === opt.value && styles.dropdownItemSelected]}
+                      onPress={() => {
+                        onSelect(opt.value);
+                        onToggle();
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[styles.dropdownItemText, value === opt.value && styles.dropdownItemTextSelected]}
+                        numberOfLines={1}
+                      >
+                        {opt.label}
+                      </Text>
+                      {value === opt.value ? (
+                        <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} />
+                      ) : null}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      ) : null}
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <VendorPageHeader
+        title={t('admin.addProduct.title')}
+        subtitle={t('vendorAddProduct.subtitle', { defaultValue: 'Fill in details to list on Tandil marketplace' })}
+        onBack={() => navigation.goBack()}
+      />
+
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Add New Product</Text>
-        <View style={styles.placeholder} />
-      </View>
+          <VendorHeroBanner
+            badge={t('vendorAddProduct.newListing', { defaultValue: 'New listing' })}
+            title={t('vendorAddProduct.heroTitle', { defaultValue: 'Create your product' })}
+            subtitle={t('vendorAddProduct.heroSubtitle', {
+              defaultValue: 'Add photos, pricing, and inventory for your store',
+            })}
+          />
 
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Image Upload Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Product Images (360° View)</Text>
-          <Text style={styles.sectionDescription}>
-            Upload high-quality images with white background and proper angles for the best customer experience
-          </Text>
-          
-          {/* Removed inline Play preview to avoid layout jumps */}
-
-          <View style={styles.imageGrid}>
-            {selectedImages.map((image, index) => renderImageItem(image, index))}
-            
-            {selectedImages.length < 8 && (
-              <TouchableOpacity style={styles.addImageButton} onPress={handleAddImage}>
-                <Ionicons name="add" size={32} color={COLORS.primary} />
-                <Text style={styles.addImageText}>Add Image</Text>
-                <Text style={styles.addImageSubtext}>
-                  {selectedImages.length}/8
+          {Object.keys(errors).length > 0 ? (
+            <View style={styles.validationBanner}>
+              <Ionicons name="alert-circle" size={22} color={COLORS.error} />
+              <View style={styles.validationBannerTextWrap}>
+                <Text style={styles.validationBannerTitle}>
+                  {t('vendorAddProduct.fixErrors', { defaultValue: 'Please fix the following:' })}
                 </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View style={styles.imageGuidelines}>
-            <Text style={styles.guidelinesTitle}>Image Guidelines:</Text>
-            <View style={styles.guidelineItem}>
-              <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-              <Text style={styles.guidelineText}>High quality (minimum 800x800px)</Text>
-            </View>
-            <View style={styles.guidelineItem}>
-              <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-              <Text style={styles.guidelineText}>White or neutral background</Text>
-            </View>
-            <View style={styles.guidelineItem}>
-              <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-              <Text style={styles.guidelineText}>Multiple angles for 360° view</Text>
-            </View>
-            <View style={styles.guidelineItem}>
-              <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-              <Text style={styles.guidelineText}>Good lighting and clear details</Text>
-            </View>
-            <View style={styles.guidelineItem}>
-              <Ionicons name="information-circle" size={16} color={COLORS.info} />
-              <Text style={styles.guidelineText}>We check border whiteness ≥ 80% and resolution ≥ 800x800.</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Basic Information */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Basic Information</Text>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Product Name *</Text>
-            <TextInput
-              style={styles.textInput}
-              value={productData.name}
-              onChangeText={(value) => handleInputChange('name', value)}
-              placeholder="Enter product name"
-              placeholderTextColor={COLORS.textSecondary}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Description</Text>
-            <TextInput
-              style={[styles.textInput, styles.textArea]}
-              value={productData.description}
-              onChangeText={(value) => handleInputChange('description', value)}
-              placeholder="Describe your product in detail"
-              placeholderTextColor={COLORS.textSecondary}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Category *</Text>
-            <View style={styles.categoryGrid}>
-              {categories.map((category) => (
-                <TouchableOpacity
-                  key={category.id}
-                  style={[
-                    styles.categoryButton,
-                    productData.category === category.id && styles.categoryButtonActive
-                  ]}
-                  onPress={() => handleInputChange('category', category.id)}
-                >
-                  <Ionicons 
-                    name={category.icon as any} 
-                    size={20} 
-                    color={productData.category === category.id ? COLORS.background : COLORS.primary} 
-                  />
-                  <Text style={[
-                    styles.categoryButtonText,
-                    productData.category === category.id && styles.categoryButtonTextActive
-                  ]}>
-                    {category.name}
+                {Object.entries(errors).map(([key, message]) => (
+                  <Text key={key} style={styles.validationBannerItem}>
+                    • {message}
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-
-        {/* Product Details */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Product Details</Text>
-          
-          <View style={styles.row}>
-            <View style={[styles.inputGroup, styles.halfWidth]}>
-              <Text style={styles.inputLabel}>Brand</Text>
-              <TextInput
-                style={styles.textInput}
-                value={productData.brand}
-                onChangeText={(value) => handleInputChange('brand', value)}
-                placeholder="Brand name"
-                placeholderTextColor={COLORS.textSecondary}
-              />
-            </View>
-
-            <View style={[styles.inputGroup, styles.halfWidth]}>
-              <Text style={styles.inputLabel}>Material</Text>
-              <TextInput
-                style={styles.textInput}
-                value={productData.material}
-                onChangeText={(value) => handleInputChange('material', value)}
-                placeholder="e.g., Leather, Canvas"
-                placeholderTextColor={COLORS.textSecondary}
-              />
-            </View>
-          </View>
-
-          <View style={styles.row}>
-            <View style={[styles.inputGroup, styles.halfWidth]}>
-              <Text style={styles.inputLabel}>Size</Text>
-              <TextInput
-                style={styles.textInput}
-                value={productData.size}
-                onChangeText={(value) => handleInputChange('size', value)}
-                placeholder="e.g., 42, M, L"
-                placeholderTextColor={COLORS.textSecondary}
-              />
-            </View>
-
-            <View style={[styles.inputGroup, styles.halfWidth]}>
-              <Text style={styles.inputLabel}>Color</Text>
-              <TextInput
-                style={styles.textInput}
-                value={productData.color}
-                onChangeText={(value) => handleInputChange('color', value)}
-                placeholder="e.g., Black, Brown"
-                placeholderTextColor={COLORS.textSecondary}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Condition</Text>
-            <View style={styles.conditionGrid}>
-              {conditions.map((condition) => (
-                <TouchableOpacity
-                  key={condition.id}
-                  style={[
-                    styles.conditionButton,
-                    productData.condition === condition.id && styles.conditionButtonActive
-                  ]}
-                  onPress={() => handleInputChange('condition', condition.id)}
-                >
-                  <Text style={[
-                    styles.conditionButtonText,
-                    productData.condition === condition.id && styles.conditionButtonTextActive
-                  ]}>
-                    {condition.name}
-                  </Text>
-                  <Text style={[
-                    styles.conditionDescription,
-                    productData.condition === condition.id && styles.conditionDescriptionActive
-                  ]}>
-                    {condition.description}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Quantity Available</Text>
-            <TextInput
-              style={styles.textInput}
-              value={productData.quantity}
-              onChangeText={(value) => handleInputChange('quantity', value)}
-              placeholder="Number of items available"
-              placeholderTextColor={COLORS.textSecondary}
-              keyboardType="numeric"
-            />
-          </View>
-        </View>
-
-        {/* 3D Model */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>3D Model (optional)</Text>
-          <Text style={styles.sectionDescription}>Provide a URL to a .glb/.gltf model for interactive 3D view.</Text>
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Model URL</Text>
-            <TextInput
-              style={styles.textInput}
-              value={modelUrl}
-              onChangeText={setModelUrl}
-              placeholder="https://.../shoe.glb"
-              placeholderTextColor={COLORS.textSecondary}
-              autoCapitalize="none"
-            />
-          </View>
-        </View>
-
-        {/* Submit Button */}
-        <View style={styles.submitSection}>
-          <TouchableOpacity
-            style={[styles.submitButton, uploading && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={uploading}
-          >
-            {uploading ? (
-              <View style={styles.loadingContainer}>
-                <Ionicons name="cloud-upload" size={24} color={COLORS.background} />
-                <Text style={styles.submitButtonText}>Uploading...</Text>
+                ))}
               </View>
-            ) : (
-              <>
-                <Ionicons name="cloud-upload" size={24} color={COLORS.background} />
-                <Text style={styles.submitButtonText}>Upload Product</Text>
-              </>
+            </View>
+          ) : null}
+
+          <VendorCard style={styles.formCard}>
+            <SectionHeader
+              icon="cube-outline"
+              title={t('admin.addProduct.productDetails')}
+              subtitle={t('vendorAddProduct.detailsHint', { defaultValue: 'Basic info customers will see' })}
+            />
+
+            <Input
+              label={t('admin.addProduct.nameLabel')}
+              placeholder={t('admin.addProduct.namePlaceholder')}
+              value={name}
+              onChangeText={(text) => { setName(text); if (errors.name) setErrors({ ...errors, name: '' }); }}
+              leftIcon="pricetag-outline"
+              error={errors.name}
+            />
+
+            <Input
+              label={t('admin.addProduct.descriptionLabel')}
+              placeholder={t('admin.addProduct.descriptionPlaceholder')}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={3}
+              error={errors.description}
+            />
+
+            <View style={styles.row}>
+              <View style={styles.halfField}>
+                <Input
+                  label={t('admin.addProduct.priceLabel')}
+                  placeholder={t('admin.addProduct.pricePlaceholder')}
+                  value={price}
+                  onChangeText={(text) => { setPrice(text); if (errors.price) setErrors({ ...errors, price: '' }); }}
+                  keyboardType="numeric"
+                  leftIcon="cash-outline"
+                  error={errors.price}
+                />
+              </View>
+              <View style={styles.halfField}>
+                <Input
+                  label={t('admin.addProduct.stockLabel')}
+                  placeholder={t('admin.addProduct.stockPlaceholder')}
+                  value={stock}
+                  onChangeText={(text) => { setStock(text); if (errors.stock) setErrors({ ...errors, stock: '' }); }}
+                  keyboardType="number-pad"
+                  leftIcon="cube-outline"
+                  error={errors.stock}
+                />
+              </View>
+            </View>
+
+            <View style={styles.row}>
+              <View style={styles.halfField}>
+                {renderDropdown(
+                  t('admin.addProduct.statusLabel'),
+                  status,
+                  statusOptions,
+                  showStatusDropdown,
+                  () => setShowStatusDropdown((v) => !v),
+                  (v) => { setStatus(v); if (errors.status) setErrors({ ...errors, status: '' }); },
+                  'pulse-outline',
+                  errors.status
+                )}
+              </View>
+              <View style={styles.halfField}>
+                {renderDropdown(
+                  t('admin.addProduct.weightUnitLabel'),
+                  weightUnit,
+                  weightUnitOptions,
+                  showWeightUnitDropdown,
+                  () => setShowWeightUnitDropdown((v) => !v),
+                  setWeightUnit,
+                  'scale-outline'
+                )}
+              </View>
+            </View>
+
+            {renderDropdown(
+              t('vendorAddProduct.categoryLabel', { defaultValue: 'Category *' }),
+              categoryId,
+              categoryOptions,
+              showCategoryDropdown,
+              () => setShowCategoryDropdown((v) => !v),
+              (v) => { setCategoryId(v); if (errors.category_id) setErrors({ ...errors, category_id: '' }); },
+              'grid-outline',
+              errors.category_id
             )}
-          </TouchableOpacity>
-          
-          <Text style={styles.submitNote}>
-            Your product will be reviewed within 24 hours before being published
-          </Text>
+
+            {renderDropdown(
+              t('admin.addProduct.serviceLabel'),
+              serviceId,
+              serviceOptions,
+              showServiceDropdown,
+              () => setShowServiceDropdown((v) => !v),
+              (v) => { setServiceId(v); if (errors.service_id) setErrors({ ...errors, service_id: '' }); },
+              'construct-outline',
+              errors.service_id
+            )}
+
+            <View style={styles.featuredCard}>
+              <View style={styles.featuredLeft}>
+                <View style={styles.featuredIcon}>
+                  <Ionicons name="star-outline" size={18} color={COLORS.warning} />
+                </View>
+                <View style={styles.featuredText}>
+                  <Text style={styles.featuredLabel}>{t('admin.addProduct.featuredLabel')}</Text>
+                  <Text style={styles.featuredHint}>
+                    {t('vendorAddProduct.featuredHint', { defaultValue: 'Highlight on the home page' })}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={isFeatured}
+                onValueChange={setIsFeatured}
+                trackColor={{ false: COLORS.border, true: COLORS.primary + '55' }}
+                thumbColor={isFeatured ? COLORS.primary : COLORS.background}
+              />
+            </View>
+
+            <View style={styles.row}>
+              <View style={styles.halfField}>
+                <Input
+                  label={t('admin.addProduct.skuLabel')}
+                  placeholder={t('admin.addProduct.skuPlaceholder')}
+                  value={sku}
+                  onChangeText={(text) => { setSku(text); if (errors.sku) setErrors({ ...errors, sku: '' }); }}
+                  error={errors.sku}
+                />
+              </View>
+              <View style={styles.halfField}>
+                <Input
+                  label={t('admin.addProduct.handleLabel')}
+                  placeholder={t('admin.addProduct.handlePlaceholder')}
+                  value={handle}
+                  onChangeText={(text) => { setHandle(text); if (errors.handle) setErrors({ ...errors, handle: '' }); }}
+                  autoCapitalize="none"
+                  error={errors.handle}
+                />
+              </View>
+            </View>
+          </VendorCard>
+
+          <VendorCard style={styles.formCard}>
+            <SectionHeader
+              icon="time-outline"
+              title={t('admin.addProduct.serviceTimingTitle')}
+              subtitle={t('admin.addProduct.serviceTimingHint')}
+            />
+            <View style={styles.serviceTimingRow}>
+              <View style={styles.serviceTimingField}>
+                <Input
+                  label={t('admin.addProduct.estimatedArrivalLabel')}
+                  placeholder={t('admin.addProduct.estimatedArrivalPlaceholder')}
+                  value={estimatedArrival}
+                  onChangeText={setEstimatedArrival}
+                  leftIcon="airplane-outline"
+                />
+              </View>
+              <View style={styles.serviceTimingField}>
+                <Input
+                  label={t('admin.addProduct.jobDurationLabel')}
+                  placeholder={t('admin.addProduct.jobDurationPlaceholder')}
+                  value={jobDuration}
+                  onChangeText={setJobDuration}
+                  leftIcon="hourglass-outline"
+                />
+              </View>
+            </View>
+          </VendorCard>
+
+          <VendorCard style={styles.formCard}>
+            <SectionHeader
+              icon="options-outline"
+              title={t('vendorAddProduct.customizationTitle', { defaultValue: 'Product options' })}
+              subtitle={t('vendorAddProduct.customizationHint', {
+                defaultValue: 'Sizes, add-ons, or variants (optional)',
+              })}
+            />
+            <ProductCustomizationBuilder value={customizationConfig} onChange={setCustomizationConfig} />
+          </VendorCard>
+
+          <VendorCard style={styles.formCard}>
+            <SectionHeader
+              icon="image-outline"
+              title={t('admin.addProduct.mainImageTitle')}
+              subtitle={t('admin.addProduct.mainImageHint')}
+            />
+            <TouchableOpacity
+              style={[styles.uploadBtn, pickingMain && styles.uploadBtnDisabled]}
+              onPress={pickMainImageFromDevice}
+              disabled={pickingMain}
+              activeOpacity={0.88}
+            >
+              <View style={styles.uploadIconCircle}>
+                <Ionicons name="image-outline" size={20} color={COLORS.primary} />
+              </View>
+              <View style={styles.uploadTextWrap}>
+                <Text style={styles.uploadTitle} numberOfLines={1}>
+                  {pickingMain ? t('admin.addProduct.opening') : t('admin.addProduct.uploadFromDevice')}
+                </Text>
+                <Text style={styles.uploadSubtitle} numberOfLines={1}>
+                  {t('vendorAddProduct.mainImageTip', { defaultValue: 'JPG or PNG · recommended 800×800' })}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+            {mainImage ? (
+              <View style={styles.uploadedPreviewWrap}>
+                <View style={[styles.thumbWrap, styles.mainThumbWrap]}>
+                  <Image source={{ uri: mainImage.uri }} style={styles.thumb} contentFit="cover" />
+                  <View style={styles.mainBadge}>
+                    <Ionicons name="star" size={12} color={COLORS.background} />
+                    <Text style={styles.mainBadgeText}>{t('admin.addProduct.mainBadge')}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.thumbRemove} onPress={removeMainImage}>
+                    <Ionicons name="close-circle" size={24} color={COLORS.error} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+          </VendorCard>
+
+          <VendorCard style={styles.formCard}>
+            <SectionHeader
+              icon="images-outline"
+              title={t('admin.addProduct.extraImagesTitle')}
+              subtitle={t('admin.addProduct.extraImagesHint')}
+            />
+            <TouchableOpacity
+              style={[styles.uploadBtn, styles.uploadBtnSecondary, pickingExtra && styles.uploadBtnDisabled]}
+              onPress={pickExtraImagesFromDevice}
+              disabled={pickingExtra}
+              activeOpacity={0.88}
+            >
+              <View style={[styles.uploadIconCircle, styles.uploadIconCircleSecondary]}>
+                <Ionicons name="images-outline" size={20} color={COLORS.primary} />
+              </View>
+              <View style={styles.uploadTextWrap}>
+                <Text style={styles.uploadTitle} numberOfLines={1}>
+                  {pickingExtra ? t('admin.addProduct.opening') : t('vendorAddProduct.addGallery', { defaultValue: 'Add gallery photos' })}
+                </Text>
+                <Text style={styles.uploadSubtitle} numberOfLines={1}>
+                  {extraImages.length > 0
+                    ? t('vendorAddProduct.photosAdded', {
+                        defaultValue: '{{count}} photo(s) added',
+                        count: extraImages.length,
+                      })
+                    : t('vendorAddProduct.galleryTip', { defaultValue: 'Optional additional photos' })}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+            {extraImages.length > 0 ? (
+              <View style={styles.uploadedPreviewWrap}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbScroll}>
+                  {extraImages.map((img, index) => (
+                    <View key={index} style={styles.thumbWrap}>
+                      <Image source={{ uri: img.uri }} style={styles.thumb} contentFit="cover" />
+                      <TouchableOpacity style={styles.thumbRemove} onPress={() => removeExtraImage(index)}>
+                        <Ionicons name="close-circle" size={24} color={COLORS.error} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
+          </VendorCard>
+
+          <View style={styles.bottomPad} />
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <Button
+            title={t('admin.addProduct.createButton', { defaultValue: 'Create Product' })}
+            onPress={handleCreateProduct}
+            disabled={loading}
+            loading={loading}
+            style={styles.submitButton}
+          />
         </View>
-      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  backButton: {
-    padding: SPACING.xs,
-  },
-  title: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.text,
-  },
-  placeholder: {
-    width: 40,
-  },
-  scrollView: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: VENDOR_SCREEN_BG },
+  keyboardView: { flex: 1 },
+  scrollView: { flex: 1 },
   scrollContent: {
-    paddingBottom: SPACING.lg,
+    paddingBottom: SPACING.md,
   },
-  section: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  sectionTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
-  sectionDescription: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
-    lineHeight: 20,
-  },
-  imageGrid: {
+  validationBanner: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'flex-start',
     gap: SPACING.sm,
-    marginBottom: SPACING.md,
-  },
-  imageItem: {
-    position: 'relative',
-    width: (width - SPACING.lg * 3) / 3,
-    height: (width - SPACING.lg * 3) / 3,
-  },
-  imagePreview: {
-    width: '100%',
-    height: '100%',
-    borderRadius: BORDER_RADIUS.md,
-  },
-  qualityHints: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    backgroundColor: COLORS.background + 'CC',
-    borderRadius: BORDER_RADIUS.round,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  hintDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.success,
-  },
-  hintText: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.text,
-  },
-  removeImageButton: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-  },
-  imageNumber: {
-    position: 'absolute',
-    bottom: SPACING.xs,
-    left: SPACING.xs,
-    backgroundColor: COLORS.primary + 'CC',
-    paddingHorizontal: SPACING.xs,
-    paddingVertical: 2,
-    borderRadius: BORDER_RADIUS.round,
-  },
-  imageNumberText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.background,
-  },
-  addImageButton: {
-    width: (width - SPACING.lg * 3) / 3,
-    height: (width - SPACING.lg * 3) / 3,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    borderStyle: 'dashed',
-    borderRadius: BORDER_RADIUS.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-  },
-  addImageText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.primary,
-    marginTop: SPACING.xs,
-  },
-  addImageSubtext: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-  },
-  imageGuidelines: {
-    backgroundColor: COLORS.surface,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
     padding: SPACING.md,
+    backgroundColor: COLORS.error + '12',
     borderRadius: BORDER_RADIUS.lg,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: SPACING.sm,
+    borderColor: COLORS.error + '44',
   },
-  previewPlayer: {
-    width: '100%',
-    height: 220,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.lg,
-    marginBottom: SPACING.md,
-    overflow: 'hidden',
+  validationBannerTextWrap: {
+    flex: 1,
   },
-  previewImage: {
-    width: '100%',
-    height: '100%',
-  },
-  previewPlayBtn: {
-    position: 'absolute',
-    bottom: SPACING.sm,
-    right: SPACING.sm,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  previewPlayText: {
-    color: COLORS.background,
+  validationBannerTitle: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semiBold,
-  },
-  guidelinesTitle: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
-  guidelineItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  guidelineText: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginLeft: SPACING.xs,
-  },
-  inputGroup: {
-    marginBottom: SPACING.sm,
-  },
-  inputLabel: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.text,
+    color: COLORS.error,
     marginBottom: SPACING.xs,
   },
-  textInput: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    height: 44,
-    fontSize: FONT_SIZES.md,
+  validationBannerItem: {
+    fontSize: FONT_SIZES.sm,
     color: COLORS.text,
-    backgroundColor: COLORS.surface,
+    lineHeight: 20,
+    marginTop: 2,
   },
-  textArea: {
-    height: 60,
-    paddingTop: SPACING.sm,
+  formCard: {
+    marginHorizontal: 0,
+    marginBottom: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
   },
   row: {
     flexDirection: 'row',
-    gap: SPACING.md,
-  },
-  halfWidth: {
-    flex: 1,
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: SPACING.sm,
   },
-  categoryButton: {
+  halfField: {
+    flex: 1,
+    minWidth: 0,
+  },
+  serviceTimingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+  },
+  serviceTimingField: {
+    flex: 1,
+    minWidth: 0,
+  },
+  featuredCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surfaceLight,
     borderRadius: BORDER_RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
   },
-  categoryButtonActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  categoryButtonText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.primary,
-    marginLeft: SPACING.xs,
-  },
-  categoryButtonTextActive: {
-    color: COLORS.background,
-  },
-  conditionGrid: {
+  featuredLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: SPACING.sm,
     gap: SPACING.sm,
   },
-  conditionButton: {
-    padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
+  featuredIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.warning + '22',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  conditionButtonActive: {
-    backgroundColor: COLORS.primary + '20',
-    borderColor: COLORS.primary,
-  },
-  conditionButtonText: {
+  featuredText: { flex: 1 },
+  featuredLabel: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
-    marginBottom: SPACING.xs,
   },
-  conditionButtonTextActive: {
-    color: COLORS.primary,
-  },
-  conditionDescription: {
+  featuredHint: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
+    marginTop: 2,
   },
-  conditionDescriptionActive: {
-    color: COLORS.primary,
+  label: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.medium,
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
   },
-  submitSection: {
+  dropdownWrapper: { marginBottom: SPACING.md },
+  dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.sm + 2,
+    minHeight: 48,
+  },
+  dropdownLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  dropdownIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary + '12',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dropdownOpen: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '06',
+  },
+  dropdownError: { borderColor: COLORS.error },
+  dropdownText: { fontSize: FONT_SIZES.md, color: COLORS.text, flex: 1 },
+  dropdownPlaceholder: { color: COLORS.textSecondary },
+  dropdownListWrap: {
+    width: '100%',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.xl,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  submitButton: {
-    backgroundColor: COLORS.primary,
+  dropdownList: {
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    width: '100%',
+    maxWidth: 340,
+    maxHeight: 320,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 10,
+    overflow: 'hidden',
+  },
+  dropdownListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surfaceLight,
+  },
+  dropdownListTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+    flex: 1,
+  },
+  dropdownScroll: {
+    maxHeight: 272,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  dropdownItemSelected: { backgroundColor: COLORS.primary + '12' },
+  dropdownItemText: { fontSize: FONT_SIZES.md, color: COLORS.text, flex: 1 },
+  dropdownItemTextSelected: { fontWeight: FONT_WEIGHTS.semiBold, color: COLORS.primary },
+  errorText: { fontSize: FONT_SIZES.xs, color: COLORS.error, marginTop: SPACING.xs },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 37, 19, 0.45)',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xl,
+  },
+  uploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.md,
+    minHeight: 52,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+    borderStyle: 'dashed',
+    backgroundColor: COLORS.primary + '06',
+  },
+  uploadBtnSecondary: {
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceLight,
+  },
+  uploadBtnDisabled: { opacity: 0.6 },
+  uploadIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary + '20',
+  },
+  uploadIconCircleSecondary: {
+    borderColor: COLORS.border,
+  },
+  uploadTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  uploadTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
+  uploadSubtitle: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  uploadedPreviewWrap: { marginTop: SPACING.md },
+  thumbScroll: { marginHorizontal: -SPACING.xs },
+  thumbWrap: {
+    width: 88,
+    height: 88,
+    marginRight: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  mainThumbWrap: {
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    width: 120,
+    height: 120,
+  },
+  mainBadge: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    right: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.lg,
-    paddingHorizontal: SPACING.xl,
-    borderRadius: BORDER_RADIUS.lg,
-    width: '100%',
-    marginBottom: SPACING.md,
+    gap: 4,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: BORDER_RADIUS.sm,
   },
-  submitButtonDisabled: {
-    backgroundColor: COLORS.textSecondary,
-  },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: COLORS.background,
-    fontSize: FONT_SIZES.lg,
+  mainBadgeText: {
+    fontSize: 10,
     fontWeight: FONT_WEIGHTS.semiBold,
-    marginLeft: SPACING.sm,
+    color: COLORS.background,
   },
-  submitNote: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
+  thumb: { width: '100%', height: '100%' },
+  thumbRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
   },
+  footer: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.md,
+    backgroundColor: COLORS.background,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  submitButton: { marginTop: 0 },
+  bottomPad: { height: SPACING.sm },
 });
 
 export default VendorAddProductScreen;

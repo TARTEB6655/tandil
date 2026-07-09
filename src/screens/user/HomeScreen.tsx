@@ -27,6 +27,11 @@ import Header from '../../components/common/Header';
 import BeforeAfter from '../../components/common/BeforeAfter';
 import { useTranslation } from 'react-i18next';
 import { getBanners, getBannerImageUrl, Banner } from '../../services/bannerService';
+import {
+  getMaintenancePhotos,
+  getMaintenancePhotoImageUrl,
+  MaintenancePhoto,
+} from '../../services/maintenancePhotosService';
 import { shopService, ShopProductCategory, ShopProduct } from '../../services/shopService';
 import { publicServiceService, PublicService } from '../../services/publicServiceService';
 import { getExclusiveOffers, PublicExclusiveOffer } from '../../services/exclusiveOffersService';
@@ -62,6 +67,8 @@ const HomeScreen: React.FC = () => {
   const [featuredProductsLoading, setFeaturedProductsLoading] = useState(true);
   const [exclusiveOffers, setExclusiveOffers] = useState<PublicExclusiveOffer[]>([]);
   const [exclusiveOffersLoading, setExclusiveOffersLoading] = useState(true);
+  const [maintenancePhotos, setMaintenancePhotos] = useState<MaintenancePhoto[]>([]);
+  const [maintenancePhotosLoading, setMaintenancePhotosLoading] = useState(true);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [locationPermissionStatus, setLocationPermissionStatus] =
@@ -211,6 +218,33 @@ const HomeScreen: React.FC = () => {
       });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMaintenancePhotosLoading(true);
+    getMaintenancePhotos(20)
+      .then((list) => {
+        if (!cancelled) setMaintenancePhotos(list);
+      })
+      .finally(() => {
+        if (!cancelled) setMaintenancePhotosLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getMaintenancePhotos(20).then((list) => {
+        if (!cancelled) setMaintenancePhotos(list);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
 
   const applyWeatherResult = useCallback(
     (result: {
@@ -700,48 +734,58 @@ const HomeScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Maintenance Photos (horizontal slider of multiple before/after cards) */}
+      {/* Maintenance Photos – GET /api/maintenance-photos?per_page=20 */}
       {(() => {
-        // Fixed agriculture/tree-maintenance images from Pixabay (stable, no randomness)
-        // Fixed palm/garden maintenance images
-        const demoBefore = [
-          'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1200&q=60', // leaves with water
-          'https://images.unsplash.com/photo-1482192505345-5655af888cc4?auto=format&fit=crop&w=1200&q=60', // tools on soil
-          'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=1200&q=60', // garden path
-        ];
-        const demoAfter = [
-          'https://images.unsplash.com/photo-1520975954732-35dd22f4758f?auto=format&fit=crop&w=1200&q=60', // maintained palm
-          'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=60', // pruned garden
-          'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=60', // healthy leaves
-        ];
-        // Always show curated palm maintenance demo on Home
-        const beforeList: string[] = demoBefore;
-        const afterList: string[] = demoAfter;
-        const count = Math.min(beforeList.length, afterList.length);
+        const pairs = maintenancePhotos
+          .map((photo) => {
+            const before = getMaintenancePhotoImageUrl(photo, 'before');
+            const after = getMaintenancePhotoImageUrl(photo, 'after');
+            if (!before || !after) return null;
+            return { id: photo.id, before, after };
+          })
+          .filter((p): p is { id: number; before: string; after: string } => p != null);
+
+        if (!maintenancePhotosLoading && pairs.length === 0) {
+          return null;
+        }
+
         return (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{t('home.maintenancePhotos')}</Text>
+              <Text style={[styles.sectionTitle, styles.sectionTitleInHeader]}>
+                {t('home.maintenancePhotos')}
+              </Text>
               {orderWithPhotos?.id ? (
-                <TouchableOpacity onPress={() => navigation.navigate('OrderTracking', { orderId: orderWithPhotos.id })}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('OrderTracking', { orderId: orderWithPhotos.id })}
+                >
                   <Text style={styles.viewAllText}>{t('home.viewOrder')}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={{ flexDirection: 'row' }}>
-                {beforeList.slice(0, count).map((bUri, idx) => (
-                  <View key={`home-ba-${idx}`} style={{ width: 300, marginRight: SPACING.md }}>
+
+            {maintenancePhotosLoading && pairs.length === 0 ? (
+              <View style={styles.maintenanceLoadingWrap}>
+                <ActivityIndicator color={COLORS.primary} />
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.maintenanceScrollContent}
+              >
+                {pairs.map((pair) => (
+                  <View key={`maintenance-photo-${pair.id}`} style={styles.maintenanceCard}>
                     <BeforeAfter
-                      beforeUri={bUri}
-                      afterUri={afterList[idx]}
+                      beforeUri={pair.before}
+                      afterUri={pair.after}
                       width={300}
                       aspectRatio={0.6}
                     />
                   </View>
                 ))}
-              </View>
-            </ScrollView>
+              </ScrollView>
+            )}
           </View>
         );
       })()}
@@ -1107,6 +1151,29 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
     marginBottom: SPACING.sm,
+  },
+  sectionTitleInHeader: {
+    marginBottom: 0,
+  },
+  maintenanceScrollContent: {
+    paddingRight: SPACING.lg,
+  },
+  maintenanceCard: {
+    width: 300,
+    marginRight: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    overflow: 'hidden',
+    backgroundColor: COLORS.surface,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  maintenanceLoadingWrap: {
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   viewAllButton: {
     flexDirection: 'row',

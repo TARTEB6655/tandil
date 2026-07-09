@@ -12,11 +12,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import { useAppStore } from '../../store';
+import { authService } from '../../services/authService';
+import {
+  VendorPageHeader,
+  VendorCard,
+  VENDOR_SCREEN_BG,
+} from '../../components/vendor/VendorUi';
 
 const VendorSettingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  
+  const { t } = useTranslation();
+  const user = useAppStore((s) => s.user);
+  const logout = useAppStore((s) => s.logout);
   const [settings, setSettings] = useState({
     notifications: true,
     emailNotifications: false,
@@ -64,7 +74,7 @@ const VendorSettingsScreen: React.FC = () => {
         Alert.alert('Clear Cache', 'Cache cleared successfully!');
         break;
       case 'about':
-        Alert.alert('About Shozy Vendor', 'Shozy Vendor App v1.0.0\n\nA comprehensive vendor management platform for partners and businesses.');
+        Alert.alert('About Tandil Vendor', 'Tandil Vendor App v1.0.0\n\nManage your agricultural products, orders, and store on the Tandil marketplace.');
         break;
       case 'terms':
         Alert.alert('Terms of Service', 'Terms of service document coming soon!');
@@ -347,58 +357,107 @@ const VendorSettingsScreen: React.FC = () => {
     },
   ];
 
+  const resetToRoleSelection = () => {
+    let rootNavigator = navigation;
+    while (rootNavigator.getParent()) {
+      rootNavigator = rootNavigator.getParent() as typeof navigation;
+    }
+    rootNavigator.reset({
+      index: 0,
+      routes: [{ name: 'RoleSelection' }],
+    });
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      t('technician.logout', { defaultValue: 'Logout' }),
+      t('technician.logoutConfirm', { defaultValue: 'Are you sure you want to logout?' }),
+      [
+        { text: t('technician.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('technician.logout', { defaultValue: 'Logout' }),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await logout();
+            } catch (error) {
+              console.error('Vendor logout error:', error);
+              await authService.clearLocalSession();
+            } finally {
+              resetToRoleSelection();
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Settings</Text>
-        <View style={styles.headerRight} />
-      </View>
+
+      <VendorPageHeader
+        title={t('vendorDashboard.settings')}
+        subtitle={t('vendorDashboard.settingsHint')}
+        onBack={() => navigation.goBack()}
+      />
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-        {/* Profile Summary */}
-        <View style={styles.profileSection}>
+        <VendorCard style={styles.profileCard}>
           <View style={styles.profileInfo}>
             <View style={styles.profileAvatar}>
-              <Ionicons name="business" size={32} color={COLORS.primary} />
+              <Ionicons name="leaf" size={28} color={COLORS.primary} />
             </View>
             <View style={styles.profileDetails}>
-              <Text style={styles.profileName}>Luxury Shoes & Accessories</Text>
-              <Text style={styles.profileEmail}>ahmed@luxuryshoes.ae</Text>
-              <Text style={styles.profileTier}>Silver Partner</Text>
+              <Text style={styles.profileName}>{user?.name || 'Green Fields Agro Supplies'}</Text>
+              <Text style={styles.profileEmail}>{user?.email || 'khalid@greenfields.ae'}</Text>
+              <Text style={styles.profileTier}>Silver Partner · Tandil</Text>
             </View>
           </View>
-        </View>
+        </VendorCard>
 
-        {/* Settings Sections */}
-        {settingsSections.map(renderSettingSection)}
+        {settingsSections.map((section) => (
+          <VendorCard key={section.title} style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            {section.items.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.settingItem}
+                onPress={() => item.type !== 'toggle' && handleSettingAction(item.action)}
+                activeOpacity={item.type === 'toggle' ? 1 : 0.85}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.settingIcon, { backgroundColor: item.iconColor + '18' }]}>
+                    <Ionicons name={item.icon as any} size={20} color={item.iconColor} />
+                  </View>
+                  <View style={styles.settingInfo}>
+                    <Text style={styles.settingTitle}>{item.title}</Text>
+                    <Text style={styles.settingSubtitle}>{item.subtitle}</Text>
+                  </View>
+                </View>
+                {item.type === 'toggle' ? (
+                  <Switch
+                    value={settings[item.key as keyof typeof settings] as boolean}
+                    onValueChange={(value) => handleSettingToggle(item.key, value)}
+                    trackColor={{ false: COLORS.border, true: COLORS.primary + '40' }}
+                    thumbColor={COLORS.primary}
+                  />
+                ) : (
+                  <View style={styles.settingRight}>
+                    {'value' in item && item.value ? (
+                      <Text style={styles.settingValue}>{item.value}</Text>
+                    ) : null}
+                    <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+          </VendorCard>
+        ))}
 
         {/* Logout Section */}
         <View style={styles.logoutSection}>
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={() => {
-              Alert.alert(
-                'Logout',
-                'Are you sure you want to logout?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Logout', style: 'destructive', onPress: () => {
-                    Alert.alert('Logged Out', 'You have been successfully logged out.');
-                    navigation.navigate('RoleSelection');
-                  }},
-                ]
-              );
-            }}
-          >
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={24} color={COLORS.error} />
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
@@ -406,7 +465,7 @@ const VendorSettingsScreen: React.FC = () => {
 
         {/* App Version */}
         <View style={styles.versionContainer}>
-          <Text style={styles.versionText}>Shozy Vendor App v1.0.0</Text>
+          <Text style={styles.versionText}>Tandil Vendor v1.0.0</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -416,35 +475,14 @@ const VendorSettingsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  backButton: {
-    padding: SPACING.xs,
-  },
-  title: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.text,
-  },
-  headerRight: {
-    width: 40,
+    backgroundColor: VENDOR_SCREEN_BG,
   },
   scrollView: {
     flex: 1,
   },
-  profileSection: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.primary + '10',
+  profileCard: {
+    marginTop: SPACING.md,
+    paddingVertical: SPACING.md,
   },
   profileInfo: {
     flexDirection: 'row',
@@ -478,30 +516,24 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.primary,
   },
-  section: {
-    marginBottom: SPACING.lg,
+  sectionCard: {
+    paddingHorizontal: 0,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xs,
   },
   sectionTitle: {
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semiBold,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
-    marginBottom: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
-  },
-  sectionContainer: {
-    backgroundColor: COLORS.surface,
-    marginHorizontal: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: 'hidden',
+    marginBottom: SPACING.xs,
+    paddingHorizontal: SPACING.md,
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },

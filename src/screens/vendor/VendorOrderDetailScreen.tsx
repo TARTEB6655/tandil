@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -8,132 +8,257 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  ActivityIndicator,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import * as Sharing from 'expo-sharing';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import {
+  vendorOrderService,
+  VendorOrderDetail,
+} from '../../services/vendorOrderService';
+
+const statusSteps = [
+  { id: 'pending', name: 'Pending', icon: 'time-outline', color: COLORS.warning },
+  { id: 'confirmed', name: 'Confirmed', icon: 'checkmark-circle-outline', color: COLORS.info },
+  { id: 'processing', name: 'Processing', icon: 'cog-outline', color: COLORS.primary },
+  { id: 'shipped', name: 'Shipped', icon: 'car-outline', color: COLORS.success },
+  { id: 'delivered', name: 'Delivered', icon: 'checkmark-done-circle', color: COLORS.success },
+];
+
+function formatDateTime(value?: string): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
+}
+
+function formatDate(value?: string): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString();
+}
 
 const VendorOrderDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { orderId } = route.params || {};
 
-  const [orderStatus, setOrderStatus] = useState('confirmed');
+  const [order, setOrder] = useState<VendorOrderDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [shipModalVisible, setShipModalVisible] = useState(false);
+  const [trackingNumber, setTrackingNumber] = useState('');
+  const [shipNote, setShipNote] = useState('Dispatched via courier');
 
-  // Demo order data
-  const orderData = {
-    id: 'ORD-2024-001',
-    orderNumber: '#2024001',
-    customerName: 'Sarah Al Mansouri',
-    customerPhone: '+971 50 987 6543',
-    customerEmail: 'sarah@email.com',
-    customerAddress: 'Villa 15, Palm Jumeirah, Dubai, UAE',
-    productName: 'Premium Leather Sneakers',
-    productImage: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400',
-    quantity: 1,
-    status: 'confirmed',
-    orderDate: '2024-01-15 14:30',
-    deliveryDate: '2024-01-18',
-    totalAmount: 'AED 299',
-    paymentMethod: 'Credit Card',
-    paymentStatus: 'Paid',
-    notes: 'Please deliver in the afternoon between 2-4 PM',
-    trackingNumber: 'TRK-2024-001',
-  };
+  const orderStatus = order?.status ?? 'pending';
 
-  const statusSteps = [
-    { id: 'pending', name: 'Pending', icon: 'time-outline', color: COLORS.warning },
-    { id: 'confirmed', name: 'Confirmed', icon: 'checkmark-circle-outline', color: COLORS.info },
-    { id: 'processing', name: 'Processing', icon: 'cog-outline', color: COLORS.primary },
-    { id: 'shipped', name: 'Shipped', icon: 'car-outline', color: COLORS.success },
-    { id: 'delivered', name: 'Delivered', icon: 'checkmark-done-circle', color: COLORS.success },
-  ];
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return COLORS.warning;
-      case 'confirmed': return COLORS.info;
-      case 'processing': return COLORS.primary;
-      case 'shipped': return COLORS.success;
-      case 'delivered': return COLORS.success;
-      default: return COLORS.textSecondary;
+  const loadOrder = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await vendorOrderService.getOrder(orderId);
+      setOrder(data);
+    } catch (error: unknown) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to load order.');
+      setOrder(null);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [orderId]);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending': return 'time-outline';
-      case 'confirmed': return 'checkmark-circle-outline';
-      case 'processing': return 'cog-outline';
-      case 'shipped': return 'car-outline';
-      case 'delivered': return 'checkmark-done-circle';
-      default: return 'help-outline';
-    }
-  };
+  useFocusEffect(
+    useCallback(() => {
+      loadOrder();
+    }, [loadOrder])
+  );
+
+  const firstItem = order?.items?.[0];
+  const notesText =
+    order?.notes?.map((n) => n.note).filter(Boolean).join('\n\n') || '';
 
   const handleStatusUpdate = (newStatus: string) => {
-    Alert.alert(
-      'Update Status',
-      `Are you sure you want to update the order status to "${newStatus}"?`,
-      [
+    if (!order) return;
+    if (newStatus === orderStatus) return;
+
+    if (newStatus === 'confirmed' && orderStatus === 'pending') {
+      Alert.alert('Update Status', 'Confirm this order?', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Update', onPress: () => {
-          setOrderStatus(newStatus);
-          Alert.alert('Success', `Order status updated to ${newStatus}`);
-        }},
-      ]
-    );
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            setActionLoading(true);
+            try {
+              const updated = await vendorOrderService.updateOrderStatus(orderId, {
+                status: 'confirmed',
+                note: 'Order accepted',
+              });
+              setOrder(updated);
+              Alert.alert('Success', 'Order status updated to confirmed');
+            } catch (error: unknown) {
+              Alert.alert('Error', error instanceof Error ? error.message : 'Failed to update order.');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]);
+      return;
+    }
+
+    if (newStatus === 'shipped' && (orderStatus === 'confirmed' || orderStatus === 'processing')) {
+      setShipModalVisible(true);
+      return;
+    }
+
+    if (newStatus === 'delivered' && orderStatus === 'shipped') {
+      Alert.alert('Update Status', 'Mark this order as delivered?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Update',
+          onPress: async () => {
+            setActionLoading(true);
+            try {
+              const updated = await vendorOrderService.updateOrderStatus(orderId, {
+                status: 'delivered',
+                note: 'Delivered to customer',
+              });
+              setOrder(updated);
+              Alert.alert('Success', 'Order status updated to delivered');
+            } catch (error: unknown) {
+              Alert.alert('Error', error instanceof Error ? error.message : 'Failed to update order.');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]);
+      return;
+    }
+
+    Alert.alert('Update Status', 'This status change is not allowed for the current order.');
+  };
+
+  const handleShip = async () => {
+    if (!trackingNumber.trim()) {
+      Alert.alert('Tracking required', 'Please enter a tracking number.');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const updated = await vendorOrderService.updateOrderStatus(orderId, {
+        status: 'shipped',
+        note: shipNote.trim() || 'Dispatched via courier',
+        tracking_number: trackingNumber.trim(),
+      });
+      setOrder(updated);
+      setShipModalVisible(false);
+      setTrackingNumber('');
+      Alert.alert('Success', 'Order status updated to shipped');
+    } catch (error: unknown) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to ship order.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleContactCustomer = () => {
-    Alert.alert(
-      'Contact Customer',
-      'Choose contact method:',
-      [
-        { text: 'Call', onPress: () => Alert.alert('Call', `Calling ${orderData.customerPhone}`) },
-        { text: 'Email', onPress: () => Alert.alert('Email', `Opening email to ${orderData.customerEmail}`) },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    if (order?.can_contact_customer) {
+      navigation.navigate('OrderContact', { orderId });
+      return;
+    }
+    Alert.alert('Contact Customer', 'Contact details are not available for this order.');
   };
 
-  const renderStatusStep = (step: any, index: number) => {
+  const handlePrintInvoice = async () => {
+    if (!order?.can_print_invoice) {
+      Alert.alert('Print Invoice', 'Invoice is not available for this order.');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const uri = await vendorOrderService.downloadInvoicePdf(orderId);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Print Invoice',
+        });
+      } else {
+        await Linking.openURL(uri);
+      }
+    } catch (error: unknown) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to load invoice.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDownloadOrder = async () => {
+    if (!order?.can_download_order) {
+      Alert.alert('Download', 'Download is not available for this order.');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const uri = await vendorOrderService.downloadOrderPdf(orderId);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Download Order',
+        });
+      } else {
+        await Linking.openURL(uri);
+      }
+    } catch (error: unknown) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to download order.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const renderStatusStep = (step: (typeof statusSteps)[0], index: number) => {
     const isActive = orderStatus === step.id;
-    const isCompleted = statusSteps.findIndex(s => s.id === orderStatus) >= index;
-    
+    const currentIndex = statusSteps.findIndex((s) => s.id === orderStatus);
+    const isCompleted = currentIndex >= index;
+
     return (
       <View key={step.id} style={styles.statusStep}>
-        <View style={[
-          styles.statusIcon,
-          isActive && { backgroundColor: step.color + '20' },
-          isCompleted && { backgroundColor: step.color + '20' }
-        ]}>
-          <Ionicons 
-            name={step.icon as any} 
-            size={20} 
-            color={isActive || isCompleted ? step.color : COLORS.textSecondary} 
+        <View
+          style={[
+            styles.statusIcon,
+            isActive && { backgroundColor: step.color + '20' },
+            isCompleted && { backgroundColor: step.color + '20' },
+          ]}
+        >
+          <Ionicons
+            name={step.icon as any}
+            size={20}
+            color={isActive || isCompleted ? step.color : COLORS.textSecondary}
           />
         </View>
         <View style={styles.statusInfo}>
-          <Text style={[
-            styles.statusName,
-            isActive && { color: step.color },
-            isCompleted && { color: step.color }
-          ]}>
+          <Text
+            style={[
+              styles.statusName,
+              isActive && { color: step.color },
+              isCompleted && { color: step.color },
+            ]}
+          >
             {step.name}
           </Text>
           {isActive && (
-            <Text style={[styles.statusActive, { color: step.color }]}>
-              Current Status
-            </Text>
+            <Text style={[styles.statusActive, { color: step.color }]}>Current Status</Text>
           )}
         </View>
         {index < statusSteps.length - 1 && (
-          <View style={[
-            styles.statusLine,
-            isCompleted && { backgroundColor: step.color }
-          ]} />
+          <View style={[styles.statusLine, isCompleted && { backgroundColor: step.color }]} />
         )}
       </View>
     );
@@ -149,20 +274,52 @@ const VendorOrderDetailScreen: React.FC = () => {
     </View>
   );
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.title}>Order Details</Text>
+          <View style={styles.moreButton} />
+        </View>
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!order) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.title}>Order Details</Text>
+          <View style={styles.moreButton} />
+        </View>
+        <View style={styles.loadingState}>
+          <Text style={styles.emptyText}>Order not found.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      
-      {/* Header */}
+
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Order Details</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.moreButton}
           onPress={() => Alert.alert('More Options', 'Additional order actions coming soon!')}
         >
@@ -171,89 +328,106 @@ const VendorOrderDetailScreen: React.FC = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-        {/* Order Status */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Order Status</Text>
-          <View style={styles.statusContainer}>
-            {statusSteps.map(renderStatusStep)}
-          </View>
+          <View style={styles.statusContainer}>{statusSteps.map(renderStatusStep)}</View>
         </View>
 
-        {/* Order Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Order Information</Text>
           <View style={styles.orderInfoContainer}>
-            {renderInfoRow('Order ID', orderData.orderNumber, 'receipt-outline')}
-            {renderInfoRow('Order Date', orderData.orderDate, 'calendar-outline')}
-            {renderInfoRow('Delivery Date', orderData.deliveryDate, 'calendar-outline')}
-            {renderInfoRow('Payment Method', orderData.paymentMethod, 'card-outline')}
-            {renderInfoRow('Payment Status', orderData.paymentStatus, 'checkmark-circle-outline')}
-            {renderInfoRow('Tracking Number', orderData.trackingNumber, 'location-outline')}
+            {renderInfoRow('Order ID', order.order_number, 'receipt-outline')}
+            {renderInfoRow('Order Date', formatDateTime(order.order_date), 'calendar-outline')}
+            {renderInfoRow('Delivery Date', formatDate(order.delivery_date), 'calendar-outline')}
+            {renderInfoRow(
+              'Total Amount',
+              order.total_amount > 0 ? `AED ${order.total_amount.toFixed(2)}` : 'FREE',
+              'cash-outline'
+            )}
+            {renderInfoRow('Tracking Number', order.tracking_number || '—', 'location-outline')}
           </View>
         </View>
 
-        {/* Product Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Product Information</Text>
           <View style={styles.productCard}>
-            <Image source={{ uri: orderData.productImage }} style={styles.productImage} />
+            {firstItem?.product_image ? (
+              <Image source={{ uri: firstItem.product_image }} style={styles.productImage} />
+            ) : (
+              <View style={[styles.productImage, styles.productImagePlaceholder]}>
+                <Ionicons name="cube-outline" size={28} color={COLORS.primary} />
+              </View>
+            )}
             <View style={styles.productInfo}>
-              <Text style={styles.productName}>{orderData.productName}</Text>
-              <Text style={styles.productQuantity}>Quantity: {orderData.quantity}</Text>
-              <Text style={styles.productPrice}>{orderData.totalAmount}</Text>
+              <Text style={styles.productName}>
+                {firstItem?.product_name || order.product_name || 'Product'}
+              </Text>
+              <Text style={styles.productQuantity}>
+                Quantity: {firstItem?.quantity ?? order.quantity ?? 1}
+              </Text>
+              <Text style={styles.productPrice}>
+                {order.total_amount > 0
+                  ? `AED ${(firstItem?.total ?? order.total_amount).toFixed(2)}`
+                  : 'FREE PRODUCT'}
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* Customer Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Customer Information</Text>
           <View style={styles.customerInfoContainer}>
-            {renderInfoRow('Name', orderData.customerName, 'person-outline')}
-            {renderInfoRow('Phone', orderData.customerPhone, 'call-outline')}
-            {renderInfoRow('Email', orderData.customerEmail, 'mail-outline')}
-            {renderInfoRow('Address', orderData.customerAddress, 'location-outline')}
+            {renderInfoRow('Name', order.customer_name, 'person-outline')}
+            {renderInfoRow('Phone', order.customer_phone || '—', 'call-outline')}
+            {renderInfoRow('Email', order.customer_email || '—', 'mail-outline')}
+            {renderInfoRow('Address', order.customer_address || '—', 'location-outline')}
           </View>
         </View>
 
-        {/* Order Notes */}
-        {orderData.notes && (
+        {notesText ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Order Notes</Text>
             <View style={styles.notesContainer}>
-              <Text style={styles.notesText}>{orderData.notes}</Text>
+              <Text style={styles.notesText}>{notesText}</Text>
             </View>
           </View>
-        )}
+        ) : null}
 
-        {/* Actions */}
         <View style={styles.actionsSection}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.primaryButton]}
-            onPress={handleContactCustomer}
-          >
-            <Ionicons name="call-outline" size={24} color={COLORS.background} />
-            <Text style={styles.primaryButtonText}>Contact Customer</Text>
-          </TouchableOpacity>
+          {(order.can_contact_customer ?? true) && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.primaryButton]}
+              onPress={handleContactCustomer}
+              disabled={actionLoading}
+            >
+              <Ionicons name="call-outline" size={24} color={COLORS.background} />
+              <Text style={styles.primaryButtonText}>Contact Customer</Text>
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryButton]}
-            onPress={() => Alert.alert('Print Invoice', 'Invoice printing feature coming soon!')}
-          >
-            <Ionicons name="print-outline" size={24} color={COLORS.primary} />
-            <Text style={styles.secondaryButtonText}>Print Invoice</Text>
-          </TouchableOpacity>
+          {(order.can_print_invoice ?? true) && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryButton]}
+              onPress={handlePrintInvoice}
+              disabled={actionLoading}
+            >
+              <Ionicons name="print-outline" size={24} color={COLORS.primary} />
+              <Text style={styles.secondaryButtonText}>Print Invoice</Text>
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryButton]}
-            onPress={() => Alert.alert('Download', 'Download feature coming soon!')}
-          >
-            <Ionicons name="download-outline" size={24} color={COLORS.primary} />
-            <Text style={styles.secondaryButtonText}>Download Order</Text>
-          </TouchableOpacity>
+          {(order.can_download_order ?? true) && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryButton]}
+              onPress={handleDownloadOrder}
+              disabled={actionLoading}
+            >
+              <Ionicons name="download-outline" size={24} color={COLORS.primary} />
+              <Text style={styles.secondaryButtonText}>Download Order</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Status Update Actions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Update Order Status</Text>
           <View style={styles.statusUpdateGrid}>
@@ -262,19 +436,25 @@ const VendorOrderDetailScreen: React.FC = () => {
                 key={step.id}
                 style={[
                   styles.statusUpdateButton,
-                  orderStatus === step.id && { backgroundColor: step.color + '20', borderColor: step.color }
+                  orderStatus === step.id && {
+                    backgroundColor: step.color + '20',
+                    borderColor: step.color,
+                  },
                 ]}
                 onPress={() => handleStatusUpdate(step.id)}
+                disabled={actionLoading}
               >
-                <Ionicons 
-                  name={step.icon as any} 
-                  size={20} 
-                  color={orderStatus === step.id ? step.color : COLORS.textSecondary} 
+                <Ionicons
+                  name={step.icon as any}
+                  size={20}
+                  color={orderStatus === step.id ? step.color : COLORS.textSecondary}
                 />
-                <Text style={[
-                  styles.statusUpdateText,
-                  orderStatus === step.id && { color: step.color }
-                ]}>
+                <Text
+                  style={[
+                    styles.statusUpdateText,
+                    orderStatus === step.id && { color: step.color },
+                  ]}
+                >
                   {step.name}
                 </Text>
               </TouchableOpacity>
@@ -282,6 +462,43 @@ const VendorOrderDetailScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+
+      <Modal visible={shipModalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Ship Order</Text>
+            <Text style={styles.fieldLabel}>Tracking number *</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="TRK-2026-0001"
+              value={trackingNumber}
+              onChangeText={setTrackingNumber}
+              autoCapitalize="characters"
+            />
+            <Text style={styles.fieldLabel}>Note</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Dispatched via courier"
+              value={shipNote}
+              onChangeText={setShipNote}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setShipModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalConfirm} onPress={handleShip}>
+                <Text style={styles.modalConfirmText}>Ship</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -310,9 +527,19 @@ const styles = StyleSheet.create({
   },
   moreButton: {
     padding: SPACING.xs,
+    width: 32,
   },
   scrollView: {
     flex: 1,
+  },
+  loadingState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
   },
   section: {
     paddingHorizontal: SPACING.lg,
@@ -395,6 +622,9 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.text,
+    flexShrink: 1,
+    textAlign: 'right',
+    marginLeft: SPACING.sm,
   },
   productCard: {
     flexDirection: 'row',
@@ -409,6 +639,11 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: BORDER_RADIUS.md,
     marginRight: SPACING.md,
+  },
+  productImagePlaceholder: {
+    backgroundColor: COLORS.primary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   productInfo: {
     flex: 1,
@@ -501,6 +736,65 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.textSecondary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+  },
+  modalTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
+  fieldLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  modalCancel: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalCancelText: {
+    color: COLORS.text,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
+  modalConfirm: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primary,
+  },
+  modalConfirmText: {
+    color: '#fff',
+    fontWeight: FONT_WEIGHTS.semibold,
   },
 });
 

@@ -19,6 +19,7 @@ const ROLE_TO_ROOT_ROUTE: Record<string, RootAppRoute> = {
   hr: 'HRManagerApp',
   hr_manager: 'HRManagerApp',
   area_manager: 'AreaManagerApp',
+  vendor: 'VendorApp',
 };
 
 export function rootRouteForRole(role: string | null | undefined): RootAppRoute | null {
