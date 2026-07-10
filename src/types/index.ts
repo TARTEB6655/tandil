@@ -337,7 +337,6 @@ export type VendorStackParamList = {
   Dashboard: undefined;
   Products: undefined;
   Orders: undefined;
-  Partnership: undefined;
   Profile: undefined;
   ProductDetail: { productId: string };
   AddProduct: undefined;
@@ -347,7 +346,6 @@ export type VendorStackParamList = {
   Analytics: undefined;
   Inventory: undefined;
   Pricing: undefined;
-  Settings: undefined;
   EditProfile: undefined;
   BusinessInfo: undefined;
   LocationAddress: undefined;

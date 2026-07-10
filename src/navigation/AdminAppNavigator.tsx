@@ -62,8 +62,8 @@ import AdminTopSellingProductsScreen from '../screens/admin/AdminTopSellingProdu
 import AdminVendorSignupRequestsScreen from '../screens/admin/AdminVendorSignupRequestsScreen';
 import AdminVendorLiveChatSessionsScreen from '../screens/admin/AdminVendorLiveChatSessionsScreen';
 import AdminVendorLiveChatScreen from '../screens/admin/AdminVendorLiveChatScreen';
-import AdminVendorPartnershipTiersScreen from '../screens/admin/AdminVendorPartnershipTiersScreen';
-import AdminVendorPartnershipTierFormScreen from '../screens/admin/AdminVendorPartnershipTierFormScreen';
+import AdminVendorManagementScreen from '../screens/admin/AdminVendorManagementScreen';
+import AdminVendorProductsScreen from '../screens/admin/AdminVendorProductsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -208,8 +208,8 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminVendorSignupRequests" component={AdminVendorSignupRequestsScreen} />
         <Stack.Screen name="AdminVendorLiveChatSessions" component={AdminVendorLiveChatSessionsScreen} />
         <Stack.Screen name="AdminVendorLiveChat" component={AdminVendorLiveChatScreen} />
-        <Stack.Screen name="AdminVendorPartnershipTiers" component={AdminVendorPartnershipTiersScreen} />
-        <Stack.Screen name="AdminVendorPartnershipTierForm" component={AdminVendorPartnershipTierFormScreen} />
+        <Stack.Screen name="AdminVendorManagement" component={AdminVendorManagementScreen} />
+        <Stack.Screen name="AdminVendorProducts" component={AdminVendorProductsScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

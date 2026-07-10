@@ -99,18 +99,11 @@ const VendorDashboardScreen: React.FC = () => {
       onPress: () => navigation.navigate('Analytics'),
     },
     {
-      icon: 'business-outline',
-      color: '#8B6914',
-      title: t('vendorTabs.partnership'),
-      subtitle: t('vendorDashboard.partnershipHint'),
-      onPress: () => navigation.navigate('Partnership'),
-    },
-    {
-      icon: 'settings-outline',
+      icon: 'person-outline',
       color: COLORS.textSecondary,
-      title: t('vendorDashboard.settings'),
+      title: t('vendorTabs.profile'),
       subtitle: t('vendorDashboard.settingsHint'),
-      onPress: () => navigation.navigate('Settings'),
+      onPress: () => navigation.navigate('Profile'),
     },
   ];
 
@@ -136,7 +129,9 @@ const VendorDashboardScreen: React.FC = () => {
             <View style={styles.highlightRow}>
               <View style={[styles.highlightCard, styles.highlightPrimary]}>
                 <Ionicons name="cash-outline" size={28} color={COLORS.background} />
-                <Text style={styles.highlightValue}>AED {stats.revenue.toFixed(0)}</Text>
+                <Text style={styles.highlightValue}>
+                  {stats.currency} {Math.round(stats.revenue)}
+                </Text>
                 <Text style={styles.highlightLabel}>{t('vendorDashboard.revenue')}</Text>
               </View>
               <View style={[styles.highlightCard, styles.highlightAccent]}>

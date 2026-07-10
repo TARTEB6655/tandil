@@ -65,17 +65,6 @@ const VendorProductsScreen: React.FC = () => {
     }, [loadProducts])
   );
 
-  const getFallbackImageUrl = (product: VendorCatalogProduct): string => {
-    switch (product.category) {
-      case 'Plants':
-        return 'https://images.unsplash.com/photo-1466781783364-36c667e55134?w=400';
-      case 'Irrigation':
-        return 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=400';
-      default:
-        return 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400';
-    }
-  };
-
   const categories = [
     { id: 'all', name: t('vendorProducts.all'), icon: 'grid-outline' },
     ...Array.from(new Set(products.map((p) => p.category))).map((cat) => ({
@@ -177,21 +166,21 @@ const VendorProductsScreen: React.FC = () => {
 
   const renderProductCard = ({ item }: { item: VendorCatalogProduct }) => {
     const approval = getApprovalBadgeStyle(item.approval_status);
+    const imageUri = !imageErrorMap[item.id] && item.images[0] ? item.images[0] : null;
     return (
     <View style={styles.productCard}>
       <View style={styles.productImageContainer}>
         <TouchableOpacity activeOpacity={0.9} onPress={() => handleOpen3DViewer(item)} style={{ flex: 1 }}>
-          <Image
-            defaultSource={require('../../../assets/splash-icon.png')}
-            source={
-              imageErrorMap[item.id] || !item.images[0]
-                ? { uri: getFallbackImageUrl(item) }
-                : { uri: item.images[0] }
-            }
-            style={styles.productImage}
-            resizeMode="cover"
-            onError={() => setImageErrorMap((prev) => ({ ...prev, [item.id]: true }))}
-          />
+          {imageUri ? (
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.productImage}
+              resizeMode="cover"
+              onError={() => setImageErrorMap((prev) => ({ ...prev, [item.id]: true }))}
+            />
+          ) : (
+            <View style={[styles.productImage, styles.productImageEmpty]} />
+          )}
         </TouchableOpacity>
         <View style={[styles.approvalBadge, { backgroundColor: approval.bg }]}>
           <Text style={[styles.approvalBadgeText, { color: approval.color }]}>{approval.label}</Text>
@@ -219,7 +208,7 @@ const VendorProductsScreen: React.FC = () => {
       <View style={styles.productActions}>
         <TouchableOpacity style={styles.actionButton} onPress={() => handleEditProduct(item.id)}>
           <Ionicons name="create-outline" size={20} color={COLORS.warning} />
-          <Text style={styles.actionText}>{t('common.edit', { defaultValue: 'Edit' })}</Text>
+          <Text style={styles.actionText}>{t('vendorProducts.edit')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
@@ -296,9 +285,16 @@ const VendorProductsScreen: React.FC = () => {
       <View style={styles.productsContainer}>
         <View style={styles.productsHeader}>
           <Text style={styles.productsTitle}>
-            {selectedCategory === 'all' ? 'All Products' : `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}`}
+            {selectedCategory === 'all'
+              ? t('vendorProducts.all')
+              : selectedCategory}
           </Text>
-          <Text style={styles.productsCount}>{filteredProducts.length} products</Text>
+          <Text style={styles.productsCount}>
+            {t('vendorProducts.productCount', {
+              count: filteredProducts.length,
+              defaultValue: `${filteredProducts.length} products`,
+            })}
+          </Text>
         </View>
 
         {loading ? (
@@ -324,15 +320,16 @@ const VendorProductsScreen: React.FC = () => {
         ) : (
           <View style={styles.emptyState}>
             <Ionicons name="cube-outline" size={64} color={COLORS.textSecondary} />
-            <Text style={styles.emptyStateTitle}>No Products Found</Text>
+            <Text style={styles.emptyStateTitle}>{t('vendorProducts.emptyTitle', { defaultValue: 'No Products Found' })}</Text>
             <Text style={styles.emptyStateText}>
-              {selectedCategory === 'all' 
-                ? 'You haven\'t added any products yet.' 
-                : `No products found in ${selectedCategory} category.`
-              }
+              {selectedCategory === 'all'
+                ? t('vendorProducts.empty')
+                : t('vendorProducts.emptyCategory', { category: selectedCategory })}
             </Text>
             <TouchableOpacity style={styles.emptyStateButton} onPress={handleAddProduct}>
-              <Text style={styles.emptyStateButtonText}>Add Your First Product</Text>
+              <Text style={styles.emptyStateButtonText}>
+                {t('vendorProducts.addFirst', { defaultValue: 'Add Your First Product' })}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -422,6 +419,11 @@ const styles = StyleSheet.create({
   productImage: {
     width: '100%',
     height: '100%',
+  },
+  productImageEmpty: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: COLORS.surface,
   },
   threeSixtyBadge: {
     position: 'absolute',

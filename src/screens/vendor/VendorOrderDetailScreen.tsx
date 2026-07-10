@@ -18,38 +18,56 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import * as Sharing from 'expo-sharing';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import {
+  VENDOR_SCREEN_BG,
+  VendorPageHeader,
+  VendorCard,
+} from '../../components/vendor/VendorUi';
 import {
   vendorOrderService,
   VendorOrderDetail,
 } from '../../services/vendorOrderService';
 
-const statusSteps = [
-  { id: 'pending', name: 'Pending', icon: 'time-outline', color: COLORS.warning },
-  { id: 'confirmed', name: 'Confirmed', icon: 'checkmark-circle-outline', color: COLORS.info },
-  { id: 'processing', name: 'Processing', icon: 'cog-outline', color: COLORS.primary },
-  { id: 'shipped', name: 'Shipped', icon: 'car-outline', color: COLORS.success },
-  { id: 'delivered', name: 'Delivered', icon: 'checkmark-done-circle', color: COLORS.success },
-];
+const STATUS_STEP_META = [
+  { id: 'pending', icon: 'time', color: COLORS.warning },
+  { id: 'confirmed', icon: 'checkmark-circle', color: COLORS.info },
+  { id: 'processing', icon: 'cog', color: COLORS.primary },
+  { id: 'shipped', icon: 'car', color: COLORS.success },
+  { id: 'delivered', icon: 'checkmark-done-circle', color: COLORS.success },
+] as const;
 
 function formatDateTime(value?: string): string {
   if (!value) return '—';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString();
+  return d.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function formatDate(value?: string): string {
   if (!value) return '—';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString();
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function statusColor(status: string): string {
+  const step = STATUS_STEP_META.find((s) => s.id === status);
+  return step?.color ?? COLORS.textSecondary;
 }
 
 const VendorOrderDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const { t } = useTranslation();
   const { orderId } = route.params || {};
 
   const [order, setOrder] = useState<VendorOrderDetail | null>(null);
@@ -57,9 +75,15 @@ const VendorOrderDetailScreen: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [shipModalVisible, setShipModalVisible] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
-  const [shipNote, setShipNote] = useState('Dispatched via courier');
+  const [shipNote, setShipNote] = useState('');
+
+  const statusSteps = STATUS_STEP_META.map((step) => ({
+    ...step,
+    name: t(`vendorOrders.${step.id}`),
+  }));
 
   const orderStatus = order?.status ?? 'pending';
+  const currentIndex = statusSteps.findIndex((s) => s.id === orderStatus);
 
   const loadOrder = useCallback(async () => {
     setLoading(true);
@@ -67,12 +91,15 @@ const VendorOrderDetailScreen: React.FC = () => {
       const data = await vendorOrderService.getOrder(orderId);
       setOrder(data);
     } catch (error: unknown) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to load order.');
+      Alert.alert(
+        t('common.error'),
+        error instanceof Error ? error.message : t('vendorOrders.loadFailed')
+      );
       setOrder(null);
     } finally {
       setLoading(false);
     }
-  }, [orderId]);
+  }, [orderId, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -81,29 +108,31 @@ const VendorOrderDetailScreen: React.FC = () => {
   );
 
   const firstItem = order?.items?.[0];
-  const notesText =
-    order?.notes?.map((n) => n.note).filter(Boolean).join('\n\n') || '';
+  const notesText = order?.notes?.map((n) => n.note).filter(Boolean).join('\n\n') || '';
 
   const handleStatusUpdate = (newStatus: string) => {
     if (!order) return;
     if (newStatus === orderStatus) return;
 
     if (newStatus === 'confirmed' && orderStatus === 'pending') {
-      Alert.alert('Update Status', 'Confirm this order?', [
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('vendorOrders.updateStatusTitle'), t('vendorOrders.confirmThisOrder'), [
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Confirm',
+          text: t('vendorOrders.confirm'),
           onPress: async () => {
             setActionLoading(true);
             try {
               const updated = await vendorOrderService.updateOrderStatus(orderId, {
                 status: 'confirmed',
-                note: 'Order accepted',
+                note: t('vendorOrders.noteAccepted'),
               });
               setOrder(updated);
-              Alert.alert('Success', 'Order status updated to confirmed');
+              Alert.alert(t('common.success'), t('vendorOrders.orderConfirmed'));
             } catch (error: unknown) {
-              Alert.alert('Error', error instanceof Error ? error.message : 'Failed to update order.');
+              Alert.alert(
+                t('common.error'),
+                error instanceof Error ? error.message : t('vendorOrders.deliverFailed')
+              );
             } finally {
               setActionLoading(false);
             }
@@ -114,26 +143,30 @@ const VendorOrderDetailScreen: React.FC = () => {
     }
 
     if (newStatus === 'shipped' && (orderStatus === 'confirmed' || orderStatus === 'processing')) {
+      setShipNote(t('vendorOrders.noteDefault'));
       setShipModalVisible(true);
       return;
     }
 
     if (newStatus === 'delivered' && orderStatus === 'shipped') {
-      Alert.alert('Update Status', 'Mark this order as delivered?', [
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('vendorOrders.updateStatusTitle'), t('vendorOrders.markDeliveredConfirm'), [
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Update',
+          text: t('vendorOrders.update'),
           onPress: async () => {
             setActionLoading(true);
             try {
               const updated = await vendorOrderService.updateOrderStatus(orderId, {
                 status: 'delivered',
-                note: 'Delivered to customer',
+                note: t('vendorOrders.noteDelivered'),
               });
               setOrder(updated);
-              Alert.alert('Success', 'Order status updated to delivered');
+              Alert.alert(t('common.success'), t('vendorOrders.orderDelivered'));
             } catch (error: unknown) {
-              Alert.alert('Error', error instanceof Error ? error.message : 'Failed to update order.');
+              Alert.alert(
+                t('common.error'),
+                error instanceof Error ? error.message : t('vendorOrders.deliverFailed')
+              );
             } finally {
               setActionLoading(false);
             }
@@ -143,27 +176,30 @@ const VendorOrderDetailScreen: React.FC = () => {
       return;
     }
 
-    Alert.alert('Update Status', 'This status change is not allowed for the current order.');
+    Alert.alert(t('vendorOrders.updateStatusTitle'), t('vendorOrders.statusNotAllowed'));
   };
 
   const handleShip = async () => {
     if (!trackingNumber.trim()) {
-      Alert.alert('Tracking required', 'Please enter a tracking number.');
+      Alert.alert(t('vendorOrders.trackingRequired'), t('vendorOrders.trackingRequiredMessage'));
       return;
     }
     setActionLoading(true);
     try {
       const updated = await vendorOrderService.updateOrderStatus(orderId, {
         status: 'shipped',
-        note: shipNote.trim() || 'Dispatched via courier',
+        note: shipNote.trim() || t('vendorOrders.noteDefault'),
         tracking_number: trackingNumber.trim(),
       });
       setOrder(updated);
       setShipModalVisible(false);
       setTrackingNumber('');
-      Alert.alert('Success', 'Order status updated to shipped');
+      Alert.alert(t('common.success'), t('vendorOrders.orderShipped'));
     } catch (error: unknown) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to ship order.');
+      Alert.alert(
+        t('common.error'),
+        error instanceof Error ? error.message : t('vendorOrders.shipFailed')
+      );
     } finally {
       setActionLoading(false);
     }
@@ -174,12 +210,12 @@ const VendorOrderDetailScreen: React.FC = () => {
       navigation.navigate('OrderContact', { orderId });
       return;
     }
-    Alert.alert('Contact Customer', 'Contact details are not available for this order.');
+    Alert.alert(t('vendorOrders.contactCustomer'), t('vendorOrders.contactUnavailable'));
   };
 
   const handlePrintInvoice = async () => {
     if (!order?.can_print_invoice) {
-      Alert.alert('Print Invoice', 'Invoice is not available for this order.');
+      Alert.alert(t('vendorOrders.printInvoice'), t('vendorOrders.invoiceUnavailable'));
       return;
     }
     setActionLoading(true);
@@ -188,13 +224,16 @@ const VendorOrderDetailScreen: React.FC = () => {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
-          dialogTitle: 'Print Invoice',
+          dialogTitle: t('vendorOrders.printInvoice'),
         });
       } else {
         await Linking.openURL(uri);
       }
     } catch (error: unknown) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to load invoice.');
+      Alert.alert(
+        t('common.error'),
+        error instanceof Error ? error.message : t('vendorOrders.invoiceFailed')
+      );
     } finally {
       setActionLoading(false);
     }
@@ -202,7 +241,7 @@ const VendorOrderDetailScreen: React.FC = () => {
 
   const handleDownloadOrder = async () => {
     if (!order?.can_download_order) {
-      Alert.alert('Download', 'Download is not available for this order.');
+      Alert.alert(t('vendorOrders.download'), t('vendorOrders.downloadUnavailable'));
       return;
     }
     setActionLoading(true);
@@ -211,80 +250,39 @@ const VendorOrderDetailScreen: React.FC = () => {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
-          dialogTitle: 'Download Order',
+          dialogTitle: t('vendorOrders.downloadOrder'),
         });
       } else {
         await Linking.openURL(uri);
       }
     } catch (error: unknown) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to download order.');
+      Alert.alert(
+        t('common.error'),
+        error instanceof Error ? error.message : t('vendorOrders.downloadFailed')
+      );
     } finally {
       setActionLoading(false);
     }
   };
 
-  const renderStatusStep = (step: (typeof statusSteps)[0], index: number) => {
-    const isActive = orderStatus === step.id;
-    const currentIndex = statusSteps.findIndex((s) => s.id === orderStatus);
-    const isCompleted = currentIndex >= index;
-
-    return (
-      <View key={step.id} style={styles.statusStep}>
-        <View
-          style={[
-            styles.statusIcon,
-            isActive && { backgroundColor: step.color + '20' },
-            isCompleted && { backgroundColor: step.color + '20' },
-          ]}
-        >
-          <Ionicons
-            name={step.icon as any}
-            size={20}
-            color={isActive || isCompleted ? step.color : COLORS.textSecondary}
-          />
-        </View>
-        <View style={styles.statusInfo}>
-          <Text
-            style={[
-              styles.statusName,
-              isActive && { color: step.color },
-              isCompleted && { color: step.color },
-            ]}
-          >
-            {step.name}
-          </Text>
-          {isActive && (
-            <Text style={[styles.statusActive, { color: step.color }]}>Current Status</Text>
-          )}
-        </View>
-        {index < statusSteps.length - 1 && (
-          <View style={[styles.statusLine, isCompleted && { backgroundColor: step.color }]} />
-        )}
-      </View>
-    );
-  };
-
-  const renderInfoRow = (label: string, value: string, icon?: string) => (
+  const renderInfoRow = (label: string, value: string, icon: string) => (
     <View style={styles.infoRow}>
-      <View style={styles.infoLabel}>
-        {icon && <Ionicons name={icon as any} size={16} color={COLORS.textSecondary} />}
-        <Text style={styles.infoLabelText}>{label}</Text>
+      <View style={styles.infoLeft}>
+        <View style={styles.infoIcon}>
+          <Ionicons name={icon as any} size={16} color={COLORS.primary} />
+        </View>
+        <Text style={styles.infoLabel}>{label}</Text>
       </View>
-      <Text style={styles.infoValue}>{value}</Text>
+      <Text style={styles.infoValue} numberOfLines={2}>
+        {value}
+      </Text>
     </View>
   );
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
-          <Text style={styles.title}>Order Details</Text>
-          <View style={styles.moreButton} />
-        </View>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <VendorPageHeader title={t('vendorOrders.detailTitle')} onBack={() => navigation.goBack()} />
         <View style={styles.loadingState}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
@@ -294,173 +292,222 @@ const VendorOrderDetailScreen: React.FC = () => {
 
   if (!order) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
-          <Text style={styles.title}>Order Details</Text>
-          <View style={styles.moreButton} />
-        </View>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <VendorPageHeader title={t('vendorOrders.detailTitle')} onBack={() => navigation.goBack()} />
         <View style={styles.loadingState}>
-          <Text style={styles.emptyText}>Order not found.</Text>
+          <Text style={styles.emptyText}>{t('vendorOrders.notFound')}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  const color = statusColor(orderStatus);
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <VendorPageHeader
+        title={t('vendorOrders.detailTitle')}
+        subtitle={order.order_number}
+        onBack={() => navigation.goBack()}
+      />
 
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Order Details</Text>
-        <TouchableOpacity
-          style={styles.moreButton}
-          onPress={() => Alert.alert('More Options', 'Additional order actions coming soon!')}
-        >
-          <Ionicons name="ellipsis-vertical" size={24} color={COLORS.text} />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Status</Text>
-          <View style={styles.statusContainer}>{statusSteps.map(renderStatusStep)}</View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Information</Text>
-          <View style={styles.orderInfoContainer}>
-            {renderInfoRow('Order ID', order.order_number, 'receipt-outline')}
-            {renderInfoRow('Order Date', formatDateTime(order.order_date), 'calendar-outline')}
-            {renderInfoRow('Delivery Date', formatDate(order.delivery_date), 'calendar-outline')}
-            {renderInfoRow(
-              'Total Amount',
-              order.total_amount > 0 ? `AED ${order.total_amount.toFixed(2)}` : 'FREE',
-              'cash-outline'
-            )}
-            {renderInfoRow('Tracking Number', order.tracking_number || '—', 'location-outline')}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <VendorCard style={styles.heroCard}>
+          <View style={styles.heroTop}>
+            <View>
+              <Text style={styles.heroOrderId}>{order.order_number}</Text>
+              <Text style={styles.heroDate}>{formatDateTime(order.order_date)}</Text>
+            </View>
+            <View style={[styles.heroBadge, { backgroundColor: color + '18' }]}>
+              <Ionicons
+                name={(statusSteps.find((s) => s.id === orderStatus)?.icon || 'help-circle') as any}
+                size={14}
+                color={color}
+              />
+              <Text style={[styles.heroBadgeText, { color }]}>
+                {statusSteps.find((s) => s.id === orderStatus)?.name || orderStatus}
+              </Text>
+            </View>
           </View>
-        </View>
+          <Text style={styles.heroAmount}>
+            {order.total_amount > 0
+              ? `AED ${order.total_amount.toFixed(2)}`
+              : t('vendorOrders.free')}
+          </Text>
+        </VendorCard>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Product Information</Text>
-          <View style={styles.productCard}>
-            {firstItem?.product_image ? (
-              <Image source={{ uri: firstItem.product_image }} style={styles.productImage} />
+        <Text style={styles.sectionLabel}>{t('vendorOrders.orderProgress')}</Text>
+        <VendorCard style={styles.timelineCard}>
+          <View style={styles.timelineRow}>
+            {statusSteps.map((step, index) => {
+              const done = currentIndex >= index;
+              const active = orderStatus === step.id;
+              return (
+                <View key={step.id} style={styles.timelineItem}>
+                  <View
+                    style={[
+                      styles.timelineDot,
+                      done && { backgroundColor: step.color, borderColor: step.color },
+                      active && { transform: [{ scale: 1.15 }] },
+                    ]}
+                  >
+                    <Ionicons
+                      name={step.icon as any}
+                      size={14}
+                      color={done ? '#fff' : COLORS.textSecondary}
+                    />
+                  </View>
+                  <Text
+                    style={[styles.timelineLabel, done && { color: step.color, fontWeight: FONT_WEIGHTS.semiBold }]}
+                    numberOfLines={1}
+                  >
+                    {step.name}
+                  </Text>
+                  {index < statusSteps.length - 1 ? (
+                    <View
+                      style={[
+                        styles.timelineConnector,
+                        currentIndex > index && { backgroundColor: step.color },
+                      ]}
+                    />
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        </VendorCard>
+
+        <Text style={styles.sectionLabel}>{t('vendorOrders.product')}</Text>
+        <VendorCard>
+          <View style={styles.productRow}>
+            {firstItem?.product_image || order.product_image ? (
+              <Image
+                source={{ uri: firstItem?.product_image || order.product_image }}
+                style={styles.productImage}
+              />
             ) : (
-              <View style={[styles.productImage, styles.productImagePlaceholder]}>
-                <Ionicons name="cube-outline" size={28} color={COLORS.primary} />
+              <View style={[styles.productImage, styles.productFallback]}>
+                <Ionicons name="cube" size={28} color={COLORS.primary} />
               </View>
             )}
-            <View style={styles.productInfo}>
+            <View style={styles.productMeta}>
               <Text style={styles.productName}>
-                {firstItem?.product_name || order.product_name || 'Product'}
+                {firstItem?.product_name || order.product_name || t('vendorOrders.product')}
               </Text>
-              <Text style={styles.productQuantity}>
-                Quantity: {firstItem?.quantity ?? order.quantity ?? 1}
+              <Text style={styles.productQty}>
+                {t('vendorOrders.qtyValue', {
+                  count: firstItem?.quantity ?? order.quantity ?? 1,
+                })}
               </Text>
               <Text style={styles.productPrice}>
                 {order.total_amount > 0
                   ? `AED ${(firstItem?.total ?? order.total_amount).toFixed(2)}`
-                  : 'FREE PRODUCT'}
+                  : t('vendorOrders.freeProduct')}
               </Text>
             </View>
           </View>
-        </View>
+        </VendorCard>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Customer Information</Text>
-          <View style={styles.customerInfoContainer}>
-            {renderInfoRow('Name', order.customer_name, 'person-outline')}
-            {renderInfoRow('Phone', order.customer_phone || '—', 'call-outline')}
-            {renderInfoRow('Email', order.customer_email || '—', 'mail-outline')}
-            {renderInfoRow('Address', order.customer_address || '—', 'location-outline')}
-          </View>
-        </View>
+        <Text style={styles.sectionLabel}>{t('vendorOrders.orderInfo')}</Text>
+        <VendorCard style={styles.infoCard}>
+          {renderInfoRow(t('vendorOrders.orderDate'), formatDateTime(order.order_date), 'calendar-outline')}
+          {renderInfoRow(t('vendorOrders.deliveryDate'), formatDate(order.delivery_date), 'bicycle-outline')}
+          {renderInfoRow(t('vendorOrders.tracking'), order.tracking_number || '—', 'navigate-outline')}
+        </VendorCard>
 
-        {notesText ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Order Notes</Text>
-            <View style={styles.notesContainer}>
-              <Text style={styles.notesText}>{notesText}</Text>
+        <Text style={styles.sectionLabel}>{t('vendorOrders.customer')}</Text>
+        <VendorCard style={styles.infoCard}>
+          <View style={styles.customerHeader}>
+            <View style={styles.customerAvatar}>
+              <Text style={styles.customerInitial}>
+                {(order.customer_name || 'C').charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.customerName}>{order.customer_name}</Text>
+              <Text style={styles.customerSub}>
+                {order.customer_phone || t('vendorOrders.noPhone')}
+              </Text>
             </View>
           </View>
+          {renderInfoRow(t('vendorOrders.email'), order.customer_email || '—', 'mail-outline')}
+          {renderInfoRow(t('vendorOrders.address'), order.customer_address || '—', 'location-outline')}
+        </VendorCard>
+
+        {notesText ? (
+          <>
+            <Text style={styles.sectionLabel}>{t('vendorOrders.notes')}</Text>
+            <VendorCard>
+              <Text style={styles.notesText}>{notesText}</Text>
+            </VendorCard>
+          </>
         ) : null}
 
-        <View style={styles.actionsSection}>
+        <Text style={styles.sectionLabel}>{t('vendorOrders.actions')}</Text>
+        <View style={styles.actionsWrap}>
           {(order.can_contact_customer ?? true) && (
             <TouchableOpacity
-              style={[styles.actionButton, styles.primaryButton]}
+              style={styles.actionPrimary}
               onPress={handleContactCustomer}
               disabled={actionLoading}
             >
-              <Ionicons name="call-outline" size={24} color={COLORS.background} />
-              <Text style={styles.primaryButtonText}>Contact Customer</Text>
+              <Ionicons name="call" size={20} color="#fff" />
+              <Text style={styles.actionPrimaryText}>{t('vendorOrders.contactCustomer')}</Text>
             </TouchableOpacity>
           )}
-
-          {(order.can_print_invoice ?? true) && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.secondaryButton]}
-              onPress={handlePrintInvoice}
-              disabled={actionLoading}
-            >
-              <Ionicons name="print-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.secondaryButtonText}>Print Invoice</Text>
-            </TouchableOpacity>
-          )}
-
-          {(order.can_download_order ?? true) && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.secondaryButton]}
-              onPress={handleDownloadOrder}
-              disabled={actionLoading}
-            >
-              <Ionicons name="download-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.secondaryButtonText}>Download Order</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Update Order Status</Text>
-          <View style={styles.statusUpdateGrid}>
-            {statusSteps.map((step) => (
+          <View style={styles.actionSecondaryRow}>
+            {(order.can_print_invoice ?? true) && (
               <TouchableOpacity
-                key={step.id}
-                style={[
-                  styles.statusUpdateButton,
-                  orderStatus === step.id && {
-                    backgroundColor: step.color + '20',
-                    borderColor: step.color,
-                  },
-                ]}
-                onPress={() => handleStatusUpdate(step.id)}
+                style={styles.actionSecondary}
+                onPress={handlePrintInvoice}
                 disabled={actionLoading}
               >
-                <Ionicons
-                  name={step.icon as any}
-                  size={20}
-                  color={orderStatus === step.id ? step.color : COLORS.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.statusUpdateText,
-                    orderStatus === step.id && { color: step.color },
-                  ]}
-                >
-                  {step.name}
-                </Text>
+                <Ionicons name="print-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.actionSecondaryText}>{t('vendorOrders.invoice')}</Text>
               </TouchableOpacity>
-            ))}
+            )}
+            {(order.can_download_order ?? true) && (
+              <TouchableOpacity
+                style={styles.actionSecondary}
+                onPress={handleDownloadOrder}
+                disabled={actionLoading}
+              >
+                <Ionicons name="download-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.actionSecondaryText}>{t('vendorOrders.download')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
+
+        <Text style={styles.sectionLabel}>{t('vendorOrders.updateStatus')}</Text>
+        <VendorCard>
+          <View style={styles.statusGrid}>
+            {statusSteps.map((step) => {
+              const active = orderStatus === step.id;
+              return (
+                <TouchableOpacity
+                  key={step.id}
+                  style={[
+                    styles.statusChip,
+                    active && { backgroundColor: step.color + '18', borderColor: step.color },
+                  ]}
+                  onPress={() => handleStatusUpdate(step.id)}
+                  disabled={actionLoading}
+                >
+                  <Ionicons
+                    name={step.icon as any}
+                    size={16}
+                    color={active ? step.color : COLORS.textSecondary}
+                  />
+                  <Text style={[styles.statusChipText, active && { color: step.color }]}>
+                    {step.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </VendorCard>
       </ScrollView>
 
       <Modal visible={shipModalVisible} transparent animationType="slide">
@@ -469,31 +516,31 @@ const VendorOrderDetailScreen: React.FC = () => {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Ship Order</Text>
-            <Text style={styles.fieldLabel}>Tracking number *</Text>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>{t('vendorOrders.shipOrder')}</Text>
+            <Text style={styles.fieldLabel}>{t('vendorOrders.trackingNumber')}</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="TRK-2026-0001"
+              placeholder={t('vendorOrders.trackingPlaceholder')}
+              placeholderTextColor={COLORS.textSecondary}
               value={trackingNumber}
               onChangeText={setTrackingNumber}
               autoCapitalize="characters"
             />
-            <Text style={styles.fieldLabel}>Note</Text>
+            <Text style={styles.fieldLabel}>{t('vendorOrders.note')}</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="Dispatched via courier"
+              placeholder={t('vendorOrders.noteDefault')}
+              placeholderTextColor={COLORS.textSecondary}
               value={shipNote}
               onChangeText={setShipNote}
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setShipModalVisible(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setShipModalVisible(false)}>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalConfirm} onPress={handleShip}>
-                <Text style={styles.modalConfirmText}>Ship</Text>
+                <Text style={styles.modalConfirmText}>{t('vendorOrders.ship')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -506,31 +553,10 @@ const VendorOrderDetailScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: VENDOR_SCREEN_BG,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  backButton: {
-    padding: SPACING.xs,
-  },
-  title: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.text,
-  },
-  moreButton: {
-    padding: SPACING.xs,
-    width: 32,
-  },
-  scrollView: {
-    flex: 1,
+  scrollContent: {
+    paddingBottom: SPACING.xxl,
   },
   loadingState: {
     flex: 1,
@@ -538,114 +564,107 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: FONT_SIZES.md,
     color: COLORS.textSecondary,
-  },
-  section: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  sectionTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.text,
-    marginBottom: SPACING.lg,
-  },
-  statusContainer: {
-    position: 'relative',
-  },
-  statusStep: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-    position: 'relative',
-  },
-  statusIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-  },
-  statusInfo: {
-    flex: 1,
-  },
-  statusName: {
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
   },
-  statusActive: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.medium,
+  heroCard: {
+    marginTop: SPACING.md,
   },
-  statusLine: {
-    position: 'absolute',
-    left: 19,
-    top: 40,
-    width: 2,
-    height: 40,
-    backgroundColor: COLORS.border,
-  },
-  orderInfoContainer: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  infoRow: {
+  heroTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    alignItems: 'flex-start',
+    marginBottom: SPACING.sm,
   },
-  infoLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  infoLabelText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  infoValue: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
+  heroOrderId: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
-    flexShrink: 1,
-    textAlign: 'right',
-    marginLeft: SPACING.sm,
   },
-  productCard: {
+  heroDate: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  heroBadge: {
     flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
-    borderWidth: 1,
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  heroBadgeText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  heroAmount: {
+    fontSize: FONT_SIZES.xxl,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primary,
+  },
+  sectionLabel: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+    paddingHorizontal: SPACING.lg,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  timelineCard: {
+    paddingVertical: SPACING.md,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  timelineItem: {
+    flex: 1,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  timelineDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
     borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+    zIndex: 2,
+  },
+  timelineLabel: {
+    fontSize: 9,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  timelineConnector: {
+    position: 'absolute',
+    top: 13,
+    left: '55%',
+    right: '-45%',
+    height: 2,
+    backgroundColor: COLORS.border,
+    zIndex: 1,
+  },
+  productRow: {
+    flexDirection: 'row',
+    gap: SPACING.md,
   },
   productImage: {
     width: 80,
     height: 80,
     borderRadius: BORDER_RADIUS.md,
-    marginRight: SPACING.md,
+    backgroundColor: COLORS.surfaceLight,
   },
-  productImagePlaceholder: {
-    backgroundColor: COLORS.primary + '20',
+  productFallback: {
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: COLORS.primary + '14',
   },
-  productInfo: {
+  productMeta: {
     flex: 1,
     justifyContent: 'center',
   },
@@ -653,87 +672,149 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
-    marginBottom: SPACING.xs,
   },
-  productQuantity: {
+  productQty: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    marginTop: 4,
   },
   productPrice: {
     fontSize: FONT_SIZES.lg,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.primary,
+    marginTop: 6,
   },
-  customerInfoContainer: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  infoCard: {
+    paddingVertical: SPACING.sm,
   },
-  notesContainer: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  infoLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    flex: 1,
+  },
+  infoIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.primary + '14',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+  },
+  infoValue: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+    maxWidth: '48%',
+    textAlign: 'right',
+  },
+  customerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    marginBottom: SPACING.sm,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  customerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.primary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customerInitial: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primary,
+  },
+  customerName: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+  },
+  customerSub: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
   },
   notesText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.text,
     lineHeight: 20,
   },
-  actionsSection: {
+  actionsWrap: {
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    gap: SPACING.md,
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
-  actionButton: {
+  actionPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.lg,
+    gap: 8,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
     borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1,
+  },
+  actionPrimaryText: {
+    color: '#fff',
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  actionSecondaryRow: {
+    flexDirection: 'row',
     gap: SPACING.sm,
   },
-  primaryButton: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  secondaryButton: {
-    backgroundColor: COLORS.surface,
+  actionSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
     borderColor: COLORS.border,
+    paddingVertical: 12,
+    borderRadius: BORDER_RADIUS.lg,
   },
-  primaryButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.background,
-  },
-  secondaryButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semiBold,
+  actionSecondaryText: {
     color: COLORS.primary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
-  statusUpdateGrid: {
+  statusGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: SPACING.sm,
   },
-  statusUpdateButton: {
+  statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: 10,
+    borderRadius: BORDER_RADIUS.round,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    gap: SPACING.xs,
+    backgroundColor: COLORS.surfaceLight,
   },
-  statusUpdateText: {
-    fontSize: FONT_SIZES.sm,
+  statusChipText: {
+    fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.textSecondary,
   },
@@ -743,10 +824,19 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderTopLeftRadius: BORDER_RADIUS.xl,
     borderTopRightRadius: BORDER_RADIUS.xl,
     padding: SPACING.lg,
+    paddingBottom: SPACING.xl,
+  },
+  modalHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.border,
+    marginBottom: SPACING.md,
   },
   modalTitle: {
     fontSize: FONT_SIZES.lg,
@@ -757,16 +847,17 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   modalInput: {
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: BORDER_RADIUS.md,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.sm + 2,
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
+    backgroundColor: COLORS.surfaceLight,
     marginBottom: SPACING.md,
   },
   modalActions: {
@@ -783,7 +874,7 @@ const styles = StyleSheet.create({
   },
   modalCancelText: {
     color: COLORS.text,
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   modalConfirm: {
     flex: 1,
@@ -794,7 +885,7 @@ const styles = StyleSheet.create({
   },
   modalConfirmText: {
     color: '#fff',
-    fontWeight: FONT_WEIGHTS.semibold,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
 });
 

@@ -24,12 +24,12 @@ import {
 const PER_PAGE = 20;
 type StatusFilter = '' | 'open' | 'in_progress' | 'resolved' | 'closed';
 
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: '', label: 'All' },
-  { value: 'open', label: 'Open' },
-  { value: 'in_progress', label: 'In progress' },
-  { value: 'resolved', label: 'Resolved' },
-  { value: 'closed', label: 'Closed' },
+const STATUS_FILTER_KEYS: { value: StatusFilter; labelKey: string }[] = [
+  { value: '', labelKey: 'adminVendorLiveChat.filterAll' },
+  { value: 'open', labelKey: 'adminVendorLiveChat.filterOpen' },
+  { value: 'in_progress', labelKey: 'adminVendorLiveChat.filterInProgress' },
+  { value: 'resolved', labelKey: 'adminVendorLiveChat.filterResolved' },
+  { value: 'closed', labelKey: 'adminVendorLiveChat.filterClosed' },
 ];
 
 function formatDate(iso?: string): string {
@@ -291,7 +291,7 @@ const AdminVendorLiveChatSessionsScreen: React.FC = () => {
       </View>
 
       <View style={styles.filterRow}>
-        {STATUS_OPTIONS.map((opt) => (
+        {STATUS_FILTER_KEYS.map((opt) => (
           <TouchableOpacity
             key={opt.value || 'all'}
             style={[styles.filterChip, statusFilter === opt.value && styles.filterChipActive]}
@@ -303,7 +303,7 @@ const AdminVendorLiveChatSessionsScreen: React.FC = () => {
                 statusFilter === opt.value && styles.filterChipTextActive,
               ]}
             >
-              {opt.label}
+              {t(opt.labelKey)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
   filterChip: {
     paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.sm,
-    borderRadius: BORDER_RADIUS.full,
+    borderRadius: BORDER_RADIUS.round,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,

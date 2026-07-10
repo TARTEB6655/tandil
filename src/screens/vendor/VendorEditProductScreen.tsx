@@ -36,6 +36,25 @@ import type { ProductCustomizationConfig } from '../../types/productCustomizatio
 const STATUS_VALUES = ['active', 'draft', 'archived'] as const;
 const WEIGHT_UNITS = ['kg', 'g', 'lb', 'oz'] as const;
 
+function translateProductStatus(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  raw?: string | null
+): string {
+  if (!raw?.trim()) return '';
+  const normalized = raw.trim().toLowerCase().replace(/\s+/g, '_');
+  const keyMap: Record<string, string> = {
+    approved: 'vendorEditProduct.statusApproved',
+    pending: 'vendorEditProduct.statusPending',
+    rejected: 'vendorEditProduct.statusRejected',
+    active: 'vendorEditProduct.statusActive',
+    inactive: 'vendorEditProduct.statusInactive',
+    draft: 'vendorEditProduct.statusDraft',
+    archived: 'vendorEditProduct.statusArchived',
+  };
+  const key = keyMap[normalized];
+  return key ? t(key, { defaultValue: raw }) : raw;
+}
+
 type CategoryOption = { id: number; name: string };
 type ServiceOption = { id: number; name: string };
 
@@ -613,14 +632,18 @@ const VendorEditProductScreen: React.FC = () => {
                 <View style={styles.statusTextWrap}>
                   {approvalStatus ? (
                     <Text style={styles.statusLine}>
-                      {t('vendorEditProduct.approval', { defaultValue: 'Approval' })}:{' '}
-                      <Text style={styles.statusValue}>{approvalStatus}</Text>
+                      {t('vendorEditProduct.approval')}:{' '}
+                      <Text style={styles.statusValue}>
+                        {translateProductStatus(t, approvalStatus)}
+                      </Text>
                     </Text>
                   ) : null}
                   {listingStatus ? (
                     <Text style={styles.statusLine}>
-                      {t('vendorEditProduct.listing', { defaultValue: 'Listing' })}:{' '}
-                      <Text style={styles.statusValue}>{listingStatus}</Text>
+                      {t('vendorEditProduct.listing')}:{' '}
+                      <Text style={styles.statusValue}>
+                        {translateProductStatus(t, listingStatus)}
+                      </Text>
                     </Text>
                   ) : null}
                   {rejectionReason ? (

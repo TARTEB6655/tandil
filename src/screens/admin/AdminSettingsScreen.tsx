@@ -120,21 +120,14 @@ const AdminSettingsScreen: React.FC = () => {
       ],
     },
     {
-      title: 'Vendor Support',
+      titleKey: 'admin.settings.vendorSupportSection',
       items: [
         {
           icon: 'chatbubbles',
-          title: 'Vendor Live Chat',
-          subtitle: 'View and reply to vendor support messages',
+          titleKey: 'admin.settings.vendorLiveChat.title',
+          subtitleKey: 'admin.settings.vendorLiveChat.subtitle',
           type: 'navigation',
           onPress: () => navigation.navigate('AdminVendorLiveChatSessions'),
-        },
-        {
-          icon: 'ribbon',
-          title: 'Partnership Tiers',
-          subtitle: 'Create and manage vendor partnership plans',
-          type: 'navigation',
-          onPress: () => navigation.navigate('AdminVendorPartnershipTiers'),
         },
       ],
     },

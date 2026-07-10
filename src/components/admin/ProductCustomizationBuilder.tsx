@@ -150,7 +150,18 @@ export const ProductCustomizationBuilder: React.FC<Props> = ({ value, onChange }
             </TouchableOpacity>
           </View>
           <Text style={styles.groupMetaText}>
-            {group.options.length} {t('admin.addProduct.optionLabel', { defaultValue: 'Option' })}{group.options.length > 1 ? 's' : ''}
+            {t(
+              group.options.length === 1
+                ? 'admin.addProduct.optionCount'
+                : 'admin.addProduct.optionsCount',
+              {
+                count: group.options.length,
+                defaultValue:
+                  group.options.length === 1
+                    ? `${group.options.length} Option`
+                    : `${group.options.length} Options`,
+              }
+            )}
           </Text>
 
           <Input

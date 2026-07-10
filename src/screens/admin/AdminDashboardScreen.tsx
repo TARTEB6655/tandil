@@ -1001,6 +1001,18 @@ const AdminDashboardScreen: React.FC = () => {
               </View>
               <Text style={styles.adminActionText}>{t('admin.dashboard.services')}</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.adminAction}
+              onPress={() => navigation.navigate('AdminVendorManagement' as never)}
+            >
+              <View style={styles.adminActionIcon}>
+                <Ionicons name="storefront-outline" size={24} color={COLORS.primary} />
+              </View>
+              <Text style={styles.adminActionText}>
+                {t('admin.dashboard.vendorManagement', { defaultValue: 'Vendor Management' })}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>

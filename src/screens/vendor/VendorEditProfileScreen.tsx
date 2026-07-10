@@ -709,20 +709,11 @@ const VendorEditProfileScreen: React.FC = () => {
               value={profile?.vat_number || ''}
               icon="receipt-outline"
             />
-            {(profile?.status_label || profile?.partnership_tier) ? (
+            {profile?.status_label ? (
               <View style={styles.statusPills}>
-                {profile?.status_label ? (
-                  <View style={styles.statusPill}>
-                    <Text style={styles.statusPillText}>{profile.status_label}</Text>
-                  </View>
-                ) : null}
-                {profile?.partnership_tier ? (
-                  <View style={[styles.statusPill, styles.tierPill]}>
-                    <Text style={[styles.statusPillText, styles.tierPillText]}>
-                      {profile.partnership_tier}
-                    </Text>
-                  </View>
-                ) : null}
+                <View style={styles.statusPill}>
+                  <Text style={styles.statusPillText}>{profile.status_label}</Text>
+                </View>
               </View>
             ) : null}
           </VendorCard>

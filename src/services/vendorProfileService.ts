@@ -1,5 +1,5 @@
 import apiClient from './api';
-import { buildFullImageUrl } from '../config/api';
+import { buildFullImageUrl, buildProfilePictureUrl } from '../config/api';
 
 export interface VendorSocialLinks {
   facebook?: string;
@@ -119,10 +119,54 @@ function pickNumber(...values: unknown[]): number | undefined {
   return undefined;
 }
 
-function resolveLogoUrl(...values: unknown[]): string | undefined {
-  const raw = pickString(...values);
+function pickImageUrl(...values: unknown[]): string {
+  for (const value of values) {
+    if (value == null || value === false) continue;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (
+        !trimmed ||
+        trimmed === 'null' ||
+        trimmed === 'undefined' ||
+        trimmed === '[object Object]'
+      ) {
+        continue;
+      }
+      return trimmed;
+    }
+    if (typeof value === 'object') {
+      const row = value as Record<string, unknown>;
+      const nested = pickImageUrl(row.url, row.src, row.path, row.uri, row.original_url, row.full_url);
+      if (nested) return nested;
+    }
+  }
+  return '';
+}
+
+function resolveMediaUrl(
+  values: unknown[],
+  prefer: 'media' | 'storage' = 'storage'
+): string | undefined {
+  const raw = pickImageUrl(...values);
   if (!raw) return undefined;
-  return raw.startsWith('http') ? raw : buildFullImageUrl(raw);
+  if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('file:')) {
+    return raw;
+  }
+  if (raw.includes('media/') || raw.startsWith('/media/')) {
+    return buildProfilePictureUrl(raw);
+  }
+  if (raw.includes('storage/') || raw.startsWith('/storage/')) {
+    return buildFullImageUrl(raw);
+  }
+  return prefer === 'media' ? buildProfilePictureUrl(raw) : buildFullImageUrl(raw);
+}
+
+function resolveProfilePictureUrl(...values: unknown[]): string | undefined {
+  return resolveMediaUrl(values, 'media');
+}
+
+function resolveLogoUrl(...values: unknown[]): string | undefined {
+  return resolveMediaUrl(values, 'storage');
 }
 
 function parseMapCoords(location?: string): { latitude?: number; longitude?: number } {
@@ -331,20 +375,36 @@ function mapVendorProfileRow(raw: Record<string, unknown>): VendorProfileData {
       raw.closes_at,
       operations.closes_at
     ),
-    profile_picture_url: resolveLogoUrl(
+    profile_picture_url: resolveProfilePictureUrl(
       storeBranding.profile_picture_url,
+      storeBranding.profile_picture,
+      storeBranding.avatar_url,
       summary.profile_picture_url,
       summary.profile_image_url,
+      summary.avatar_url,
+      summary.avatar,
+      header.profile_picture_url,
+      header.avatar_url,
+      header.avatar,
       raw.profile_picture_url,
-      flatProfile.profile_picture_url
+      raw.profile_picture,
+      raw.avatar_url,
+      flatProfile.profile_picture_url,
+      flatProfile.profile_picture,
+      user.profile_picture_url,
+      user.avatar,
+      vendor.profile_picture_url,
+      vendor.avatar
     ),
     logo_url: resolveLogoUrl(
       storeBranding.logo_url,
+      storeBranding.logo,
       raw.logo_url,
       flatProfile.logo_url,
       vendor.logo_url,
       business.logo_url,
-      raw.logo
+      raw.logo,
+      summary.logo_url
     ),
     business_name_note: pickString(businessContact.business_name_note),
     bank_hint: pickString(bankAccount.subtitle),

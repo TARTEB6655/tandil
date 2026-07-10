@@ -238,11 +238,13 @@ export type VendorOrderStatus =
   | 'cancelled';
 
 export interface VendorDashboardStats {
+  currency: string;
   totalProducts: number;
   activeProducts: number;
   lowStockCount: number;
   pendingOrders: number;
   totalOrders: number;
+  deliveredOrders: number;
   revenue: number;
 }
 
@@ -711,32 +713,19 @@ function normalizeProduct(raw: Record<string, unknown>): VendorCatalogProduct {
 }
 
 export const vendorService = {
+  /** GET /vendor/dashboard/summary – mobile dashboard cards */
   async getDashboardStats(): Promise<VendorDashboardStats> {
-    try {
-      const response = await apiClient.get('/vendor/dashboard');
-      const data = response?.data?.data ?? response?.data;
-      if (data) {
-        return {
-          totalProducts: Number(data.total_products ?? 0),
-          activeProducts: Number(data.active_products ?? 0),
-          lowStockCount: Number(data.low_stock_count ?? 0),
-          pendingOrders: Number(data.pending_orders ?? 0),
-          totalOrders: Number(data.total_orders ?? 0),
-          revenue: Number(data.revenue ?? 0),
-        };
-      }
-    } catch {
-      // demo fallback
-    }
-    const products = await this.getProducts();
-    const orders = await this.getOrders();
+    const response = await apiClient.get('/vendor/dashboard/summary');
+    const data = response?.data?.data ?? response?.data ?? {};
     return {
-      totalProducts: products.length,
-      activeProducts: products.filter((p) => p.is_available).length,
-      lowStockCount: products.filter((p) => p.stock_quantity <= p.low_stock_threshold).length,
-      pendingOrders: orders.filter((o) => o.status === 'pending').length,
-      totalOrders: orders.length,
-      revenue: orders.reduce((sum, o) => sum + o.total_amount, 0),
+      currency: String(data.currency ?? 'AED'),
+      totalProducts: Number(data.products ?? data.total_products ?? 0),
+      activeProducts: Number(data.active ?? data.active_products ?? 0),
+      lowStockCount: Number(data.low_stock ?? data.low_stock_count ?? 0),
+      pendingOrders: Number(data.pending_orders ?? 0),
+      totalOrders: Number(data.total_orders ?? 0),
+      deliveredOrders: Number(data.delivered_orders ?? 0),
+      revenue: Number(data.revenue ?? 0),
     };
   },
 

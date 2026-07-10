@@ -16,7 +16,6 @@ import VendorSignupScreen from '../screens/vendor/VendorSignupScreen';
 import VendorDashboardScreen from '../screens/vendor/VendorDashboardScreen';
 import VendorProductsScreen from '../screens/vendor/VendorProductsScreen';
 import VendorOrdersScreen from '../screens/vendor/VendorOrdersScreen';
-import VendorPartnershipScreen from '../screens/vendor/VendorPartnershipScreen';
 import VendorProfileScreen from '../screens/vendor/VendorProfileScreen';
 import VendorProductDetailScreen from '../screens/vendor/VendorProductDetailScreen';
 import VendorAddProductScreen from '../screens/vendor/VendorAddProductScreen';
@@ -24,7 +23,6 @@ import VendorEditProductScreen from '../screens/vendor/VendorEditProductScreen';
 import VendorOrderDetailScreen from '../screens/vendor/VendorOrderDetailScreen';
 import VendorOrderContactScreen from '../screens/vendor/VendorOrderContactScreen';
 import VendorAnalyticsScreen from '../screens/vendor/VendorAnalyticsScreen';
-import VendorSettingsScreen from '../screens/vendor/VendorSettingsScreen';
 import VendorInventoryScreen from '../screens/vendor/VendorInventoryScreen';
 import VendorPricingScreen from '../screens/vendor/VendorPricingScreen';
 import VendorEditProfileScreen from '../screens/vendor/VendorEditProfileScreen';
@@ -55,9 +53,6 @@ const TabNavigator = () => {
               break;
             case 'Orders':
               iconName = focused ? 'list' : 'list-outline';
-              break;
-            case 'Partnership':
-              iconName = focused ? 'business' : 'business-outline';
               break;
             case 'Profile':
               iconName = focused ? 'person' : 'person-outline';
@@ -102,11 +97,6 @@ const TabNavigator = () => {
         options={{ tabBarLabel: t('vendorTabs.orders') }}
       />
       <Tab.Screen
-        name="Partnership"
-        component={VendorPartnershipScreen}
-        options={{ tabBarLabel: t('vendorTabs.partnership') }}
-      />
-      <Tab.Screen
         name="Profile"
         component={VendorProfileScreen}
         options={{ tabBarLabel: t('vendorTabs.profile') }}
@@ -139,7 +129,6 @@ const VendorAppNavigator = () => {
       <Stack.Screen name="Analytics" component={VendorAnalyticsScreen} />
       <Stack.Screen name="Inventory" component={VendorInventoryScreen} />
       <Stack.Screen name="Pricing" component={VendorPricingScreen} />
-      <Stack.Screen name="Settings" component={VendorSettingsScreen} />
       <Stack.Screen name="EditProfile" component={VendorEditProfileScreen} />
       <Stack.Screen name="BusinessInfo" component={VendorBusinessInfoScreen} />
       <Stack.Screen name="LocationAddress" component={VendorLocationAddressScreen} />
