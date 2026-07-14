@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Order, OrderStatus } from '../../types';
@@ -69,150 +70,228 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   const { t, i18n } = useTranslation();
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString(i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'ur' ? 'ur-PK' : 'en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return new Date(date).toLocaleDateString(
+      i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'ur' ? 'ur-PK' : 'en-US',
+      {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }
+    );
   };
+
+  const addressLine =
+    order.address?.street || order.address?.city
+      ? `${order.address.street || ''}${order.address.street && order.address.city ? ', ' : ''}${order.address.city || ''}`
+      : t('addresses.sheikhZayedDubai', {
+          defaultValue: `${order.address?.street || ''}, ${order.address?.city || ''}`,
+        });
 
   return (
     <TouchableOpacity
       style={[styles.container, isCompact && styles.compactContainer]}
       onPress={onPress}
-      activeOpacity={0.8}
+      activeOpacity={0.88}
     >
-      <View style={styles.header}>
-        <View style={styles.orderInfo}>
-          <Text style={styles.orderId}>{t('orders.orderNumber', { id: order.id, defaultValue: `#${order.id}` })}</Text>
-          <Text style={styles.date}>{formatDate(order.createdAt)}</Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-          <Ionicons name={statusIcon as any} size={16} color={statusColor} />
-          <Text style={[styles.statusText, { color: statusColor }]}>
-            {t(`orders.status.${order.status}`, { defaultValue: ORDER_STATUS_LABELS[order.status] })}
-          </Text>
-        </View>
-      </View>
+      <View style={[styles.accentBar, { backgroundColor: statusColor }]} />
 
-      <View style={styles.content}>
-        <Text style={styles.amount}>{t('orders.currency', { defaultValue: 'AED' })} {order.totalAmount}</Text>
-          <Text style={styles.address} numberOfLines={1}>
-            {t('addresses.sheikhZayedDubai', { defaultValue: `${order.address.street}, ${order.address.city}` })}
+      <View style={styles.body}>
+        <View style={styles.header}>
+          <View style={styles.orderInfo}>
+            <View style={styles.idRow}>
+              <View style={styles.idIconWrap}>
+                <Ionicons name="receipt-outline" size={14} color={COLORS.primary} />
+              </View>
+              <Text style={styles.orderId}>
+                {t('orders.orderNumber', { id: order.id, defaultValue: `#${order.id}` })}
+              </Text>
+            </View>
+            <Text style={styles.date}>{formatDate(order.createdAt)}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor + '18' }]}>
+            <Ionicons name={statusIcon as any} size={14} color={statusColor} />
+            <Text style={[styles.statusText, { color: statusColor }]}>
+              {t(`orders.status.${order.status}`, {
+                defaultValue: ORDER_STATUS_LABELS[order.status],
+              })}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          <Text style={styles.amount}>
+            {t('orders.currency', { defaultValue: 'AED' })} {order.totalAmount}
           </Text>
-        
-        {!isCompact && (
-          <View style={styles.details}>
-            <View style={styles.detail}>
-              <Ionicons name="calendar-outline" size={16} color={COLORS.textSecondary} />
-              <Text style={styles.detailText}>
-                {formatDate(order.scheduledDate)}
-              </Text>
+          <View style={styles.addressRow}>
+            <Ionicons name="location-outline" size={14} color={COLORS.textSecondary} />
+            <Text style={styles.address} numberOfLines={1}>
+              {addressLine}
+            </Text>
+          </View>
+
+          {!isCompact && (
+            <View style={styles.details}>
+              <View style={styles.detailChip}>
+                <Ionicons name="calendar-outline" size={14} color={COLORS.primary} />
+                <Text style={styles.detailText}>{formatDate(order.scheduledDate)}</Text>
+              </View>
+              <View style={styles.detailChip}>
+                <Ionicons name="card-outline" size={14} color={COLORS.primary} />
+                <Text style={styles.detailText}>
+                  {order.paymentMethod
+                    ? t(`booking.paymentMethods.${order.paymentMethod}`, {
+                        defaultValue: order.paymentMethod,
+                      })
+                    : 'N/A'}
+                </Text>
+              </View>
             </View>
-            <View style={styles.detail}>
-              <Ionicons name="card-outline" size={16} color={COLORS.textSecondary} />
-              <Text style={styles.detailText}>
-                {order.paymentMethod ? t(`booking.paymentMethods.${order.paymentMethod}`, { defaultValue: order.paymentMethod }) : 'N/A'}
-              </Text>
-            </View>
+          )}
+        </View>
+
+        {order.specialInstructions && !isCompact && (
+          <View style={styles.instructions}>
+            <Ionicons name="information-circle-outline" size={16} color={COLORS.warning} />
+            <Text style={styles.instructionsText} numberOfLines={2}>
+              {t(`orders.special.${order.id}`, { defaultValue: order.specialInstructions })}
+            </Text>
           </View>
         )}
-      </View>
 
-      {order.specialInstructions && !isCompact && (
-        <View style={styles.instructions}>
-          <Ionicons name="information-circle-outline" size={16} color={COLORS.warning} />
-          <Text style={styles.instructionsText} numberOfLines={2}>
-            {t(`orders.special.${order.id}`, { defaultValue: order.specialInstructions })}
-          </Text>
+        <View style={styles.footer}>
+          <Text style={styles.viewTrack}>{t('orders.viewTracking', 'View tracking')}</Text>
+          <View style={styles.chevronWrap}>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+          </View>
         </View>
-      )}
+      </View>
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    flexDirection: 'row',
     backgroundColor: COLORS.background,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
+    borderRadius: 18,
     marginBottom: SPACING.md,
-    shadowColor: COLORS.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 1,
+        shadowRadius: 10,
+      },
+      android: { elevation: 3 },
+    }),
   },
   compactContainer: {
-    padding: SPACING.sm,
     marginBottom: SPACING.sm,
+  },
+  accentBar: {
+    width: 4,
+  },
+  body: {
+    flex: 1,
+    padding: SPACING.md,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: SPACING.sm,
+    gap: SPACING.sm,
   },
   orderInfo: {
     flex: 1,
   },
+  idRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  idIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary + '12',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   orderId: {
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semiBold,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
   },
   date: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: 4,
+    marginLeft: 30,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: BORDER_RADIUS.round,
-    gap: SPACING.xs,
+    gap: 4,
   },
   statusText: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   content: {
     marginBottom: SPACING.sm,
   },
   amount: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONT_SIZES.xl,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.primary,
-    marginBottom: SPACING.xs,
+    marginBottom: 6,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   address: {
+    flex: 1,
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
   },
   details: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     marginTop: SPACING.sm,
     gap: SPACING.xs,
   },
-  detail: {
+  detailChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
+    gap: 4,
+    backgroundColor: COLORS.surfaceLight,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.round,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   detailText: {
     fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
+    color: COLORS.text,
+    fontWeight: FONT_WEIGHTS.medium,
   },
   instructions: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: SPACING.xs,
     paddingTop: SPACING.sm,
+    marginBottom: SPACING.sm,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
@@ -221,4 +300,25 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     flex: 1,
   },
-}); 
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  viewTrack: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
+  chevronWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary + '12',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

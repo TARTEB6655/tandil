@@ -16,6 +16,22 @@ export const publicApiClient: AxiosInstance = axios.create({
   headers: API_CONFIG.headers,
 });
 
+/** Ensure multipart FormData is not sent as application/json (breaks file uploads). */
+function stripJsonContentTypeForFormData(config: {
+  data?: unknown;
+  headers?: { delete?: (key: string) => void; [key: string]: unknown };
+}) {
+  if (!(config.data instanceof FormData) || !config.headers) return config;
+  if (typeof config.headers.delete === 'function') {
+    config.headers.delete('Content-Type');
+    config.headers.delete('content-type');
+  } else {
+    delete config.headers['Content-Type'];
+    delete config.headers['content-type'];
+  }
+  return config;
+}
+
 // Request interceptor - Add auth token to all requests
 apiClient.interceptors.request.use(
   async (config) => {
@@ -27,15 +43,17 @@ apiClient.interceptors.request.use(
     } catch (error) {
       console.error('Error getting auth token:', error);
     }
-    // When sending FormData, remove Content-Type so axios sets multipart/form-data with boundary
-    if (config.data instanceof FormData) {
-      delete config.headers['Content-Type'];
-    }
-    return config;
+    return stripJsonContentTypeForFormData(config as any);
   },
   (error: AxiosError) => {
     return Promise.reject(error);
   }
+);
+
+// Public client also posts FormData (e.g. vendor signup) — strip JSON content-type
+publicApiClient.interceptors.request.use(
+  (config) => stripJsonContentTypeForFormData(config as any),
+  (error: AxiosError) => Promise.reject(error)
 );
 
 // Response interceptor - Handle errors globally

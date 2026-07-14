@@ -495,11 +495,120 @@ const HomeScreen: React.FC = () => {
     ];
   })();
 
-  const onBannerButtonPress = useCallback((buttonLink: string | null) => {
-    if (buttonLink && (buttonLink.startsWith('http://') || buttonLink.startsWith('https://'))) {
-      Linking.openURL(buttonLink).catch(() => {});
-    }
-  }, []);
+  // Shop by Category: use API categories when available, else static fallback
+  const staticCategoryFallback = [
+    { id: 'fertilizer', name: t('store.categories.fertilizer', { defaultValue: 'Fertilizer' }), image: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=60', products_count: 1, coming_soon: false },
+    { id: 'soil', name: t('store.categories.soil', { defaultValue: 'Soil' }), image: 'https://images.unsplash.com/photo-1457530378978-8bac673b8062?auto=format&fit=crop&w=800&q=60', products_count: 1, coming_soon: false },
+    { id: 'tools', name: t('store.categories.tools', { defaultValue: 'Tools' }), image: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=800&q=60', products_count: 1, coming_soon: false },
+    { id: 'irrigation', name: t('store.categories.irrigation', { defaultValue: 'Irrigation' }), image: 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800&q=60', products_count: 1, coming_soon: false },
+    { id: 'produce', name: t('store.categories.produce', { defaultValue: 'Produce' }), image: 'https://images.unsplash.com/photo-1567306226416-28f0efdc88ce?auto=format&fit=crop&w=800&q=60', products_count: 1, coming_soon: false },
+  ];
+  const displayCategories = productCategories.length > 0 ? productCategories : staticCategoryFallback;
+
+  const onBannerButtonPress = useCallback(
+    (buttonLink: string | null, bannerTitle?: string) => {
+      const openCategory = (category: {
+        id: string;
+        name: string;
+        image: string | null;
+        products_count?: number;
+        coming_soon?: boolean;
+      }) => {
+        const noProducts =
+          category.coming_soon ||
+          (category.products_count !== undefined && category.products_count === 0);
+        if (noProducts) {
+          Alert.alert(
+            t('category.comingSoon', { defaultValue: 'Coming Soon' }),
+            t('category.comingSoonMessage', {
+              defaultValue: 'Products in this category are coming soon.',
+            })
+          );
+          return;
+        }
+        navigation.navigate('CategoryProducts', {
+          category: {
+            id: category.id,
+            name: category.name,
+            image: category.image ?? '',
+          },
+        });
+      };
+
+      const findCategory = (raw: string | null | undefined) => {
+        if (!raw?.trim() || displayCategories.length === 0) return null;
+        const needle = raw.trim().toLowerCase();
+        const idMatch = needle.match(
+          /(?:category|categories|shop\/category)[\/:=\s-]*(\d+)/i
+        );
+        if (idMatch?.[1]) {
+          return (
+            displayCategories.find((c) => String(c.id) === idMatch[1]) ?? null
+          );
+        }
+        if (/^\d+$/.test(needle)) {
+          return displayCategories.find((c) => String(c.id) === needle) ?? null;
+        }
+        // Match by name / partial (e.g. "fruits", "Fresh Fruits & Vegetables")
+        const byName = displayCategories.find((c) => {
+          const name = (c.name || '').toLowerCase();
+          return (
+            name === needle ||
+            name.includes(needle) ||
+            needle.includes(name) ||
+            needle.split(/[\s&,|/+-]+/).some((token) => token.length > 2 && name.includes(token))
+          );
+        });
+        if (byName) return byName;
+
+        // Common produce keywords → fruits / vegetables category (EN + AR)
+        const produceHint =
+          /\b(fruit|fruits|vegetable|vegetables|produce|fresh)\b/i.test(needle) ||
+          /فواكه|خضروات|خضار/.test(raw);
+        if (produceHint) {
+          return (
+            displayCategories.find((c) => {
+              const name = (c.name || '').toLowerCase();
+              return (
+                /\b(fruit|fruits|vegetable|vegetables|produce)\b/i.test(name) ||
+                /فواكه|خضروات|خضار/.test(c.name || '')
+              );
+            }) ?? null
+          );
+        }
+        return null;
+      };
+
+      const link = buttonLink?.trim() || null;
+
+      if (link && (link.startsWith('http://') || link.startsWith('https://'))) {
+        // Prefer in-app if URL path still points at a category id
+        const fromUrl = findCategory(link);
+        if (fromUrl) {
+          openCategory(fromUrl);
+          return;
+        }
+        Linking.openURL(link).catch(() => {});
+        return;
+      }
+
+      const fromLink = findCategory(link);
+      if (fromLink) {
+        openCategory(fromLink);
+        return;
+      }
+
+      const fromTitle = findCategory(bannerTitle);
+      if (fromTitle) {
+        openCategory(fromTitle);
+        return;
+      }
+
+      // Default: open Store so user can pick a category
+      navigation.navigate('Main' as never, { screen: 'Store' } as never);
+    },
+    [displayCategories, navigation, t]
+  );
 
   const scrollToSlide = (index: number) => {
     if (!flatListRef.current) return;
@@ -546,16 +655,6 @@ const HomeScreen: React.FC = () => {
   });
   const featuredBadges = [t('home.badges.popular'), t('home.badges.new'), t('home.badges.bestValue')];
 
-  // Shop by Category: use API categories when available, else static fallback
-  const staticCategoryFallback = [
-    { id: 'fertilizer', name: t('store.categories.fertilizer', { defaultValue: 'Fertilizer' }), image: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=60', products_count: 1, coming_soon: false },
-    { id: 'soil', name: t('store.categories.soil', { defaultValue: 'Soil' }), image: 'https://images.unsplash.com/photo-1457530378978-8bac673b8062?auto=format&fit=crop&w=800&q=60', products_count: 1, coming_soon: false },
-    { id: 'tools', name: t('store.categories.tools', { defaultValue: 'Tools' }), image: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=800&q=60', products_count: 1, coming_soon: false },
-    { id: 'irrigation', name: t('store.categories.irrigation', { defaultValue: 'Irrigation' }), image: 'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800&q=60', products_count: 1, coming_soon: false },
-    { id: 'produce', name: t('store.categories.produce', { defaultValue: 'Produce' }), image: 'https://images.unsplash.com/photo-1567306226416-28f0efdc88ce?auto=format&fit=crop&w=800&q=60', products_count: 1, coming_soon: false },
-  ];
-  const displayCategories = productCategories.length > 0 ? productCategories : staticCategoryFallback;
-
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <Header 
@@ -568,7 +667,10 @@ const HomeScreen: React.FC = () => {
         showCart={true}
         cartItemCount={cartItemCount}
       />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
       {/* Weather widget – premium card with location, temperature, condition */}
       <TouchableOpacity
         style={styles.weatherCard}
@@ -576,6 +678,8 @@ const HomeScreen: React.FC = () => {
         onPress={handleWeatherCardPress}
         disabled={weatherLoading || !!weather}
       >
+        <View style={styles.weatherDecorLarge} />
+        <View style={styles.weatherDecorSmall} />
         {weatherLoading ? (
           <View style={styles.weatherPromptRow}>
             <ActivityIndicator size="small" color="#fff" />
@@ -651,26 +755,28 @@ const HomeScreen: React.FC = () => {
             setCurrentSlide(index);
           }}
           renderItem={({ item }) => (
-            <View style={[styles.slide, { backgroundColor: item.backgroundColor }]}>
-              <View style={styles.slideContent}>
-                <View style={styles.slideTextContainer}>
-                  <Text style={styles.slideTitle}>{item.title}</Text>
-                  <Text style={styles.slideSubtitle}>{item.subtitle}</Text>
-                  <TouchableOpacity
-                    style={styles.slideButton}
-                    onPress={() => onBannerButtonPress(item.buttonLink ?? null)}
-                  >
-                    <Text style={styles.slideButtonText}>{item.buttonText}</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.slideImageContainer}>
-                  <Image
-                    source={{ uri: item.image }}
-                    style={styles.slideImage}
-                    contentFit="cover"
-                    transition={200}
-                    cachePolicy="disk"
-                  />
+            <View style={styles.slide}>
+              <View style={[styles.slideInner, { backgroundColor: item.backgroundColor || COLORS.primary }]}>
+                <View style={styles.slideContent}>
+                  <View style={styles.slideTextContainer}>
+                    <Text style={styles.slideTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.slideSubtitle} numberOfLines={2}>{item.subtitle}</Text>
+                    <TouchableOpacity
+                      style={styles.slideButton}
+                      onPress={() => onBannerButtonPress(item.buttonLink ?? null, item.title)}
+                    >
+                      <Text style={styles.slideButtonText}>{item.buttonText}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.slideImageContainer}>
+                    <Image
+                      source={{ uri: item.image }}
+                      style={styles.slideImage}
+                      contentFit="cover"
+                      transition={200}
+                      cachePolicy="disk"
+                    />
+                  </View>
                 </View>
               </View>
             </View>
@@ -720,16 +826,26 @@ const HomeScreen: React.FC = () => {
 
       {/* Loyalty Points */}
       <View style={styles.loyaltyCard}>
+        <View style={styles.loyaltyDecor} />
         <View style={styles.loyaltyContent}>
-          <View>
-            <Text style={styles.loyaltyTitle}>{t('home.loyaltyPoints')}</Text>
-            <Text style={styles.loyaltyPoints}>{user?.loyaltyPoints || 0} {t('common.points')}</Text>
+          <View style={styles.loyaltyLeft}>
+            <View style={styles.loyaltyIconWrap}>
+              <Ionicons name="gift-outline" size={22} color="#fff" />
+            </View>
+            <View>
+              <Text style={styles.loyaltyTitle}>{t('home.loyaltyPoints')}</Text>
+              <Text style={styles.loyaltyPoints}>
+                {user?.loyaltyPoints || 0} {t('common.points')}
+              </Text>
+            </View>
           </View>
           <TouchableOpacity
             style={styles.loyaltyButton}
             onPress={() => navigation.navigate('LoyaltyPoints')}
+            activeOpacity={0.88}
           >
             <Text style={styles.loyaltyButtonText}>{t('home.viewRewards')}</Text>
+            <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -757,9 +873,11 @@ const HomeScreen: React.FC = () => {
               </Text>
               {orderWithPhotos?.id ? (
                 <TouchableOpacity
+                  style={styles.viewAllButton}
                   onPress={() => navigation.navigate('OrderTracking', { orderId: orderWithPhotos.id })}
                 >
                   <Text style={styles.viewAllText}>{t('home.viewOrder')}</Text>
+                  <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -793,9 +911,10 @@ const HomeScreen: React.FC = () => {
       {/* Exclusive Offers – dynamic from GET /api/exclusive-offers (first 3) */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('home.exclusiveOffers')}</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Offers')}>
+          <Text style={[styles.sectionTitle, styles.sectionTitleInHeader]}>{t('home.exclusiveOffers')}</Text>
+          <TouchableOpacity style={styles.viewAllButton} onPress={() => navigation.navigate('Offers')}>
             <Text style={styles.viewAllText}>{t('home.viewAll')}</Text>
+            <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
         {exclusiveOffersLoading ? (
@@ -843,11 +962,13 @@ const HomeScreen: React.FC = () => {
       {/* Place Service Orders - dynamic from GET /services (public API) or static fallback */}
        <View style={styles.section}>
          <View style={styles.sectionHeader}>
-           <Text style={styles.sectionTitle}>{t('home.placeServiceOrders')}</Text>
+           <Text style={[styles.sectionTitle, styles.sectionTitleInHeader]}>{t('home.placeServiceOrders')}</Text>
            <TouchableOpacity
+             style={styles.viewAllButton}
              onPress={() => navigation.navigate('Main' as never, { screen: 'Services' } as never)}
            >
              <Text style={styles.viewAllText}>{t('home.viewAll')}</Text>
+             <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
            </TouchableOpacity>
          </View>
 
@@ -930,11 +1051,13 @@ const HomeScreen: React.FC = () => {
       {/* Featured Products (from API: first 3 here, View All shows all) */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('home.featured')}</Text>
+          <Text style={[styles.sectionTitle, styles.sectionTitleInHeader]}>{t('home.featured')}</Text>
           <TouchableOpacity
+            style={styles.viewAllButton}
             onPress={() => navigation.navigate('FeaturedProducts' as never)}
           >
             <Text style={styles.viewAllText}>{t('home.viewAll')}</Text>
+            <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
 
@@ -986,11 +1109,13 @@ const HomeScreen: React.FC = () => {
       {/* Product Categories */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('home.shopByCategory')}</Text>
+          <Text style={[styles.sectionTitle, styles.sectionTitleInHeader]}>{t('home.shopByCategory')}</Text>
           <TouchableOpacity
+            style={styles.viewAllButton}
             onPress={() => navigation.navigate('Main' as never, { screen: 'Store' } as never)}
           >
             <Text style={styles.viewAllText}>{t('home.viewAll')}</Text>
+            <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
         
@@ -1022,46 +1147,76 @@ const HomeScreen: React.FC = () => {
 
       {/* Quick Actions */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('home.quickActions')}</Text>
+        <Text style={[styles.sectionTitle, styles.sectionTitleInHeader, { marginBottom: SPACING.md }]}>
+          {t('home.quickActions')}
+        </Text>
         <View style={styles.quickActions}>
           <TouchableOpacity
-            style={styles.quickAction}
+            style={[styles.quickAction, styles.quickActionBook]}
             onPress={() => navigation.navigate('Main' as never, { screen: 'Services' } as never)}
+            activeOpacity={0.88}
           >
-            <View style={styles.quickActionIcon}>
-              <Ionicons name="construct-outline" size={24} color={COLORS.primary} />
+            <View style={[styles.quickActionIcon, styles.quickActionIconBook]}>
+              <Ionicons name="construct" size={24} color="#fff" />
             </View>
-            <Text style={styles.quickActionText}>{t('home.bookService')}</Text>
+            <View style={styles.quickActionTextCol}>
+              <Text style={styles.quickActionText}>{t('home.bookService')}</Text>
+              <Text style={styles.quickActionHint}>{t('home.bookServiceHint', 'Schedule a visit')}</Text>
+            </View>
+            <View style={styles.quickActionChevron}>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.quickAction}
+            style={[styles.quickAction, styles.quickActionTrack]}
             onPress={() => navigation.navigate('Main' as never, { screen: 'Orders' } as never)}
+            activeOpacity={0.88}
           >
-            <View style={styles.quickActionIcon}>
-              <Ionicons name="location-outline" size={24} color={COLORS.primary} />
+            <View style={[styles.quickActionIcon, styles.quickActionIconTrack]}>
+              <Ionicons name="navigate" size={24} color="#fff" />
             </View>
-            <Text style={styles.quickActionText}>{t('home.trackOrder')}</Text>
+            <View style={styles.quickActionTextCol}>
+              <Text style={styles.quickActionText}>{t('home.trackOrder')}</Text>
+              <Text style={styles.quickActionHint}>{t('home.trackOrderHint', 'Live status')}</Text>
+            </View>
+            <View style={styles.quickActionChevron}>
+              <Ionicons name="chevron-forward" size={16} color="#B8860B" />
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.quickAction}
+            style={[styles.quickAction, styles.quickActionShop]}
             onPress={() => navigation.navigate('Main' as never, { screen: 'Store' } as never)}
+            activeOpacity={0.88}
           >
-            <View style={styles.quickActionIcon}>
-              <Ionicons name="bag-outline" size={24} color={COLORS.primary} />
+            <View style={[styles.quickActionIcon, styles.quickActionIconShop]}>
+              <Ionicons name="bag-handle" size={24} color="#fff" />
             </View>
-            <Text style={styles.quickActionText}>{t('home.shopProducts')}</Text>
+            <View style={styles.quickActionTextCol}>
+              <Text style={styles.quickActionText}>{t('home.shopProducts')}</Text>
+              <Text style={styles.quickActionHint}>{t('home.shopProductsHint', 'Browse store')}</Text>
+            </View>
+            <View style={styles.quickActionChevron}>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.primaryLight} />
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.quickAction}
+            style={[styles.quickAction, styles.quickActionHistory]}
             onPress={() => navigation.navigate('OrderHistory')}
+            activeOpacity={0.88}
           >
-            <View style={styles.quickActionIcon}>
-              <Ionicons name="list-outline" size={24} color={COLORS.primary} />
+            <View style={[styles.quickActionIcon, styles.quickActionIconHistory]}>
+              <Ionicons name="time" size={24} color="#fff" />
             </View>
-            <Text style={styles.quickActionText}>{t('home.orderHistory')}</Text>
+            <View style={styles.quickActionTextCol}>
+              <Text style={styles.quickActionText}>{t('home.orderHistory')}</Text>
+              <Text style={styles.quickActionHint}>{t('home.orderHistoryHint', 'Past orders')}</Text>
+            </View>
+            <View style={styles.quickActionChevron}>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.secondary} />
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -1073,7 +1228,11 @@ const HomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceLight,
+  },
+  scrollContent: {
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxl,
   },
   greetingContainer: {
     backgroundColor: COLORS.background,
@@ -1103,36 +1262,72 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.error,
   },
   loyaltyCard: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.primaryDark,
     marginHorizontal: SPACING.lg,
     marginBottom: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: 20,
     padding: SPACING.lg,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.primaryDark,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.25,
+        shadowRadius: 12,
+      },
+      android: { elevation: 5 },
+    }),
+  },
+  loyaltyDecor: {
+    position: 'absolute',
+    top: -30,
+    right: -20,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   loyaltyContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  loyaltyLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    flex: 1,
+  },
+  loyaltyIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   loyaltyTitle: {
     fontSize: FONT_SIZES.sm,
-    color: COLORS.background,
-    opacity: 0.9,
+    color: 'rgba(255,255,255,0.85)',
   },
   loyaltyPoints: {
     fontSize: FONT_SIZES.xl,
     fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.background,
+    color: '#fff',
+    marginTop: 2,
   },
   loyaltyButton: {
-    backgroundColor: COLORS.background,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#fff',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 10,
+    borderRadius: BORDER_RADIUS.round,
   },
   loyaltyButtonText: {
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.primary,
   },
   section: {
@@ -1148,7 +1343,7 @@ const styles = StyleSheet.create({
 
   sectionTitle: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
     marginBottom: SPACING.sm,
   },
@@ -1161,14 +1356,16 @@ const styles = StyleSheet.create({
   maintenanceCard: {
     width: 300,
     marginRight: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: 18,
     overflow: 'hidden',
-    backgroundColor: COLORS.surface,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 3,
   },
   maintenanceLoadingWrap: {
     height: 180,
@@ -1179,11 +1376,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
+    backgroundColor: COLORS.primary + '12',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: BORDER_RADIUS.round,
   },
   viewAllText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
      serviceCard: {
      width: 200,
@@ -1261,13 +1462,15 @@ const styles = StyleSheet.create({
   },
   serviceGridCard: {
     width: '48%',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.background,
+    borderRadius: 18,
     overflow: 'hidden',
-    shadowColor: COLORS.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
     elevation: 3,
     marginBottom: SPACING.md,
   },
@@ -1278,8 +1481,6 @@ const styles = StyleSheet.create({
      alignItems: 'center',
      backgroundColor: COLORS.primary + '10',
      overflow: 'hidden',
-     borderTopLeftRadius: BORDER_RADIUS.lg,
-     borderTopRightRadius: BORDER_RADIUS.lg,
    },
    serviceGridIcon: {
      width: 48,
@@ -1320,9 +1521,9 @@ const styles = StyleSheet.create({
      top: SPACING.sm,
      left: SPACING.sm,
      backgroundColor: COLORS.primary,
-     paddingHorizontal: SPACING.sm,
-     paddingVertical: 2,
-     borderRadius: BORDER_RADIUS.xs,
+     paddingHorizontal: 10,
+     paddingVertical: 4,
+     borderRadius: BORDER_RADIUS.round,
    },
    serviceGridBadgeText: {
      fontSize: FONT_SIZES.xs,
@@ -1331,10 +1532,11 @@ const styles = StyleSheet.create({
    },
    serviceGridContent: {
      padding: SPACING.md,
+     backgroundColor: COLORS.background,
    },
    serviceGridTitle: {
      fontSize: FONT_SIZES.sm,
-     fontWeight: FONT_WEIGHTS.semiBold,
+     fontWeight: FONT_WEIGHTS.bold,
      color: COLORS.text,
      marginBottom: SPACING.xs,
    },
@@ -1427,50 +1629,118 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
   quickActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    gap: SPACING.sm,
   },
   quickAction: {
-    width: '48%',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: SPACING.md,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 1,
+        shadowRadius: 10,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  quickActionBook: {
+    backgroundColor: '#E8F2EA',
+    borderColor: '#C5DBC9',
+  },
+  quickActionTrack: {
+    backgroundColor: '#FBF5E6',
+    borderColor: '#EBD9A8',
+  },
+  quickActionShop: {
+    backgroundColor: '#EAF6EE',
+    borderColor: '#C8E2D0',
+  },
+  quickActionHistory: {
+    backgroundColor: '#F3EBE7',
+    borderColor: '#DFCEC5',
   },
   quickActionIcon: {
     width: 48,
     height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.primary + '20',
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.sm,
+    marginRight: 12,
+  },
+  quickActionIconBook: {
+    backgroundColor: COLORS.primary,
+  },
+  quickActionIconTrack: {
+    backgroundColor: '#C9970A',
+  },
+  quickActionIconShop: {
+    backgroundColor: COLORS.primaryLight,
+  },
+  quickActionIconHistory: {
+    backgroundColor: COLORS.secondary,
+  },
+  quickActionTextCol: {
+    flex: 1,
+    gap: 2,
   },
   quickActionText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
-    textAlign: 'center',
+  },
+  quickActionHint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+  },
+  quickActionChevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // Weather widget – premium dark card
   weatherCard: {
-    marginHorizontal: SPACING.md,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.sm,
     marginBottom: SPACING.md,
     padding: SPACING.lg,
     backgroundColor: COLORS.primary,
-    borderRadius: BORDER_RADIUS.xl,
+    borderRadius: 22,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
+        shadowColor: COLORS.primaryDark,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.28,
+        shadowRadius: 14,
       },
-      android: { elevation: 6 },
+      android: { elevation: 7 },
     }),
+  },
+  weatherDecorLarge: {
+    position: 'absolute',
+    top: -48,
+    right: -36,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  weatherDecorSmall: {
+    position: 'absolute',
+    bottom: -28,
+    left: -20,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   weatherContent: {
     flexDirection: 'row',
@@ -1500,9 +1770,9 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   weatherIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1521,7 +1791,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   weatherTemp: {
-    fontSize: 42,
+    fontSize: 44,
     fontWeight: '700',
     color: '#fff',
     letterSpacing: -1,
@@ -1535,11 +1805,11 @@ const styles = StyleSheet.create({
   },
   weatherConditionPill: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: BORDER_RADIUS.round,
-    marginTop: 4,
+    marginTop: 6,
   },
   weatherConditionText: {
     fontSize: FONT_SIZES.sm,
@@ -1578,21 +1848,27 @@ const styles = StyleSheet.create({
   arrowButton: {
     position: 'absolute',
     top: '50%',
-    marginTop: -16,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    marginTop: -18,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(15,37,19,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
   },
-  arrowLeft: { left: SPACING.md },
-  arrowRight: { right: SPACING.md },
+  arrowLeft: { left: SPACING.lg + 6 },
+  arrowRight: { right: SPACING.lg + 6 },
   slide: {
     width: screenWidth,
-    height: 200,
-    paddingHorizontal: SPACING.xl + 24,
+    height: 210,
+    paddingHorizontal: SPACING.lg,
+  },
+  slideInner: {
+    flex: 1,
+    borderRadius: 22,
+    overflow: 'hidden',
+    paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.lg,
   },
   slideContent: {
@@ -1619,19 +1895,19 @@ const styles = StyleSheet.create({
   slideButton: {
     backgroundColor: COLORS.background,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 10,
+    borderRadius: BORDER_RADIUS.round,
     alignSelf: 'flex-start',
   },
   slideButtonText: {
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.primary,
   },
   slideImageContainer: {
     width: 120,
     height: 120,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: 16,
     overflow: 'hidden',
   },
   slideImage: {
@@ -1667,10 +1943,17 @@ const styles = StyleSheet.create({
   },
   featuredServiceCard: {
     width: 280,
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.background,
+    borderRadius: 18,
     marginRight: SPACING.md,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 3,
   },
   featuredServiceImageContainer: {
     height: 160,
@@ -1686,9 +1969,9 @@ const styles = StyleSheet.create({
     top: SPACING.sm,
     left: SPACING.sm,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: BORDER_RADIUS.xs,
+    borderRadius: BORDER_RADIUS.round,
   },
   featuredServiceBadgeText: {
     fontSize: FONT_SIZES.xs,
@@ -1700,7 +1983,7 @@ const styles = StyleSheet.create({
   },
   featuredServiceName: {
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semiBold,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
@@ -1736,13 +2019,15 @@ const styles = StyleSheet.create({
   },
   categoryCard: {
     width: '48%',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.background,
+    borderRadius: 18,
     overflow: 'hidden',
-    shadowColor: COLORS.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
     elevation: 3,
     marginBottom: SPACING.md,
   },
@@ -1758,12 +2043,9 @@ const styles = StyleSheet.create({
   categoryImageEmpty: {
     width: '100%',
     height: '100%',
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: COLORS.border,
   },
   categoryImageEmptyIcon: {
     opacity: 0.5,
@@ -1776,7 +2058,7 @@ const styles = StyleSheet.create({
   },
   categoryName: {
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
     textAlign: 'center',
     padding: SPACING.md,
@@ -1932,13 +2214,15 @@ const styles = StyleSheet.create({
   },
   // Offers styles
   offerBannerFull: {
-    height: 160,
-    borderRadius: BORDER_RADIUS.lg,
+    height: 168,
+    borderRadius: 20,
     overflow: 'hidden',
     marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   offerPlaceholder: {
-    backgroundColor: '#e8e8e8',
+    backgroundColor: COLORS.surface,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1947,12 +2231,19 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
   },
   offerImageFull: { width: '100%', height: '100%' },
-  offerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.25)' },
+  offerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,37,19,0.35)' },
   offerContentFull: { position: 'absolute', left: SPACING.lg, right: SPACING.lg, bottom: SPACING.lg },
   offerTitle: { color: COLORS.background, fontSize: FONT_SIZES.xl, fontWeight: FONT_WEIGHTS.bold },
   offerSubtitle: { color: COLORS.background, opacity: 0.9, marginTop: 2 },
-  offerRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: SPACING.md },
-  offerHalf: { width: '48%', height: 120, borderRadius: BORDER_RADIUS.lg, overflow: 'hidden' },
+  offerRow: { flexDirection: 'row', justifyContent: 'space-between', gap: SPACING.md },
+  offerHalf: {
+    flex: 1,
+    height: 128,
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
   offerImageHalf: { width: '100%', height: '100%' },
   offerContentHalf: { position: 'absolute', left: SPACING.md, right: SPACING.md, bottom: SPACING.md },
   offerTitleSm: { color: COLORS.background, fontWeight: FONT_WEIGHTS.semiBold },

@@ -83,6 +83,10 @@ export interface CreateVendorProductParams {
   customization?: ProductCustomizationConfig | null;
   mainImage?: { uri: string };
   extraImages?: { uri: string }[];
+  /** Existing product image IDs to delete on update (multipart removed_image_ids[]). */
+  removed_image_ids?: number[];
+  /** Set true when clearing the existing main image without uploading a replacement. */
+  remove_main_image?: boolean;
 }
 
 export interface VendorProductCreateResponse {
@@ -117,6 +121,15 @@ function buildVendorProductFormData(params: CreateVendorProductParams): FormData
   }
   if (params.image_urls?.length) {
     formData.append('image_urls', JSON.stringify(params.image_urls));
+  }
+  // Backend requires removed_image_ids[] when deleting existing gallery images.
+  (params.removed_image_ids ?? []).forEach((id) => {
+    if (Number.isFinite(id)) {
+      formData.append('removed_image_ids[]', String(id));
+    }
+  });
+  if (params.remove_main_image) {
+    formData.append('remove_main_image', '1');
   }
   if (params.mainImage?.uri) {
     formData.append('main_image', {
@@ -282,6 +295,12 @@ export interface VendorProductsListResult {
 }
 
 /** Full vendor product row from GET /vendor/products/:id (edit form). */
+export interface VendorProductImageItem {
+  id?: number;
+  uri: string;
+  is_primary?: boolean;
+}
+
 export interface VendorProductDetail extends VendorCatalogProduct {
   product_status?: string;
   category_id?: number;
@@ -293,6 +312,8 @@ export interface VendorProductDetail extends VendorCatalogProduct {
   job_duration?: string;
   product_type?: 'simple' | 'variable';
   customization?: ProductCustomizationConfig | null;
+  /** Images with IDs for edit/remove (removed_image_ids[]). */
+  product_images?: VendorProductImageItem[];
 }
 
 export interface VendorOrder {
@@ -323,7 +344,166 @@ export interface VendorProductOffer {
   compare_at_price?: number;
   stock_quantity: number;
   delivery_days: number;
+  /** Human-readable delivery label from API when available (e.g. "2 day delivery"). */
+  delivery_label?: string;
   is_available: boolean;
+  is_best_price?: boolean;
+  discount_percent?: number;
+  currency?: string;
+}
+
+export type VendorCompareSortBy = 'price' | 'rating' | 'delivery';
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function pickCompareNumber(...values: unknown[]): number {
+  for (const value of values) {
+    if (value == null || value === '') continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return 0;
+}
+
+function pickCompareString(...values: unknown[]): string {
+  for (const value of values) {
+    if (value != null && String(value).trim()) return String(value).trim();
+  }
+  return '';
+}
+
+function extractCompareVendorRows(payload: unknown): unknown[] {
+  const body = asRecord(payload);
+  if (!body) return [];
+  const data = body.data ?? body;
+  if (Array.isArray(data)) return data;
+  const nested = asRecord(data);
+  if (!nested) return [];
+  const list =
+    nested.vendors ??
+    nested.items ??
+    nested.offers ??
+    nested.results ??
+    nested.compare_vendors ??
+    nested.data;
+  return Array.isArray(list) ? list : [];
+}
+
+function mapCompareVendorOffer(
+  row: unknown,
+  productId: string,
+  productName?: string
+): VendorProductOffer {
+  const o = asRecord(row) ?? {};
+  const vendor = asRecord(o.vendor) ?? {};
+  const price = pickCompareNumber(
+    o.price,
+    o.sale_price,
+    o.current_price,
+    o.amount
+  );
+  const compareAt = pickCompareNumber(
+    o.compare_at_price,
+    o.original_price,
+    o.regular_price,
+    o.mrp
+  );
+  const discountFromApi = pickCompareNumber(
+    o.discount_percent,
+    o.discount_percentage,
+    o.discount
+  );
+  const discount =
+    discountFromApi > 0
+      ? discountFromApi
+      : compareAt > price && price > 0
+        ? Math.round(((compareAt - price) / compareAt) * 100)
+        : 0;
+  const deliveryLabel = pickCompareString(
+    o.delivery_label,
+    o.estimated_arrival,
+    o.delivery_time,
+    o.delivery_text,
+    o.delivery
+  );
+  const deliveryDays =
+    pickCompareNumber(o.delivery_days, o.delivery_day, o.estimated_days) ||
+    (deliveryLabel.match(/(\d+)/)?.[1] != null
+      ? Number(deliveryLabel.match(/(\d+)/)?.[1])
+      : 0);
+
+  const logoRaw = pickCompareString(
+    o.vendor_logo,
+    o.logo,
+    o.logo_url,
+    vendor.logo_url,
+    vendor.logo,
+    vendor.profile_picture_url
+  );
+  const logo =
+    logoRaw && !logoRaw.startsWith('http')
+      ? buildFullImageUrl(logoRaw)
+      : logoRaw || undefined;
+
+  const priceFormatted = pickCompareString(o.price_formatted, o.sale_price_formatted);
+  const currencyFromPrice =
+    priceFormatted.match(/^([A-Za-z]{3})\b/)?.[1] ||
+    pickCompareString(o.currency) ||
+    'AED';
+
+  return {
+    vendor_id: pickCompareString(
+      o.vendor_id,
+      o.id,
+      vendor.id,
+      o.vendor_product_id
+    ) || String(o.vendor_id ?? o.id ?? ''),
+    vendor_name:
+      pickCompareString(
+        o.vendor_name,
+        o.business_name,
+        o.company_name,
+        vendor.business_name,
+        vendor.company_name,
+        vendor.name,
+        o.name
+      ) || 'Vendor',
+    vendor_logo: logo,
+    vendor_rating: pickCompareNumber(
+      o.vendor_rating,
+      o.rating,
+      vendor.rating,
+      o.average_rating,
+      o.stars
+    ),
+    product_id: pickCompareString(o.product_id, productId) || productId,
+    product_name:
+      pickCompareString(o.product_name, productName) || productName || '',
+    price,
+    compare_at_price: compareAt > 0 ? compareAt : undefined,
+    stock_quantity: pickCompareNumber(
+      o.stock_quantity,
+      o.stock,
+      o.stock_count,
+      o.quantity
+    ),
+    delivery_days: deliveryDays,
+    delivery_label: deliveryLabel || undefined,
+    is_available:
+      o.is_available !== false &&
+      o.available !== false &&
+      String(o.status ?? '').toLowerCase() !== 'unavailable',
+    is_best_price:
+      o.is_best_price === true ||
+      o.best_price === true ||
+      o.is_lowest_price === true,
+    discount_percent: discount > 0 ? discount : undefined,
+    currency: currencyFromPrice,
+  };
 }
 
 function demoProducts(): VendorCatalogProduct[] {
@@ -480,6 +660,69 @@ function resolveProductImageUrl(raw: unknown): string | null {
   return null;
 }
 
+/** Collect product images with IDs from detail/list payloads. */
+function extractProductImages(product: Record<string, unknown>): VendorProductImageItem[] {
+  const items: VendorProductImageItem[] = [];
+  const seen = new Set<string>();
+
+  const push = (raw: unknown, forcePrimary?: boolean) => {
+    if (raw == null) return;
+    if (typeof raw === 'string') {
+      const uri = resolveProductImageUrl(raw);
+      if (!uri || seen.has(uri)) return;
+      seen.add(uri);
+      items.push({ uri, is_primary: forcePrimary === true });
+      return;
+    }
+    if (typeof raw !== 'object') return;
+    const obj = raw as {
+      id?: number | string;
+      image_url?: string;
+      url?: string;
+      image_path?: string;
+      is_primary?: number | boolean;
+    };
+    const uri = resolveProductImageUrl(obj);
+    if (!uri || seen.has(uri)) return;
+    seen.add(uri);
+    const idNum = obj.id != null ? Number(obj.id) : NaN;
+    items.push({
+      uri,
+      id: Number.isFinite(idNum) && idNum > 0 ? idNum : undefined,
+      is_primary:
+        forcePrimary === true || obj.is_primary === 1 || obj.is_primary === true,
+    });
+  };
+
+  push(product.primary_image ?? product.main_image, true);
+  if (typeof product.image_url === 'string') push(product.image_url, items.length === 0);
+
+  const gallery = Array.isArray(product.gallery_images) ? product.gallery_images : [];
+  const images = Array.isArray(product.images) ? product.images : [];
+
+  if (gallery.length > 0) {
+    gallery.forEach((g) => push(g, false));
+  } else {
+    images.forEach((img, index) => {
+      const obj =
+        img && typeof img === 'object'
+          ? (img as { is_primary?: number | boolean })
+          : null;
+      const isPrimary =
+        obj?.is_primary === 1 ||
+        obj?.is_primary === true ||
+        (index === 0 && items.length === 0);
+      push(img, isPrimary);
+    });
+  }
+
+  if (items.length > 0 && !items.some((i) => i.is_primary)) {
+    items[0] = { ...items[0], is_primary: true };
+  }
+
+  return items;
+}
+
 /** Map GET /vendor/products item → catalog row for UI. */
 function mapVendorProductListItem(row: Record<string, unknown>): VendorCatalogProduct {
   const product = (row.product ?? {}) as Record<string, unknown>;
@@ -630,8 +873,14 @@ function mapVendorProductDetail(payload: unknown): VendorProductDetail {
     customization = null;
   }
 
+  const productImages = extractProductImages(product);
+  const imageUris =
+    productImages.length > 0 ? productImages.map((i) => i.uri) : base.images;
+
   return {
     ...base,
+    images: imageUris,
+    product_images: productImages,
     product_status: product.status != null ? String(product.status) : undefined,
     category_id: resolveProductCategoryId(product),
     service_ids: serviceIds,
@@ -1022,31 +1271,52 @@ export const vendorService = {
     }
   },
 
+  /**
+   * GET /shop/products/{product_id}/compare-vendors?sort_by=price|rating|delivery
+   * Fallback: GET /vendor/compare/products/{product_id}?sort_by=...
+   */
   async getVendorOffersForProduct(
     productId: string,
-    productName?: string
+    productName?: string,
+    sortBy: VendorCompareSortBy = 'price'
   ): Promise<VendorProductOffer[]> {
-    try {
-      const response = await publicApiClient.get(`/shop/products/${productId}/vendor-offers`);
-      const rows = response?.data?.data ?? response?.data?.offers ?? [];
-      if (Array.isArray(rows) && rows.length > 0) {
-        return rows.map((o: any) => ({
-          vendor_id: String(o.vendor_id ?? o.id),
-          vendor_name: o.vendor_name ?? o.name ?? '',
-          vendor_logo: o.vendor_logo ?? o.logo,
-          vendor_rating: Number(o.vendor_rating ?? o.rating ?? 0),
-          product_id: String(o.product_id ?? productId),
-          product_name: o.product_name ?? productName ?? '',
-          price: Number(o.price ?? 0),
-          compare_at_price: o.compare_at_price != null ? Number(o.compare_at_price) : undefined,
-          stock_quantity: Number(o.stock_quantity ?? 0),
-          delivery_days: Number(o.delivery_days ?? 2),
-          is_available: o.is_available !== false,
-        }));
+    const id = String(productId ?? '').trim();
+    if (!id) return [];
+
+    const sort = sortBy === 'rating' || sortBy === 'delivery' ? sortBy : 'price';
+    const endpoints = [
+      `/shop/products/${encodeURIComponent(id)}/compare-vendors`,
+      `/vendor/compare/products/${encodeURIComponent(id)}`,
+    ];
+
+    let lastError: unknown;
+    for (const url of endpoints) {
+      try {
+        const response = await publicApiClient.get(url, {
+          params: { sort_by: sort },
+          timeout: 20000,
+        });
+        const body = asRecord(response.data) ?? {};
+        if (body.success === false) {
+          throw new Error(
+            pickCompareString(body.message) || 'Failed to load vendor comparison.'
+          );
+        }
+        const rows = extractCompareVendorRows(response.data);
+        return rows.map((row) => mapCompareVendorOffer(row, id, productName));
+      } catch (error) {
+        lastError = error;
       }
-    } catch {
-      // demo
     }
-    return demoVendorOffers(productId, productName ?? 'Product');
+
+    const ax = lastError as {
+      response?: { data?: { message?: string } };
+      message?: string;
+    };
+    throw new Error(
+      ax?.response?.data?.message ||
+        ax?.message ||
+        'Failed to load vendor comparison.'
+    );
   },
 };

@@ -121,8 +121,12 @@ const OrdersScreen: React.FC = () => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="list-outline" size={64} color={COLORS.textSecondary} />
-      <Text style={styles.emptyStateTitle}>{t('tabs.orders')}</Text>
+      <View style={styles.emptyIconWrap}>
+        <Ionicons name="receipt-outline" size={40} color={COLORS.primary} />
+      </View>
+      <Text style={styles.emptyStateTitle}>
+        {t('orders.emptyTitle', 'No orders yet')}
+      </Text>
       {!isAuthenticated ? (
         <Text style={styles.emptyStateDescription}>
           {t('orders.loginToSee', 'Sign in to view your orders.')}
@@ -130,17 +134,21 @@ const OrdersScreen: React.FC = () => {
       ) : loadError ? (
         <Text style={styles.errorText}>{loadError}</Text>
       ) : (
-        <Text style={styles.emptyStateDescription}>{t('home.placeServiceOrders')}</Text>
+        <Text style={styles.emptyStateDescription}>
+          {t('orders.emptyShop', 'Browse the store or book a service to place your first order.')}
+        </Text>
       )}
       <TouchableOpacity
         style={styles.browseButton}
         onPress={() =>
           navigation.navigate('Main' as never, { screen: isAuthenticated ? 'Store' : 'Services' } as never)
         }
+        activeOpacity={0.88}
       >
         <Text style={styles.browseButtonText}>
           {isAuthenticated ? t('tabs.store', 'Store') : t('tabs.services')}
         </Text>
+        <Ionicons name="arrow-forward" size={16} color="#fff" />
       </TouchableOpacity>
     </View>
   );
@@ -182,7 +190,9 @@ const OrdersScreen: React.FC = () => {
             <TouchableOpacity
               style={styles.historyButton}
               onPress={() => navigation.navigate('OrderHistory')}
+              activeOpacity={0.88}
             >
+              <Ionicons name="time-outline" size={16} color={COLORS.primary} />
               <Text style={styles.historyButtonText}>{t('home.orderHistory')}</Text>
             </TouchableOpacity>
           }
@@ -205,7 +215,9 @@ const OrdersScreen: React.FC = () => {
           <TouchableOpacity
             style={styles.historyButton}
             onPress={() => navigation.navigate('OrderHistory')}
+            activeOpacity={0.88}
           >
+            <Ionicons name="time-outline" size={16} color={COLORS.primary} />
             <Text style={styles.historyButtonText}>{t('home.orderHistory')}</Text>
           </TouchableOpacity>
         }
@@ -243,23 +255,31 @@ const OrdersScreen: React.FC = () => {
 
       <View style={styles.quickActions}>
         <TouchableOpacity
-          style={styles.quickAction}
-          onPress={() => navigation.navigate('Main' as never, { screen: 'Services' } as never)}
+          style={[styles.quickAction, styles.quickActionPrimary]}
+          onPress={() => navigation.navigate('Main' as never, { screen: 'Store' } as never)}
+          activeOpacity={0.88}
         >
-          <View style={styles.quickActionIcon}>
-            <Ionicons name="add-circle" size={24} color={COLORS.primary} />
+          <View style={[styles.quickActionIcon, { backgroundColor: COLORS.primary }]}>
+            <Ionicons name="bag-handle" size={20} color="#fff" />
           </View>
-          <Text style={styles.quickActionText}>{t('tabs.orders')}</Text>
+          <View style={styles.quickActionTextCol}>
+            <Text style={styles.quickActionText}>{t('home.shopProducts', 'Shop')}</Text>
+            <Text style={styles.quickActionHint}>{t('orders.shopHint', 'Browse products')}</Text>
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.quickAction}
+          style={[styles.quickAction, styles.quickActionHelp]}
           onPress={() => navigation.navigate('HelpCenter')}
+          activeOpacity={0.88}
         >
-          <View style={styles.quickActionIcon}>
-            <Ionicons name="help-circle" size={24} color={COLORS.primary} />
+          <View style={[styles.quickActionIcon, { backgroundColor: COLORS.secondary }]}>
+            <Ionicons name="help-buoy" size={20} color="#fff" />
           </View>
-          <Text style={styles.quickActionText}>{t('home.learnMore')}</Text>
+          <View style={styles.quickActionTextCol}>
+            <Text style={styles.quickActionText}>{t('helpCenter.title', 'Help')}</Text>
+            <Text style={styles.quickActionHint}>{t('orders.helpHint', 'Get support')}</Text>
+          </View>
         </TouchableOpacity>
       </View>
     </View>
@@ -269,7 +289,7 @@ const OrdersScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceLight,
   },
   loadingBox: {
     flex: 1,
@@ -277,63 +297,75 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   historyButton: {
-    padding: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primary + '12',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.round,
   },
   historyButtonText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   filterContainer: {
     paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.lg,
+    paddingTop: SPACING.sm,
+    marginBottom: SPACING.md,
   },
   filterTab: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     marginRight: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   filterTabActive: {
     backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   filterTabText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   filterTabTextActive: {
     color: COLORS.background,
   },
   filterCount: {
-    backgroundColor: COLORS.textSecondary,
+    backgroundColor: COLORS.surfaceLight,
     borderRadius: 10,
-    paddingHorizontal: SPACING.xs,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     marginLeft: SPACING.xs,
     minWidth: 20,
     alignItems: 'center',
   },
   filterCountActive: {
-    backgroundColor: COLORS.background,
+    backgroundColor: 'rgba(255,255,255,0.25)',
   },
   filterCountText: {
     fontSize: FONT_SIZES.xs,
-    color: COLORS.background,
+    color: COLORS.text,
     fontWeight: FONT_WEIGHTS.bold,
   },
   filterCountTextActive: {
-    color: COLORS.primary,
+    color: COLORS.background,
   },
   banner: {
     marginHorizontal: SPACING.lg,
     marginBottom: SPACING.sm,
-    padding: SPACING.sm,
-    backgroundColor: COLORS.warning + '22',
-    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.warning + '18',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.warning + '44',
   },
   bannerText: {
     fontSize: FONT_SIZES.sm,
@@ -353,13 +385,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: SPACING.xl,
-    minHeight: 280,
+    minHeight: 320,
+  },
+  emptyIconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
   },
   emptyStateTitle: {
     fontSize: FONT_SIZES.xl,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
-    marginTop: SPACING.lg,
     marginBottom: SPACING.sm,
   },
   emptyStateDescription: {
@@ -367,6 +407,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
     marginBottom: SPACING.xl,
+    lineHeight: 22,
   },
   errorText: {
     fontSize: FONT_SIZES.md,
@@ -375,41 +416,63 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   browseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: 14,
+    borderRadius: BORDER_RADIUS.round,
   },
   browseButtonText: {
     color: COLORS.background,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   quickActions: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    gap: SPACING.sm,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.surface,
-    margin: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.md,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
   },
   quickAction: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+  },
+  quickActionPrimary: {
+    backgroundColor: '#E8F2EA',
+    borderColor: '#C5DBC9',
+  },
+  quickActionHelp: {
+    backgroundColor: '#F3EBE7',
+    borderColor: '#DFCEC5',
   },
   quickActionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.primary + '10',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.sm,
+  },
+  quickActionTextCol: {
+    flex: 1,
   },
   quickActionText: {
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
+  },
+  quickActionHint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 1,
   },
 });
 

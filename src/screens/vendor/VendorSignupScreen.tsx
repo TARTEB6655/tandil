@@ -163,8 +163,19 @@ const VendorSignupScreen: React.FC = () => {
     });
     if (result.canceled || !result.assets?.[0]) return null;
     const asset = result.assets[0];
-    const name = asset.fileName ?? asset.uri.split('/').pop() ?? 'upload.jpg';
-    const mimeType = asset.mimeType ?? (forLogo ? 'image/jpeg' : 'application/octet-stream');
+    let name = asset.fileName ?? asset.uri.split('/').pop() ?? (forLogo ? 'logo.jpg' : 'upload.jpg');
+    // Strip query params from URI-derived names
+    name = name.split('?')[0] || (forLogo ? 'logo.jpg' : 'upload.jpg');
+    if (!/\.[a-zA-Z0-9]+$/.test(name)) {
+      name = forLogo ? 'logo.jpg' : `${name}.jpg`;
+    }
+    const mimeType =
+      asset.mimeType ??
+      (name.toLowerCase().endsWith('.png')
+        ? 'image/png'
+        : name.toLowerCase().endsWith('.pdf')
+          ? 'application/pdf'
+          : 'image/jpeg');
     return { uri: asset.uri, name, mimeType };
   }, [t]);
 
@@ -187,6 +198,7 @@ const VendorSignupScreen: React.FC = () => {
       !phone.trim() ||
       !tradeLicenseNumber.trim() ||
       !tradeLicenseUpload ||
+      !companyLogo ||
       !address.trim() ||
       !password.trim() ||
       !confirmPassword.trim() ||

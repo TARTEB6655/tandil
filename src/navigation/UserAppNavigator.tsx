@@ -47,6 +47,7 @@ import PaymentMethodsScreen from '../screens/user/PaymentMethodsScreen';
 import WalletScreen from '../screens/user/WalletScreen';
 import AppInfoContentScreen from '../screens/user/AppInfoContentScreen';
 import VendorCompareScreen from '../screens/user/VendorCompareScreen';
+import ShopVendorStoreScreen from '../screens/user/ShopVendorStoreScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator<UserStackParamList>();
@@ -158,6 +159,7 @@ const UserAppNavigator = () => {
       <Stack.Screen name="Wallet" component={WalletScreen} />
       <Stack.Screen name="AppInfoContent" component={AppInfoContentScreen} />
       <Stack.Screen name="VendorCompare" component={VendorCompareScreen} />
+      <Stack.Screen name="ShopVendorStore" component={ShopVendorStoreScreen} />
     </Stack.Navigator>
   );
 };

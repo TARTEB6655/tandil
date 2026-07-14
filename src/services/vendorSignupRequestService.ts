@@ -149,13 +149,35 @@ export function vendorTypeLabel(type: string): string {
   return labels[type.toLowerCase()] ?? type;
 }
 
+function normalizeUploadUri(uri: string): string {
+  if (!uri) return uri;
+  if (uri.startsWith('file://') || uri.startsWith('content://') || uri.startsWith('http')) {
+    return uri;
+  }
+  // iOS / local paths often need the file:// prefix for multipart uploads
+  if (uri.startsWith('/')) return `file://${uri}`;
+  return uri;
+}
+
+function guessMimeType(name: string, fallback = 'image/jpeg'): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  return fallback;
+}
+
 function appendFile(form: FormData, key: string, file?: PickedUploadFile | null) {
   if (!file?.uri) return;
+  const name = file.name?.trim() || `${key}.jpg`;
+  const type = file.mimeType?.trim() || guessMimeType(name);
   form.append(key, {
-    uri: file.uri,
-    name: file.name,
-    type: file.mimeType,
-  } as any);
+    uri: normalizeUploadUri(file.uri),
+    name,
+    type,
+  } as unknown as Blob);
 }
 
 function buildGoogleMapsLocation(params: VendorSignupPayload): string {
@@ -623,6 +645,9 @@ export const vendorSignupRequestService = {
     if (!params.emirates_id_upload?.uri) {
       throw new Error('Emirates ID file is required.');
     }
+    if (!params.company_logo?.uri) {
+      throw new Error('Company logo file is required.');
+    }
     if (!buildGoogleMapsLocation(params)) {
       throw new Error('Google Maps location is required.');
     }
@@ -631,6 +656,8 @@ export const vendorSignupRequestService = {
     try {
       const response = await publicApiClient.post('/vendor/auth/register', form, {
         timeout: 120000,
+        headers: { Accept: 'application/json' },
+        transformRequest: [(data) => data],
       });
       const body = response?.data ?? {};
       if (body?.success === false) {

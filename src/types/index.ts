@@ -285,6 +285,12 @@ export type UserStackParamList = {
   PaymentMethods: undefined;
   AppInfoContent: { pageKey: AppInfoPageKey };
   VendorCompare: { productId: string; productName?: string };
+  ShopVendorStore: {
+    vendorId: string;
+    vendorName?: string;
+    vendorLogo?: string;
+    vendorRating?: number;
+  };
 };
 
 export type TechnicianStackParamList = {

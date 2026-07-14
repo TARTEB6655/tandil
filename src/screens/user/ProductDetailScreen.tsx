@@ -120,6 +120,11 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   const product = useMemo(() => {
     const fromApi = shopProductToDisplay(apiProduct);
     if (fromApi) return fromApi;
+    // Ensure route product id is a numeric catalog id string
+    const rid = Number(initialProduct?.id);
+    if (initialProduct && Number.isFinite(rid) && rid > 0) {
+      return { ...initialProduct, id: String(rid) };
+    }
     return initialProduct;
   }, [apiProduct, initialProduct]);
 
@@ -277,7 +282,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     setAddingToCart(true);
     try {
       const productId = Number(product.id);
-      if (!Number.isFinite(productId)) {
+      if (!Number.isFinite(productId) || productId <= 0) {
         Alert.alert(t('common.error', 'Error'), t('product.invalidProduct', { defaultValue: 'Invalid product.' }));
         return;
       }
@@ -528,19 +533,25 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
             )}
           </View>
 
-          <TouchableOpacity
-            style={styles.compareVendorsBtn}
-            onPress={() =>
-              navigation.navigate('VendorCompare', {
-                productId: product.id,
-                productName: product.name,
-              })
-            }
-          >
-            <Ionicons name="git-compare-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.compareVendorsText}>{t('vendorCompare.compareButton')}</Text>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
-          </TouchableOpacity>
+          {apiProduct?.compare_vendors?.available === true ? (
+            <TouchableOpacity
+              style={styles.compareVendorsBtn}
+              onPress={() =>
+                navigation.navigate('VendorCompare', {
+                  productId: String(product.id),
+                  productName:
+                    apiProduct.compare_vendors?.product_name || product.name,
+                })
+              }
+            >
+              <Ionicons name="git-compare-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.compareVendorsText}>
+                {apiProduct.compare_vendors?.label?.trim() ||
+                  t('vendorCompare.compareButton')}
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+          ) : null}
 
           {/* Quantity Selection */}
           <View style={styles.quantitySection}>

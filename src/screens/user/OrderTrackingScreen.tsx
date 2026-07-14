@@ -32,16 +32,6 @@ function resolveTrackPhotoUrl(entry: unknown): string | null {
   return buildFullImageUrl(raw);
 }
 
-function badgeColorForStatus(statusLabel: string): string {
-  const s = statusLabel.toLowerCase();
-  if (s.includes('cancel')) return COLORS.error;
-  if (s.includes('deliver') || s.includes('complete')) return COLORS.success;
-  if (s.includes('progress') || s.includes('assign')) return COLORS.primary;
-  if (s.includes('confirm')) return COLORS.info;
-  if (s.includes('pending')) return COLORS.warning;
-  return COLORS.textSecondary;
-}
-
 const OrderTrackingScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -198,35 +188,27 @@ const OrderTrackingScreen: React.FC = () => {
     return null;
   }
 
-  const badgeBg = badgeColorForStatus(track.current_status);
-
   return (
     <View style={styles.container}>
-      <Header
-        title={t('tabs.orders')}
-        showBack={true}
-        rightComponent={
-          <TouchableOpacity style={styles.moreButton}>
-            <Ionicons name="ellipsis-vertical" size={24} color={COLORS.text} />
-          </TouchableOpacity>
-        }
-      />
+      <Header title={t('orders.trackingTitle', 'Order tracking')} showBack={true} />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.statusContainer}>
+        <View style={styles.heroCard}>
+          <View style={styles.heroDecor} />
           <View style={styles.statusHeader}>
-            <Text style={styles.orderId}>
-              {t('orders.orderNumberShort', {
-                short: track.order_number_short || String(track.order_id),
-                defaultValue: `Order #${track.order_number_short || track.order_id}`,
-              })}
-            </Text>
-            <View style={[styles.statusBadge, { backgroundColor: badgeBg + '22' }]}>
-              <Text style={[styles.statusText, { color: badgeBg }]}>{track.current_status}</Text>
+            <View style={styles.heroOrderMeta}>
+              <Text style={styles.heroLabel}>{t('orders.orderLabel', 'Order')}</Text>
+              <Text style={styles.orderId}>
+                #{track.order_number_short || track.order_id}
+              </Text>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+              <Text style={styles.statusTextLight}>{track.current_status}</Text>
             </View>
           </View>
-
-          <TrackingTimeline timeline={track.tracking?.timeline ?? []} />
+          <View style={styles.timelineCard}>
+            <TrackingTimeline timeline={track.tracking?.timeline ?? []} />
+          </View>
         </View>
 
         {photoUrls.length > 0 ? (
@@ -254,7 +236,9 @@ const OrderTrackingScreen: React.FC = () => {
           <View style={styles.orderCard}>
             <View style={styles.orderInfo}>
               <View style={styles.orderInfoItem}>
-                <Ionicons name="calendar-outline" size={20} color={COLORS.textSecondary} />
+                <View style={styles.orderInfoIcon}>
+                  <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
+                </View>
                 <View style={styles.orderInfoText}>
                   <Text style={styles.orderInfoLabel}>{t('booking.date', 'Placed')}</Text>
                   <Text style={styles.orderInfoValue}>{placedDate}</Text>
@@ -262,7 +246,9 @@ const OrderTrackingScreen: React.FC = () => {
               </View>
 
               <View style={styles.orderInfoItem}>
-                <Ionicons name="location-outline" size={20} color={COLORS.textSecondary} />
+                <View style={styles.orderInfoIcon}>
+                  <Ionicons name="location-outline" size={18} color={COLORS.primary} />
+                </View>
                 <View style={styles.orderInfoText}>
                   <Text style={styles.orderInfoLabel}>{t('booking.addressSection', 'Address')}</Text>
                   <Text style={styles.orderInfoValue}>{summary?.delivery_address ?? '—'}</Text>
@@ -270,7 +256,9 @@ const OrderTrackingScreen: React.FC = () => {
               </View>
 
               <View style={styles.orderInfoItem}>
-                <Ionicons name="card-outline" size={20} color={COLORS.textSecondary} />
+                <View style={styles.orderInfoIcon}>
+                  <Ionicons name="card-outline" size={18} color={COLORS.primary} />
+                </View>
                 <View style={styles.orderInfoText}>
                   <Text style={styles.orderInfoLabel}>{t('booking.payment', 'Payment')}</Text>
                   <Text style={styles.orderInfoValue}>{summary?.payment_method ?? '—'}</Text>
@@ -278,10 +266,12 @@ const OrderTrackingScreen: React.FC = () => {
               </View>
 
               <View style={styles.orderInfoItem}>
-                <Ionicons name="cash-outline" size={20} color={COLORS.textSecondary} />
+                <View style={[styles.orderInfoIcon, styles.orderInfoIconTotal]}>
+                  <Ionicons name="cash-outline" size={18} color="#fff" />
+                </View>
                 <View style={styles.orderInfoText}>
                   <Text style={styles.orderInfoLabel}>{t('booking.total', 'Total')}</Text>
-                  <Text style={styles.orderInfoValue}>
+                  <Text style={[styles.orderInfoValue, styles.totalValue]}>
                     {summary?.currency ?? 'AED'} {Number(summary?.total ?? 0).toFixed(2)}
                   </Text>
                 </View>
@@ -289,7 +279,9 @@ const OrderTrackingScreen: React.FC = () => {
 
               {estimatedArrival ? (
                 <View style={styles.orderInfoItem}>
-                  <Ionicons name="navigate-outline" size={20} color={COLORS.textSecondary} />
+                  <View style={styles.orderInfoIcon}>
+                    <Ionicons name="navigate-outline" size={18} color={COLORS.primary} />
+                  </View>
                   <View style={styles.orderInfoText}>
                     <Text style={styles.orderInfoLabel}>
                       {t('product.estimatedArrival', { defaultValue: 'Estimated arrival' })}
@@ -301,7 +293,9 @@ const OrderTrackingScreen: React.FC = () => {
 
               {jobDuration ? (
                 <View style={styles.orderInfoItem}>
-                  <Ionicons name="hourglass-outline" size={20} color={COLORS.textSecondary} />
+                  <View style={styles.orderInfoIcon}>
+                    <Ionicons name="hourglass-outline" size={18} color={COLORS.primary} />
+                  </View>
                   <View style={styles.orderInfoText}>
                     <Text style={styles.orderInfoLabel}>
                       {t('product.jobDuration', { defaultValue: 'Job duration' })}
@@ -313,7 +307,9 @@ const OrderTrackingScreen: React.FC = () => {
 
               {summary?.special_instructions ? (
                 <View style={styles.orderInfoItem}>
-                  <Ionicons name="chatbubble-outline" size={20} color={COLORS.textSecondary} />
+                  <View style={styles.orderInfoIcon}>
+                    <Ionicons name="chatbubble-outline" size={18} color={COLORS.primary} />
+                  </View>
                   <View style={styles.orderInfoText}>
                     <Text style={styles.orderInfoLabel}>{t('booking.special', 'Note')}</Text>
                     <Text style={styles.orderInfoValue}>{summary.special_instructions}</Text>
@@ -325,25 +321,28 @@ const OrderTrackingScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      <View style={styles.bottomActions}>
-        {isDone ? (
-          <TouchableOpacity style={styles.rateButton} onPress={handleRateService}>
-            <Ionicons name="star-outline" size={20} color={COLORS.background} />
-            <Text style={styles.rateButtonText}>{t('orders.rateService', 'Rate service')}</Text>
-          </TouchableOpacity>
-        ) : track.can_cancel ? (
-          <TouchableOpacity
-            style={[styles.cancelButton, cancelling && { opacity: 0.6 }]}
-            onPress={handleCancelOrder}
-            disabled={cancelling}
-          >
-            <Ionicons name="close-circle-outline" size={20} color={COLORS.error} />
-            <Text style={styles.cancelButtonText}>
-              {cancelling ? t('common.loading', 'Loading...') : t('orders.cancelOrder', 'Cancel order')}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
+      {(isDone || track.can_cancel) ? (
+        <View style={styles.bottomActions}>
+          {isDone ? (
+            <TouchableOpacity style={styles.rateButton} onPress={handleRateService} activeOpacity={0.88}>
+              <Ionicons name="star" size={20} color={COLORS.background} />
+              <Text style={styles.rateButtonText}>{t('orders.rateService', 'Rate service')}</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.cancelButton, cancelling && { opacity: 0.6 }]}
+              onPress={handleCancelOrder}
+              disabled={cancelling}
+              activeOpacity={0.88}
+            >
+              <Ionicons name="close-circle-outline" size={20} color={COLORS.error} />
+              <Text style={styles.cancelButtonText}>
+                {cancelling ? t('common.loading', 'Loading...') : t('orders.cancelOrder', 'Cancel order')}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : null}
     </View>
   );
 };
@@ -351,7 +350,7 @@ const OrderTrackingScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceLight,
   },
   scrollContent: {
     paddingBottom: SPACING.xl,
@@ -360,7 +359,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceLight,
     padding: SPACING.lg,
   },
   loadingText: {
@@ -384,40 +383,65 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.xl,
     paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.round,
   },
   retryText: {
     color: COLORS.background,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
-  moreButton: {
-    padding: SPACING.sm,
-  },
-  statusContainer: {
-    paddingHorizontal: SPACING.lg,
+  heroCard: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.sm,
     marginBottom: SPACING.lg,
+    backgroundColor: COLORS.primary,
+    borderRadius: 22,
+    padding: SPACING.lg,
+    overflow: 'hidden',
+  },
+  heroDecor: {
+    position: 'absolute',
+    top: -40,
+    right: -30,
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   statusHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: SPACING.md,
   },
-  orderId: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.text,
+  heroOrderMeta: {
     flex: 1,
     marginRight: SPACING.sm,
   },
-  statusBadge: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.md,
-  },
-  statusText: {
-    fontSize: FONT_SIZES.sm,
+  heroLabel: {
+    fontSize: FONT_SIZES.xs,
+    color: 'rgba(255,255,255,0.75)',
+    marginBottom: 2,
     fontWeight: FONT_WEIGHTS.medium,
+  },
+  orderId: {
+    fontSize: FONT_SIZES.xl,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: '#fff',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  statusTextLight: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: '#fff',
+  },
+  timelineCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: 16,
+    padding: SPACING.md,
   },
   section: {
     marginBottom: SPACING.lg,
@@ -425,7 +449,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
     marginBottom: SPACING.md,
   },
@@ -434,13 +458,17 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   photoThumb: {
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   orderCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.background,
+    borderRadius: 18,
     padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   orderInfo: {
     gap: SPACING.md,
@@ -449,19 +477,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
+  orderInfoIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary + '12',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderInfoIconTotal: {
+    backgroundColor: COLORS.primary,
+  },
   orderInfoText: {
     flex: 1,
     marginLeft: SPACING.sm,
   },
   orderInfoLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    marginBottom: 2,
+    fontWeight: FONT_WEIGHTS.medium,
   },
   orderInfoValue: {
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  totalValue: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZES.lg,
   },
   bottomActions: {
     padding: SPACING.lg,
@@ -471,8 +515,8 @@ const styles = StyleSheet.create({
   },
   rateButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 14,
+    borderRadius: BORDER_RADIUS.round,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -480,21 +524,23 @@ const styles = StyleSheet.create({
   rateButtonText: {
     color: COLORS.background,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
     marginLeft: SPACING.sm,
   },
   cancelButton: {
-    backgroundColor: COLORS.error + '20',
-    paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.error + '14',
+    paddingVertical: 14,
+    borderRadius: BORDER_RADIUS.round,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.error + '33',
   },
   cancelButtonText: {
     color: COLORS.error,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
     marginLeft: SPACING.sm,
   },
 });

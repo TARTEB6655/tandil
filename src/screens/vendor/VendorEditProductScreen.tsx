@@ -128,8 +128,10 @@ const VendorEditProductScreen: React.FC = () => {
   const [handle, setHandle] = useState('');
   const [estimatedArrival, setEstimatedArrival] = useState('');
   const [jobDuration, setJobDuration] = useState('');
-  const [mainImage, setMainImage] = useState<{ uri: string } | null>(null);
-  const [extraImages, setExtraImages] = useState<{ uri: string }[]>([]);
+  const [mainImage, setMainImage] = useState<{ uri: string; id?: number } | null>(null);
+  const [extraImages, setExtraImages] = useState<{ uri: string; id?: number }[]>([]);
+  const [removedImageIds, setRemovedImageIds] = useState<number[]>([]);
+  const [removeMainImageFlag, setRemoveMainImageFlag] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
@@ -183,8 +185,17 @@ const VendorEditProductScreen: React.FC = () => {
     setApprovalStatus(detail.approval_status ?? null);
     setListingStatus(detail.listing_status ?? null);
     setRejectionReason(detail.rejection_reason ?? null);
-    setMainImage(detail.images[0] ? { uri: detail.images[0] } : null);
-    setExtraImages(detail.images.slice(1).map((uri) => ({ uri })));
+    const productImages =
+      detail.product_images && detail.product_images.length > 0
+        ? detail.product_images
+        : detail.images.map((uri) => ({ uri }));
+    const primary =
+      productImages.find((img) => img.is_primary) ?? productImages[0] ?? null;
+    const extras = productImages.filter((img) => img !== primary && Boolean(img.uri));
+    setMainImage(primary?.uri ? { uri: primary.uri, id: primary.id } : null);
+    setExtraImages(extras.map((img) => ({ uri: img.uri, id: img.id })));
+    setRemovedImageIds([]);
+    setRemoveMainImageFlag(false);
     setCustomizationConfig(detail.customization ?? { groups: [] });
     setErrors({});
   }, []);
@@ -286,6 +297,7 @@ const VendorEditProductScreen: React.FC = () => {
       if (!result.canceled && result.assets?.[0]) {
         const uri = await compressImageForUpload(result.assets[0].uri);
         setMainImage({ uri });
+        setRemoveMainImageFlag(false);
       }
     } catch (err: unknown) {
       const message = (err as { message?: string; code?: string })?.message || (err as { code?: string })?.code || 'Could not open photo library.';
@@ -333,9 +345,26 @@ const VendorEditProductScreen: React.FC = () => {
     }
   };
 
-  const removeMainImage = () => setMainImage(null);
+  const removeMainImage = () => {
+    setMainImage((prev) => {
+      // Existing server main image: tell backend via remove_main_image
+      if (prev && !isLocalImageUri(prev.uri)) {
+        setRemoveMainImageFlag(true);
+      }
+      return null;
+    });
+  };
+
   const removeExtraImage = (index: number) => {
-    setExtraImages((prev) => prev.filter((_, i) => i !== index));
+    setExtraImages((prev) => {
+      const target = prev[index];
+      if (target?.id != null) {
+        setRemovedImageIds((ids) =>
+          ids.includes(target.id!) ? ids : [...ids, target.id!]
+        );
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const validateForm = (): boolean => {
@@ -419,6 +448,8 @@ const VendorEditProductScreen: React.FC = () => {
         ...timingFields,
         mainImage: localMainImage,
         extraImages: localExtraImages.map((img) => ({ uri: img.uri })),
+        removed_image_ids: removedImageIds.length > 0 ? removedImageIds : undefined,
+        remove_main_image: removeMainImageFlag && !localMainImage ? true : undefined,
       });
 
       Alert.alert(
@@ -909,14 +940,24 @@ const VendorEditProductScreen: React.FC = () => {
             {extraImages.length > 0 ? (
               <View style={styles.uploadedPreviewWrap}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbScroll}>
-                  {extraImages.map((img, index) => (
-                    <View key={index} style={styles.thumbWrap}>
+                  {extraImages.map((img, index) => {
+                    if (!img.uri?.trim()) return null;
+                    return (
+                    <View
+                      key={img.id != null ? `gallery-${img.id}` : `gallery-new-${img.uri}-${index}`}
+                      style={styles.thumbWrap}
+                    >
                       <Image source={{ uri: img.uri }} style={styles.thumb} contentFit="cover" />
-                      <TouchableOpacity style={styles.thumbRemove} onPress={() => removeExtraImage(index)}>
+                      <TouchableOpacity
+                        style={styles.thumbRemove}
+                        onPress={() => removeExtraImage(index)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
                         <Ionicons name="close-circle" size={24} color={COLORS.error} />
                       </TouchableOpacity>
                     </View>
-                  ))}
+                    );
+                  })}
                 </ScrollView>
               </View>
             ) : null}

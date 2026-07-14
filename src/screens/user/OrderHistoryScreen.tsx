@@ -86,8 +86,12 @@ const OrderHistoryScreen: React.FC = () => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="list-outline" size={64} color={COLORS.textSecondary} />
-      <Text style={styles.emptyStateTitle}>{t('tabs.orders')}</Text>
+      <View style={styles.emptyIconWrap}>
+        <Ionicons name="time-outline" size={40} color={COLORS.primary} />
+      </View>
+      <Text style={styles.emptyStateTitle}>
+        {t('orders.emptyHistoryTitle', 'No order history')}
+      </Text>
       {!isAuthenticated ? (
         <Text style={styles.emptyStateDescription}>
           {t('orders.loginToSee', 'Sign in to view your orders.')}
@@ -104,10 +108,12 @@ const OrderHistoryScreen: React.FC = () => {
         onPress={() =>
           navigation.navigate('Main' as never, { screen: isAuthenticated ? 'Store' : 'Home' } as never)
         }
+        activeOpacity={0.88}
       >
         <Text style={styles.browseButtonText}>
           {isAuthenticated ? t('tabs.store', 'Store') : t('tabs.home', 'Home')}
         </Text>
+        <Ionicons name="arrow-forward" size={16} color="#fff" />
       </TouchableOpacity>
     </View>
   );
@@ -128,19 +134,6 @@ const OrderHistoryScreen: React.FC = () => {
       <Header
         title={t('home.orderHistory')}
         showBack={true}
-        rightComponent={
-          <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => {
-              const sequence = ['all', 'pending', 'in_progress', 'completed', 'cancelled'];
-              const idx = sequence.indexOf(selectedFilter);
-              const next = sequence[(idx + 1) % sequence.length];
-              setSelectedFilter(next);
-            }}
-          >
-            <Ionicons name="filter" size={24} color={COLORS.text} />
-          </TouchableOpacity>
-        }
       />
 
       <View style={styles.filterContainer}>
@@ -156,6 +149,7 @@ const OrderHistoryScreen: React.FC = () => {
               key={filter.id}
               style={[styles.filterTab, selectedFilter === filter.id && styles.filterTabActive]}
               onPress={() => setSelectedFilter(filter.id)}
+              activeOpacity={0.88}
             >
               <Text
                 style={[
@@ -200,34 +194,35 @@ const OrderHistoryScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceLight,
   },
   loadingBox: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  filterButton: {
-    padding: SPACING.sm,
-  },
   filterContainer: {
     paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.lg,
+    paddingTop: SPACING.sm,
+    marginBottom: SPACING.md,
   },
   filterTab: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     marginRight: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   filterTabActive: {
     backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   filterTabText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   filterTabTextActive: {
     color: COLORS.background,
@@ -244,9 +239,11 @@ const styles = StyleSheet.create({
   banner: {
     marginHorizontal: SPACING.lg,
     marginBottom: SPACING.sm,
-    padding: SPACING.sm,
-    backgroundColor: COLORS.warning + '22',
-    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.warning + '18',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.warning + '44',
   },
   bannerText: {
     fontSize: FONT_SIZES.sm,
@@ -257,12 +254,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: SPACING.xl,
+    minHeight: 320,
+  },
+  emptyIconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
   },
   emptyStateTitle: {
     fontSize: FONT_SIZES.xl,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
-    marginTop: SPACING.lg,
     marginBottom: SPACING.sm,
   },
   emptyStateDescription: {
@@ -270,6 +276,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
     marginBottom: SPACING.xl,
+    lineHeight: 22,
   },
   errorText: {
     fontSize: FONT_SIZES.md,
@@ -278,15 +285,18 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   browseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: 14,
+    borderRadius: BORDER_RADIUS.round,
   },
   browseButtonText: {
     color: COLORS.background,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
 });
 

@@ -77,6 +77,14 @@ export interface ShopProduct {
       sort_order?: number;
     }>;
   }>;
+  /** From GET /shop/products/:id — show Compare vendors button when available is true. */
+  compare_vendors?: {
+    available?: boolean;
+    vendor_count?: number;
+    label?: string;
+    match_by?: string;
+    product_name?: string;
+  } | null;
 }
 
 export interface ShopFeaturedProductsResponse {
