@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -73,12 +72,14 @@ function ProductRow({
   busy,
   enabled,
   onToggle,
+  onDelete,
   t,
 }: {
   item: AdminManagedVendorProduct;
   busy: boolean;
   enabled: boolean;
   onToggle: () => void;
+  onDelete: () => void;
   t: (key: string, options?: { defaultValue?: string }) => string;
 }) {
   return (
@@ -110,16 +111,31 @@ function ProductRow({
           </View>
         ) : null}
       </View>
-      <View style={styles.toggleWrap}>
+      <View style={styles.actionsWrap}>
         {busy ? (
           <ActivityIndicator size="small" color={COLORS.primary} />
         ) : (
-          <Switch
-            value={enabled}
-            onValueChange={onToggle}
-            trackColor={{ false: COLORS.border, true: COLORS.primary + '88' }}
-            thumbColor={enabled ? COLORS.primary : '#f4f3f4'}
-          />
+          <>
+            <Switch
+              value={enabled}
+              onValueChange={onToggle}
+              trackColor={{ false: COLORS.border, true: COLORS.primary + '88' }}
+              thumbColor={enabled ? COLORS.primary : '#f4f3f4'}
+            />
+            {item.can_delete !== false ? (
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={onDelete}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('adminVendorManagement.deleteProduct', {
+                  defaultValue: 'Delete product',
+                })}
+              >
+                <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+              </TouchableOpacity>
+            ) : null}
+          </>
         )}
       </View>
     </View>
@@ -142,6 +158,7 @@ const AdminVendorProductsScreen: React.FC = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
@@ -301,6 +318,72 @@ const AdminVendorProductsScreen: React.FC = () => {
     );
   };
 
+  const handleDelete = (product: AdminManagedVendorProduct) => {
+    if (product.can_delete === false) {
+      Alert.alert(
+        t('adminVendorManagement.deleteNotAllowedTitle', {
+          defaultValue: 'Cannot delete',
+        }),
+        t('adminVendorManagement.deleteNotAllowed', {
+          defaultValue: 'This product cannot be deleted right now.',
+        })
+      );
+      return;
+    }
+
+    Alert.alert(
+      t('adminVendorManagement.deleteProduct', { defaultValue: 'Delete product' }),
+      t('adminVendorManagement.deleteConfirm', {
+        defaultValue: 'Delete "{{name}}"? This cannot be undone.',
+        name: product.name,
+      }),
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('common.delete', { defaultValue: 'Delete' }),
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingId(product.id);
+            const previous = products;
+            const previousSummary = summary;
+            setProducts((list) => list.filter((p) => p.id !== product.id));
+            if (summary) {
+              setSummary({
+                ...summary,
+                total_products: Math.max(0, summary.total_products - 1),
+                enabled_products: Math.max(
+                  0,
+                  summary.enabled_products - (product.is_available ? 1 : 0)
+                ),
+                disabled_products: Math.max(
+                  0,
+                  summary.disabled_products - (product.is_available ? 0 : 1)
+                ),
+              });
+            }
+            try {
+              await adminVendorManagementService.deleteProduct(vendorId, product);
+              await load(1, true);
+            } catch (err: unknown) {
+              setProducts(previous);
+              setSummary(previousSummary);
+              Alert.alert(
+                t('common.error'),
+                err instanceof Error
+                  ? err.message
+                  : t('adminVendorManagement.deleteFailed', {
+                      defaultValue: 'Failed to delete product.',
+                    })
+              );
+            } finally {
+              setDeletingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const title =
     vendor?.business_name ||
     vendorNameParam ||
@@ -311,7 +394,7 @@ const AdminVendorProductsScreen: React.FC = () => {
     `${summary?.currency || 'AED'} ${Math.round(summary?.total_revenue ?? 0)}`;
 
   const renderProduct = ({ item }: { item: AdminManagedVendorProduct }) => {
-    const busy = togglingId === item.id;
+    const busy = togglingId === item.id || deletingId === item.id;
     const enabled = item.is_available;
     return (
       <ProductRow
@@ -319,13 +402,14 @@ const AdminVendorProductsScreen: React.FC = () => {
         busy={busy}
         enabled={enabled}
         onToggle={() => handleToggle(item)}
+        onDelete={() => handleDelete(item)}
         t={t}
       />
     );
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
 
       {loading && !refreshing ? (
@@ -471,7 +555,7 @@ const AdminVendorProductsScreen: React.FC = () => {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -693,6 +777,20 @@ const styles = StyleSheet.create({
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusPillText: { fontSize: 10, fontWeight: FONT_WEIGHTS.semiBold },
   toggleWrap: { width: 52, alignItems: 'center', justifyContent: 'center' },
+  actionsWrap: {
+    width: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  deleteBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.error + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   centered: {
     flex: 1,
     alignItems: 'center',

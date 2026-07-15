@@ -491,6 +491,7 @@ const AdminDashboardScreen: React.FC = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
+        <View style={styles.headerDecor} />
         <View style={styles.headerContent}>
           <View style={styles.headerTextWrap}>
             {profileLoading ? (
@@ -510,7 +511,7 @@ const AdminDashboardScreen: React.FC = () => {
               onPress={() => navigation.navigate('AdminNotifications' as never)}
               activeOpacity={0.7}
             >
-              <Ionicons name="notifications-outline" size={24} color={COLORS.text} />
+              <Ionicons name="notifications-outline" size={22} color="#fff" />
               {unreadNotificationsCount > 0 ? (
                 <View style={styles.notificationBadge}>
                   <Text style={styles.notificationBadgeText} numberOfLines={1}>
@@ -523,19 +524,22 @@ const AdminDashboardScreen: React.FC = () => {
               style={styles.profileButton}
               onPress={() => navigation.navigate('Main' as never, { screen: 'SettingsTab' } as never)}
             >
-            {profilePictureUrl ? (
-              <Image source={{ uri: profilePictureUrl }} style={styles.avatarImage} contentFit="cover" />
-            ) : (
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{avatarInitial}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+              {profilePictureUrl ? (
+                <Image source={{ uri: profilePictureUrl }} style={styles.avatarImage} contentFit="cover" />
+              ) : (
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{avatarInitial}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* User Statistics Section */}
         <View style={styles.userStatsSection}>
           <View style={styles.userStatsHeader}>
@@ -551,7 +555,7 @@ const AdminDashboardScreen: React.FC = () => {
               <Text style={styles.timeRangeText}>
                 {timeRange === 'daily' ? t('admin.dashboard.daily') : timeRange === 'weekly' ? t('admin.dashboard.weekly') : timeRange === 'monthly' ? t('admin.dashboard.monthly') : t('admin.dashboard.yearly')}
               </Text>
-              <Ionicons name="chevron-down" size={16} color={COLORS.text} />
+              <Ionicons name="chevron-down" size={16} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
 
@@ -563,8 +567,9 @@ const AdminDashboardScreen: React.FC = () => {
             <View style={[styles.userStatsGrid, { paddingHorizontal: 0 }]}>
               {/* Customers Card */}
               <View style={styles.userStatCard}>
-                <View style={[styles.userStatIcon, { backgroundColor: '#4A90E2' + '20' }]}>
-                  <Ionicons name="people" size={24} color="#4A90E2" />
+                <View style={[styles.userStatAccent, { backgroundColor: '#4A90E2' }]} />
+                <View style={[styles.userStatIcon, { backgroundColor: '#4A90E2' + '18' }]}>
+                  <Ionicons name="people" size={22} color="#4A90E2" />
                 </View>
                 <Text style={styles.userStatValue}>
                   {timeRange === 'daily' ? statistics.customers.daily :
@@ -590,12 +595,14 @@ const AdminDashboardScreen: React.FC = () => {
                     const isNeutral = growthValue === '+0' || growthValue === '0';
                     const growthColor = isPositive ? COLORS.success : isNegative ? COLORS.error : COLORS.textSecondary;
                     return (
-                      <Text style={[styles.userStatGrowthText, { color: growthColor }]}>
-                        {isPositive && '↑ '}
-                        {isNegative && '↓ '}
-                        {isNeutral && '— '}
-                        {growthValue.includes('%') ? growthValue : `${growthValue}%`} {t('admin.dashboard.vsPreviousPeriod')}
-                      </Text>
+                      <View style={[styles.growthPill, { backgroundColor: growthColor + '14' }]}>
+                        <Text style={[styles.userStatGrowthText, { color: growthColor }]}>
+                          {isPositive && '↑ '}
+                          {isNegative && '↓ '}
+                          {isNeutral && '— '}
+                          {growthValue.includes('%') ? growthValue : `${growthValue}%`}
+                        </Text>
+                      </View>
                     );
                   })()}
                 </View>
@@ -603,8 +610,9 @@ const AdminDashboardScreen: React.FC = () => {
 
               {/* Technicians Card */}
               <View style={styles.userStatCard}>
-                <View style={[styles.userStatIcon, { backgroundColor: '#4CAF50' + '20' }]}>
-                  <Ionicons name="briefcase" size={24} color="#4CAF50" />
+                <View style={[styles.userStatAccent, { backgroundColor: '#2d7541' }]} />
+                <View style={[styles.userStatIcon, { backgroundColor: '#2d7541' + '18' }]}>
+                  <Ionicons name="briefcase" size={22} color="#2d7541" />
                 </View>
                 <Text style={styles.userStatValue}>
                   {timeRange === 'daily' ? statistics.technicians.daily :
@@ -630,12 +638,14 @@ const AdminDashboardScreen: React.FC = () => {
                     const isNeutral = growthValue === '+0' || growthValue === '0';
                     const growthColor = isPositive ? COLORS.success : isNegative ? COLORS.error : COLORS.textSecondary;
                     return (
-                      <Text style={[styles.userStatGrowthText, { color: growthColor }]}>
-                        {isPositive && '↑ '}
-                        {isNegative && '↓ '}
-                        {isNeutral && '— '}
-                        {growthValue.includes('%') ? growthValue : `${growthValue}%`} {t('admin.dashboard.vsPreviousPeriod')}
-                      </Text>
+                      <View style={[styles.growthPill, { backgroundColor: growthColor + '14' }]}>
+                        <Text style={[styles.userStatGrowthText, { color: growthColor }]}>
+                          {isPositive && '↑ '}
+                          {isNegative && '↓ '}
+                          {isNeutral && '— '}
+                          {growthValue.includes('%') ? growthValue : `${growthValue}%`}
+                        </Text>
+                      </View>
                     );
                   })()}
                 </View>
@@ -643,8 +653,9 @@ const AdminDashboardScreen: React.FC = () => {
 
               {/* Employees/Staff Card */}
               <View style={styles.userStatCard}>
-                <View style={[styles.userStatIcon, { backgroundColor: '#9C27B0' + '20' }]}>
-                  <Ionicons name="people-outline" size={24} color="#9C27B0" />
+                <View style={[styles.userStatAccent, { backgroundColor: '#9C27B0' }]} />
+                <View style={[styles.userStatIcon, { backgroundColor: '#9C27B0' + '18' }]}>
+                  <Ionicons name="people-outline" size={22} color="#9C27B0" />
                 </View>
                 <Text style={styles.userStatValue}>
                   {statistics.employees ? (
@@ -678,12 +689,14 @@ const AdminDashboardScreen: React.FC = () => {
                     const isNeutral = growthValue === '+0' || growthValue === '0';
                     const growthColor = isPositive ? COLORS.success : isNegative ? COLORS.error : COLORS.textSecondary;
                     return (
-                      <Text style={[styles.userStatGrowthText, { color: growthColor }]}>
-                        {isPositive && '↑ '}
-                        {isNegative && '↓ '}
-                        {isNeutral && '— '}
-                        {growthValue.includes('%') ? growthValue : `${growthValue}%`} {t('admin.dashboard.vsPreviousPeriod')}
-                      </Text>
+                      <View style={[styles.growthPill, { backgroundColor: growthColor + '14' }]}>
+                        <Text style={[styles.userStatGrowthText, { color: growthColor }]}>
+                          {isPositive && '↑ '}
+                          {isNegative && '↓ '}
+                          {isNeutral && '— '}
+                          {growthValue.includes('%') ? growthValue : `${growthValue}%`}
+                        </Text>
+                      </View>
                     );
                   })()}
                 </View>
@@ -692,8 +705,9 @@ const AdminDashboardScreen: React.FC = () => {
               {/* Total Users Card */}
               {statistics.total_users && (
                 <View style={styles.userStatCard}>
-                  <View style={[styles.userStatIcon, { backgroundColor: COLORS.primary + '20' }]}>
-                    <Ionicons name="people-outline" size={24} color={COLORS.primary} />
+                  <View style={[styles.userStatAccent, { backgroundColor: COLORS.primary }]} />
+                  <View style={[styles.userStatIcon, { backgroundColor: COLORS.primary + '18' }]}>
+                    <Ionicons name="people-outline" size={22} color={COLORS.primary} />
                   </View>
                   <Text style={styles.userStatValue}>
                     {(() => {
@@ -722,13 +736,15 @@ const AdminDashboardScreen: React.FC = () => {
                       const isNeutral = growthValue === '+0' || growthValue === '0';
                       const growthColor = isPositive ? COLORS.success : isNegative ? COLORS.error : COLORS.textSecondary;
                       return (
+                      <View style={[styles.growthPill, { backgroundColor: growthColor + '14' }]}>
                         <Text style={[styles.userStatGrowthText, { color: growthColor }]}>
                           {isPositive && '↑ '}
                           {isNegative && '↓ '}
                           {isNeutral && '— '}
-                          {growthValue.includes('%') ? growthValue : `${growthValue}%`} {t('admin.dashboard.vsPreviousPeriod')}
+                          {growthValue.includes('%') ? growthValue : `${growthValue}%`}
                         </Text>
-                      );
+                      </View>
+                    );
                     })()}
                   </View>
                 </View>
@@ -737,8 +753,9 @@ const AdminDashboardScreen: React.FC = () => {
               {/* Active Subscriptions Card */}
               {statistics.active_subscriptions && (
                 <View style={styles.userStatCard}>
-                  <View style={[styles.userStatIcon, { backgroundColor: COLORS.success + '20' }]}>
-                    <Ionicons name="calendar-outline" size={24} color={COLORS.success} />
+                  <View style={[styles.userStatAccent, { backgroundColor: COLORS.success }]} />
+                  <View style={[styles.userStatIcon, { backgroundColor: COLORS.success + '18' }]}>
+                    <Ionicons name="calendar-outline" size={22} color={COLORS.success} />
                   </View>
                   <Text style={styles.userStatValue}>
                     {(() => {
@@ -767,13 +784,15 @@ const AdminDashboardScreen: React.FC = () => {
                       const isNeutral = growthValue === '+0' || growthValue === '0';
                       const growthColor = isPositive ? COLORS.success : isNegative ? COLORS.error : COLORS.textSecondary;
                       return (
+                      <View style={[styles.growthPill, { backgroundColor: growthColor + '14' }]}>
                         <Text style={[styles.userStatGrowthText, { color: growthColor }]}>
                           {isPositive && '↑ '}
                           {isNegative && '↓ '}
                           {isNeutral && '— '}
-                          {growthValue.includes('%') ? growthValue : `${growthValue}%`} {t('admin.dashboard.vsPreviousPeriod')}
+                          {growthValue.includes('%') ? growthValue : `${growthValue}%`}
                         </Text>
-                      );
+                      </View>
+                    );
                     })()}
                   </View>
                 </View>
@@ -781,9 +800,10 @@ const AdminDashboardScreen: React.FC = () => {
 
               {/* Monthly Revenue Card */}
               {statistics.monthly_revenue && (
-                <View style={styles.userStatCard}>
-                  <View style={[styles.userStatIcon, { backgroundColor: COLORS.warning + '20' }]}>
-                    <Ionicons name="trending-up-outline" size={24} color={COLORS.warning} />
+                <View style={[styles.userStatCard, styles.userStatCardFeatured]}>
+                  <View style={[styles.userStatAccent, { backgroundColor: COLORS.warning }]} />
+                  <View style={[styles.userStatIcon, { backgroundColor: COLORS.warning + '18' }]}>
+                    <Ionicons name="trending-up-outline" size={22} color={COLORS.warning} />
                   </View>
                   <Text style={styles.userStatValue}>
                     {(() => {
@@ -817,13 +837,15 @@ const AdminDashboardScreen: React.FC = () => {
                       const isNeutral = growthValue === '+0' || growthValue === '0';
                       const growthColor = isPositive ? COLORS.success : isNegative ? COLORS.error : COLORS.textSecondary;
                       return (
+                      <View style={[styles.growthPill, { backgroundColor: growthColor + '14' }]}>
                         <Text style={[styles.userStatGrowthText, { color: growthColor }]}>
                           {isPositive && '↑ '}
                           {isNegative && '↓ '}
                           {isNeutral && '— '}
-                          {growthValue.includes('%') ? growthValue : `${growthValue}%`} {t('admin.dashboard.vsPreviousPeriod')}
+                          {growthValue.includes('%') ? growthValue : `${growthValue}%`}
                         </Text>
-                      );
+                      </View>
+                    );
                     })()}
                   </View>
                 </View>
@@ -1083,13 +1105,28 @@ const AdminDashboardScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceLight,
+  },
+  scrollContent: {
+    paddingBottom: SPACING.xxl,
   },
   header: {
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.primary,
     paddingTop: SPACING.xl,
     paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.lg,
+    paddingBottom: SPACING.xl,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    overflow: 'hidden',
+  },
+  headerDecor: {
+    position: 'absolute',
+    top: -50,
+    right: -40,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   headerContent: {
     flexDirection: 'row',
@@ -1098,22 +1135,23 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
+    color: 'rgba(255,255,255,0.8)',
   },
   adminName: {
     fontSize: FONT_SIZES.xl,
     fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.text,
+    color: '#fff',
+    marginTop: 2,
   },
   adminRole: {
     fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
+    color: 'rgba(255,255,255,0.92)',
     fontWeight: FONT_WEIGHTS.medium,
     marginTop: 2,
   },
   adminId: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    color: 'rgba(255,255,255,0.65)',
     marginTop: 2,
   },
   headerRightRow: {
@@ -1122,13 +1160,18 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
   },
   notificationIconButton: {
-    padding: SPACING.sm,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
     position: 'relative',
   },
   notificationBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: 2,
+    right: 2,
     minWidth: 18,
     height: 18,
     borderRadius: 9,
@@ -1143,28 +1186,33 @@ const styles = StyleSheet.create({
     color: COLORS.background,
   },
   profileButton: {
-    padding: SPACING.sm,
+    padding: 2,
   },
   headerTextWrap: {
     flex: 1,
+    paddingRight: SPACING.sm,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.45)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.45)',
   },
   avatarText: {
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.bold,
-    color: COLORS.background,
+    color: '#fff',
   },
   statsGrid: {
     flexDirection: 'row',
@@ -1175,9 +1223,11 @@ const styles = StyleSheet.create({
   },
   statGridItem: {
     width: '47%',
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   statGridIcon: {
     width: 48,
@@ -1214,14 +1264,14 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: FONT_WEIGHTS.semiBold,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
     marginBottom: SPACING.md,
   },
   viewAllText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   activitiesLoading: {
     flexDirection: 'row',
@@ -1246,10 +1296,17 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   quickStatCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
-    width: 160,
+    width: 168,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 2,
   },
   quickStatHeader: {
     flexDirection: 'row',
@@ -1284,12 +1341,14 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semiBold,
   },
   activityCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   activityIcon: {
     width: 40,
@@ -1312,13 +1371,15 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   productCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   productInfo: {
     flex: 1,
@@ -1336,7 +1397,7 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceLight,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderStyle: 'dashed',
@@ -1363,29 +1424,32 @@ const styles = StyleSheet.create({
   },
   adminAction: {
     width: '48%',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     alignItems: 'center',
     marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   adminActionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.primary + '10',
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary + '14',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.sm,
   },
   adminActionText: {
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
     textAlign: 'center',
   },
   // User Statistics Styles
   userStatsSection: {
+    marginTop: -18,
     marginBottom: SPACING.lg,
     paddingHorizontal: SPACING.lg,
   },
@@ -1394,6 +1458,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: SPACING.md,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   userStatsTitleContainer: {
     flex: 1,
@@ -1409,25 +1478,26 @@ const styles = StyleSheet.create({
   userStatsSubtitle: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
+    lineHeight: 18,
   },
   timeRangeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.primary + '12',
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.round,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.primary + '30',
     minWidth: 90,
     height: 36,
     flexShrink: 0,
   },
   timeRangeText: {
     fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.text,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
     marginRight: SPACING.xs,
   },
   loadingContainer: {
@@ -1442,14 +1512,32 @@ const styles = StyleSheet.create({
   },
   userStatCard: {
     width: '47%',
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  userStatCardFeatured: {
+    borderColor: COLORS.warning + '55',
+  },
+  userStatAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
   },
   userStatIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.sm,
@@ -1458,12 +1546,13 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xl,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: 4,
   },
   userStatLabel: {
     fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+    marginBottom: 2,
   },
   userStatPeriod: {
     fontSize: FONT_SIZES.xs,
@@ -1473,8 +1562,14 @@ const styles = StyleSheet.create({
   userStatGrowth: {
     marginTop: SPACING.xs,
   },
+  growthPill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: BORDER_RADIUS.round,
+  },
   userStatGrowthText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.semiBold,
   },
   // Modal Styles
@@ -1509,7 +1604,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderRadius: BORDER_RADIUS.md,
     marginBottom: SPACING.sm,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.surfaceLight,
   },
   modalOptionSelected: {
     backgroundColor: COLORS.primary + '10',

@@ -11,7 +11,6 @@ import {
   StatusBar,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -259,7 +258,7 @@ const AdminVendorManagementScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
 
       {loading && !refreshing ? (
@@ -318,7 +317,7 @@ const AdminVendorManagementScreen: React.FC = () => {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 };
 

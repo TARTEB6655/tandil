@@ -7,10 +7,11 @@ import {
   TouchableOpacity,
   ViewStyle,
   TextStyle,
+  Platform,
+  I18nManager,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
-import { I18nManager } from 'react-native';
 
 interface InputProps {
   label?: string;
@@ -55,6 +56,7 @@ export const Input: React.FC<InputProps> = ({
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const isPasswordHidden = secureTextEntry && !showPassword;
 
   const inputContainerStyle = [
     styles.container,
@@ -70,6 +72,8 @@ export const Input: React.FC<InputProps> = ({
     (rightIcon || secureTextEntry) && styles.inputWithRightIcon,
     multiline && styles.multilineInput,
     disabled && styles.disabledInput,
+    // iOS secureTextEntry + custom weighting clips glyphs into a tiny streak
+    isPasswordHidden && Platform.OS === 'ios' && styles.secureInputIOS,
     I18nManager.isRTL && { textAlign: 'right' as const },
     inputStyle,
   ];
@@ -100,7 +104,7 @@ export const Input: React.FC<InputProps> = ({
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={COLORS.textSecondary}
-          secureTextEntry={secureTextEntry && !showPassword}
+          secureTextEntry={isPasswordHidden}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
           autoCorrect={autoCorrect}
@@ -110,12 +114,16 @@ export const Input: React.FC<InputProps> = ({
           maxLength={maxLength}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
+          textContentType={secureTextEntry ? 'newPassword' : undefined}
+          autoComplete={secureTextEntry ? 'password-new' : undefined}
+          underlineColorAndroid="transparent"
         />
         {(rightIcon || secureTextEntry) && (
           <TouchableOpacity
             style={styles.rightIcon}
             onPress={handleRightIconPress}
             disabled={disabled}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons
               name={
@@ -154,7 +162,7 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
     backgroundColor: COLORS.background,
     paddingHorizontal: SPACING.md,
-    minHeight: 48,
+    minHeight: 52,
   },
   focused: {
     borderColor: COLORS.primary,
@@ -169,8 +177,15 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: FONT_SIZES.md,
+    lineHeight: Platform.OS === 'ios' ? 22 : undefined,
     color: COLORS.text,
-    paddingVertical: SPACING.sm,
+    paddingVertical: Platform.OS === 'ios' ? 14 : SPACING.sm,
+    includeFontPadding: false,
+  },
+  secureInputIOS: {
+    fontFamily: 'System',
+    fontWeight: '400',
+    letterSpacing: 0,
   },
   inputWithLeftIcon: {
     marginLeft: SPACING.sm,

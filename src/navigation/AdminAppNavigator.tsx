@@ -4,9 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
-import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants';
 import { useAuthStackInitialRoute } from '../hooks/useAuthStackInitialRoute';
+import {
+  DashboardTabIcon,
+  useDashboardTabOptions,
+} from '../components/common/DashboardTabBar';
 
 // Screens
 import AdminLoginScreen from '../screens/admin/AdminLoginScreen';
@@ -70,25 +73,17 @@ const Tab = createBottomTabNavigator();
 
 const TabNavigator = () => {
   const { t } = useTranslation();
+  const tabOptions = useDashboardTabOptions();
+
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textSecondary,
-        tabBarStyle: {
-          backgroundColor: COLORS.background,
-          borderTopColor: COLORS.border,
-        },
-      }}
-    >
+    <Tab.Navigator screenOptions={tabOptions}>
       <Tab.Screen
         name="DashboardTab"
         component={AdminDashboardScreen}
         options={{
           tabBarLabel: t('admin.tabs.dashboard'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="home" outlineName="home-outline" />
           ),
         }}
       />
@@ -97,8 +92,8 @@ const TabNavigator = () => {
         component={UsersManagementScreen}
         options={{
           tabBarLabel: t('admin.tabs.users'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="people" outlineName="people-outline" />
           ),
         }}
       />
@@ -107,8 +102,8 @@ const TabNavigator = () => {
         component={AdminPendingReportsScreen}
         options={{
           tabBarLabel: t('admin.tabs.reports'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bar-chart-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="bar-chart" outlineName="bar-chart-outline" />
           ),
         }}
       />
@@ -117,8 +112,12 @@ const TabNavigator = () => {
         component={AdminNotificationStatisticsScreen}
         options={{
           tabBarLabel: t('admin.tabs.notificationStats'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="notifications-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon
+              focused={focused}
+              name="notifications"
+              outlineName="notifications-outline"
+            />
           ),
         }}
       />
@@ -127,8 +126,8 @@ const TabNavigator = () => {
         component={AdminSettingsScreen}
         options={{
           tabBarLabel: t('admin.tabs.settings'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="settings" outlineName="settings-outline" />
           ),
         }}
       />

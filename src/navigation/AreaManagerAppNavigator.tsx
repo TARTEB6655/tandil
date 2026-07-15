@@ -3,10 +3,13 @@ import { ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants';
 import { useTranslation } from 'react-i18next';
 import { useAuthStackInitialRoute } from '../hooks/useAuthStackInitialRoute';
+import {
+  DashboardTabIcon,
+  useDashboardTabOptions,
+} from '../components/common/DashboardTabBar';
 
 // Screens
 import AreaManagerLoginScreen from '../screens/areamanager/AreaManagerLoginScreen';
@@ -33,25 +36,17 @@ const Tab = createBottomTabNavigator();
 
 const TabNavigator = () => {
   const { t } = useTranslation();
+  const tabOptions = useDashboardTabOptions();
+
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textSecondary,
-        tabBarStyle: {
-          backgroundColor: COLORS.background,
-          borderTopColor: COLORS.border,
-        },
-      }}
-    >
+    <Tab.Navigator screenOptions={tabOptions}>
       <Tab.Screen
         name="DashboardTab"
         component={AreaManagerDashboardScreen}
         options={{
           tabBarLabel: t('admin.areaManagerDashboard.tabDashboard', { defaultValue: 'Dashboard' }),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="home" outlineName="home-outline" />
           ),
         }}
       />
@@ -60,8 +55,8 @@ const TabNavigator = () => {
         component={AllTeamsScreen}
         options={{
           tabBarLabel: t('admin.areaManagerDashboard.tabTeams', { defaultValue: 'Teams' }),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="people" outlineName="people-outline" />
           ),
         }}
       />
@@ -70,8 +65,8 @@ const TabNavigator = () => {
         component={AreaManagerProfileScreen}
         options={{
           tabBarLabel: t('admin.areaManagerDashboard.tabProfile', { defaultValue: 'Profile' }),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="person" outlineName="person-outline" />
           ),
         }}
       />

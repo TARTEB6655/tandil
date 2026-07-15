@@ -543,13 +543,28 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
                     apiProduct.compare_vendors?.product_name || product.name,
                 })
               }
+              activeOpacity={0.9}
             >
-              <Ionicons name="git-compare-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.compareVendorsText}>
-                {apiProduct.compare_vendors?.label?.trim() ||
-                  t('vendorCompare.compareButton')}
-              </Text>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
+              <View style={styles.compareDecor} />
+              <View style={styles.compareIconWrap}>
+                <Ionicons name="git-compare" size={20} color="#fff" />
+              </View>
+              <View style={styles.compareTextCol}>
+                <Text style={styles.compareVendorsText} numberOfLines={1}>
+                  {t('vendorCompare.compareButton')}
+                </Text>
+                <Text style={styles.compareVendorsSub} numberOfLines={1}>
+                  {apiProduct.compare_vendors?.vendor_count != null &&
+                  apiProduct.compare_vendors.vendor_count > 0
+                    ? t('vendorCompare.offersCount', {
+                        count: apiProduct.compare_vendors.vendor_count,
+                      })
+                    : t('vendorCompare.compareHint')}
+                </Text>
+              </View>
+              <View style={styles.compareChevron}>
+                <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
+              </View>
             </TouchableOpacity>
           ) : null}
 
@@ -862,20 +877,62 @@ const styles = StyleSheet.create({
   compareVendorsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.md,
+    gap: SPACING.md,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     marginBottom: SPACING.lg,
-    backgroundColor: COLORS.primary + '10',
-    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: '#E8F2EA',
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: COLORS.primary + '30',
+    borderColor: '#C5DBC9',
+    overflow: 'hidden',
+    shadowColor: COLORS.primaryDark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  compareDecor: {
+    position: 'absolute',
+    top: -28,
+    right: -20,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(28,75,39,0.08)',
+  },
+  compareIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compareTextCol: {
+    flex: 1,
+    gap: 2,
   },
   compareVendorsText: {
-    flex: 1,
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semiBold,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primaryDark,
+  },
+  compareVendorsSub: {
+    fontSize: FONT_SIZES.xs,
     color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.medium,
+    opacity: 0.85,
+  },
+  compareChevron: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#C5DBC9',
   },
   sizeSection: {
     marginBottom: SPACING.lg,

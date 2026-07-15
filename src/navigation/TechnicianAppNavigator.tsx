@@ -3,11 +3,14 @@ import { ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { COLORS } from '../constants';
 import { useAuthStackInitialRoute } from '../hooks/useAuthStackInitialRoute';
 import { TechnicianStackParamList } from '../types';
+import {
+  DashboardTabIcon,
+  useDashboardTabOptions,
+} from '../components/common/DashboardTabBar';
 
 // Screens
 import TechnicianLoginScreen from '../screens/technician/TechnicianLoginScreen';
@@ -58,25 +61,17 @@ const ProfileStack = () => (
 
 const TabNavigator = () => {
   const { t } = useTranslation();
+  const tabOptions = useDashboardTabOptions();
+
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textSecondary,
-        tabBarStyle: {
-          backgroundColor: COLORS.background,
-          borderTopColor: COLORS.border,
-        },
-      }}
-    >
+    <Tab.Navigator screenOptions={tabOptions}>
       <Tab.Screen
         name="DashboardTab"
         component={TechnicianDashboardScreen}
         options={{
           tabBarLabel: t('technician.tabs.dashboard'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="home" outlineName="home-outline" />
           ),
         }}
       />
@@ -85,8 +80,8 @@ const TabNavigator = () => {
         component={TechnicianOrderHistoryScreen}
         options={{
           tabBarLabel: t('technician.tabs.tasks'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="list" outlineName="list-outline" />
           ),
         }}
       />
@@ -95,8 +90,8 @@ const TabNavigator = () => {
         component={AvailabilityScreen}
         options={{
           tabBarLabel: t('technician.tabs.schedule'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="calendar" outlineName="calendar-outline" />
           ),
         }}
       />
@@ -105,8 +100,8 @@ const TabNavigator = () => {
         component={ProfileStack}
         options={{
           tabBarLabel: t('technician.tabs.profile'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="person" outlineName="person-outline" />
           ),
         }}
       />

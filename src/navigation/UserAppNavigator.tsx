@@ -1,11 +1,12 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UserStackParamList } from '../types';
-import { COLORS } from '../constants';
 import { useTranslation } from 'react-i18next';
+import {
+  DashboardTabIcon,
+  useDashboardTabOptions,
+} from '../components/common/DashboardTabBar';
 
 // Tab Screens
 import HomeScreen from '../screens/user/HomeScreen';
@@ -54,50 +55,45 @@ const Stack = createStackNavigator<UserStackParamList>();
 
 // Tab Navigator
 const TabNavigator = () => {
-  const insets = useSafeAreaInsets();
-
   const { t } = useTranslation();
+  const tabOptions = useDashboardTabOptions();
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName: string;
-
+        ...tabOptions,
+        tabBarIcon: ({ focused }) => {
           switch (route.name) {
             case 'Home':
-              iconName = focused ? 'home' : 'home-outline';
-              break;
+              return (
+                <DashboardTabIcon focused={focused} name="home" outlineName="home-outline" />
+              );
             case 'Services':
-              iconName = focused ? 'construct' : 'construct-outline';
-              break;
+              return (
+                <DashboardTabIcon
+                  focused={focused}
+                  name="construct"
+                  outlineName="construct-outline"
+                />
+              );
             case 'Orders':
-              iconName = focused ? 'list' : 'list-outline';
-              break;
+              return (
+                <DashboardTabIcon focused={focused} name="list" outlineName="list-outline" />
+              );
             case 'Store':
-              iconName = focused ? 'bag' : 'bag-outline';
-              break;
+              return (
+                <DashboardTabIcon focused={focused} name="bag" outlineName="bag-outline" />
+              );
             case 'Profile':
-              iconName = focused ? 'person' : 'person-outline';
-              break;
+              return (
+                <DashboardTabIcon focused={focused} name="person" outlineName="person-outline" />
+              );
             default:
-              iconName = 'help-outline';
+              return (
+                <DashboardTabIcon focused={focused} name="ellipse" outlineName="ellipse-outline" />
+              );
           }
-
-          return <Ionicons name={iconName as any} size={size} color={color} />;
         },
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textSecondary,
-        tabBarStyle: {
-          backgroundColor: COLORS.background,
-          borderTopColor: COLORS.border,
-          borderTopWidth: 1,
-          paddingBottom: insets.bottom,
-          paddingTop: 8,
-          height: 60 + insets.bottom,
-        },
-        headerShown: false,
-        tabBarLabelStyle: { textTransform: 'none' },
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: t('tabs.home') }} />

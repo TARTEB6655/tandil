@@ -3,10 +3,13 @@ import { ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants';
 import { useTranslation } from 'react-i18next';
 import { useAuthStackInitialRoute } from '../hooks/useAuthStackInitialRoute';
+import {
+  DashboardTabIcon,
+  useDashboardTabOptions,
+} from '../components/common/DashboardTabBar';
 
 // Screens
 import HRManagerLoginScreen from '../screens/hrmanager/HRManagerLoginScreen';
@@ -31,25 +34,17 @@ const Tab = createBottomTabNavigator();
 
 const TabNavigator = () => {
   const { t } = useTranslation();
+  const tabOptions = useDashboardTabOptions();
+
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textSecondary,
-        tabBarStyle: {
-          backgroundColor: COLORS.background,
-          borderTopColor: COLORS.border,
-        },
-      }}
-    >
+    <Tab.Navigator screenOptions={tabOptions}>
       <Tab.Screen
         name="DashboardTab"
         component={HRManagerDashboardScreen}
         options={{
           tabBarLabel: t('admin.hrManagerDashboard.tabDashboard', { defaultValue: 'Dashboard' }),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="home" outlineName="home-outline" />
           ),
         }}
       />
@@ -58,8 +53,8 @@ const TabNavigator = () => {
         component={EmployeeListScreen}
         options={{
           tabBarLabel: t('admin.hrManagerDashboard.tabEmployees', { defaultValue: 'Employees' }),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="people" outlineName="people-outline" />
           ),
         }}
       />
@@ -68,8 +63,8 @@ const TabNavigator = () => {
         component={ManageLeavesScreen}
         options={{
           tabBarLabel: t('admin.hrManagerDashboard.tabLeaves', { defaultValue: 'Leaves' }),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="calendar" outlineName="calendar-outline" />
           ),
         }}
       />
@@ -78,8 +73,8 @@ const TabNavigator = () => {
         component={HRManagerProfileScreen}
         options={{
           tabBarLabel: t('admin.hrManagerDashboard.tabProfile', { defaultValue: 'Profile' }),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+          tabBarIcon: ({ focused }) => (
+            <DashboardTabIcon focused={focused} name="person" outlineName="person-outline" />
           ),
         }}
       />

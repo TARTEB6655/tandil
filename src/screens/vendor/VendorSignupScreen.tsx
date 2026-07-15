@@ -9,10 +9,15 @@ import {
   Platform,
   ScrollView,
   Image,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
@@ -48,6 +53,115 @@ const UAE_EMIRATES = [
   'Fujairah',
 ];
 
+/** Fallback file input HTML (only used inside a Modal when DocumentPicker is unavailable). */
+const FILE_PICKER_FALLBACK_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <style>
+    html, body { margin: 0; height: 100%; background: #fff; font-family: -apple-system, sans-serif; }
+    .wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    label {
+      position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px;
+      width: 100%; max-width: 320px; padding: 28px 20px; border: 1.5px dashed #2d6a4f;
+      border-radius: 16px; text-align: center; font-size: 16px; font-weight: 600; color: #2d6a4f;
+    }
+    label span { font-size: 13px; font-weight: 400; color: #6b7280; }
+    input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <label>
+      Tap to select PDF or image
+      <span>Opens Files on your phone</span>
+      <input id="file" type="file" accept="application/pdf,image/*" />
+    </label>
+  </div>
+  <script>
+    document.getElementById('file').addEventListener('change', function (e) {
+      var file = e.target.files && e.target.files[0];
+      if (!file) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ canceled: true }));
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var dataUrl = String(reader.result || '');
+        var base64 = dataUrl.indexOf(',') >= 0 ? dataUrl.split(',')[1] : '';
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          canceled: false,
+          name: file.name || 'document',
+          mimeType: file.type || 'application/octet-stream',
+          base64: base64
+        }));
+      };
+      reader.onerror = function () {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ canceled: true }));
+      };
+      reader.readAsDataURL(file);
+    });
+    setTimeout(function () {
+      try { document.getElementById('file').click(); } catch (e) {}
+    }, 200);
+  </script>
+</body>
+</html>`;
+
+function isImageFile(file: PickedUploadFile | null | undefined): boolean {
+  if (!file) return false;
+  if (file.mimeType?.toLowerCase().startsWith('image/')) return true;
+  return /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.name || '');
+}
+
+function fileFromAsset(
+  asset: {
+    uri: string;
+    fileName?: string | null;
+    mimeType?: string | null;
+  },
+  fallbackName: string
+): PickedUploadFile {
+  let name = asset.fileName ?? asset.uri.split('/').pop() ?? fallbackName;
+  name = name.split('?')[0] || fallbackName;
+  if (!/\.[a-zA-Z0-9]+$/.test(name)) {
+    name = `${name.replace(/\.$/, '')}.jpg`;
+  }
+  const mimeType =
+    asset.mimeType ??
+    (name.toLowerCase().endsWith('.png')
+      ? 'image/png'
+      : name.toLowerCase().endsWith('.pdf')
+        ? 'application/pdf'
+        : 'image/jpeg');
+  return { uri: asset.uri, name, mimeType };
+}
+
+async function savePickedBase64File(data: {
+  name?: string;
+  mimeType?: string;
+  base64: string;
+}): Promise<PickedUploadFile> {
+  let name = (data.name || 'document').replace(/[^\w.\-()+ ]+/g, '_');
+  if (!/\.[a-zA-Z0-9]+$/.test(name)) {
+    const ext = data.mimeType?.includes('pdf')
+      ? '.pdf'
+      : data.mimeType?.includes('png')
+        ? '.png'
+        : '.jpg';
+    name = `${name}${ext}`;
+  }
+  const dir = FileSystem.cacheDirectory || FileSystem.documentDirectory || '';
+  const uri = `${dir}vendor-upload-${Date.now()}-${name}`;
+  await FileSystem.writeAsStringAsync(uri, data.base64, { encoding: 'base64' });
+  return {
+    uri,
+    name,
+    mimeType: data.mimeType || 'application/octet-stream',
+  };
+}
+
 function SectionTitle({ title, icon }: { title: string; icon?: string }) {
   return (
     <View style={styles.sectionTitleRow}>
@@ -68,43 +182,204 @@ function SectionCard({ children }: { children: React.ReactNode }) {
 function FileUploadField({
   label,
   file,
-  onPick,
+  onPicked,
   onClear,
   required,
-  hint,
 }: {
   label: string;
   file: PickedUploadFile | null;
-  onPick: () => void;
+  onPicked: (file: PickedUploadFile) => void;
   onClear: () => void;
   required?: boolean;
   hint?: string;
 }) {
+  const { t } = useTranslation();
+  const [busy, setBusy] = useState<'file' | 'photo' | null>(null);
+  const [fallbackOpen, setFallbackOpen] = useState(false);
+  const showPreview = isImageFile(file);
+
+  const handleFallbackMessage = async (event: WebViewMessageEvent) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data) as {
+        canceled?: boolean;
+        name?: string;
+        mimeType?: string;
+        base64?: string;
+      };
+      if (data.canceled || !data.base64) {
+        setFallbackOpen(false);
+        return;
+      }
+      const picked = await savePickedBase64File({
+        name: data.name,
+        mimeType: data.mimeType,
+        base64: data.base64,
+      });
+      onPicked(picked);
+      setFallbackOpen(false);
+    } catch (err) {
+      console.warn('Failed to save picked file', err);
+      Alert.alert('Error', 'Could not save the selected file. Please try again.');
+      setFallbackOpen(false);
+    }
+  };
+
+  const pickFile = async () => {
+    if (busy) return;
+    setBusy('file');
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
+        copyToCacheDirectory: true,
+        multiple: false,
+        base64: false,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        const asset = result.assets[0];
+        const name = (asset.name || asset.uri.split('/').pop() || 'document').split('?')[0];
+        const mimeType =
+          asset.mimeType ||
+          (name.toLowerCase().endsWith('.pdf')
+            ? 'application/pdf'
+            : name.toLowerCase().endsWith('.png')
+              ? 'image/png'
+              : 'image/jpeg');
+        onPicked({ uri: asset.uri, name, mimeType });
+      }
+    } catch (err) {
+      console.warn('DocumentPicker unavailable, opening fallback', err);
+      setFallbackOpen(true);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const pickPhoto = async () => {
+    if (busy) return;
+    setBusy('photo');
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert(t('common.error'), t('vendorSignup.photoPermission'));
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsEditing: false,
+      });
+      if (!result.canceled && result.assets?.[0]) {
+        onPicked(fileFromAsset(result.assets[0], `photo_${Date.now()}.jpg`));
+      }
+    } catch (err) {
+      console.warn('Gallery picker failed', err);
+      Alert.alert(
+        t('common.error'),
+        t('vendorSignup.galleryFailed', {
+          defaultValue: 'Could not open photo gallery. Please try again.',
+        })
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <View style={styles.uploadField}>
       <Text style={styles.label}>
         {label}
         {required ? <Text style={styles.required}> *</Text> : null}
       </Text>
-      <TouchableOpacity style={styles.uploadBtn} onPress={onPick} activeOpacity={0.85}>
-        <View style={styles.uploadIconWrap}>
-          <Ionicons name="cloud-upload-outline" size={22} color={COLORS.primary} />
-        </View>
-        <View style={styles.uploadTextWrap}>
-          <Text style={styles.uploadBtnText} numberOfLines={1}>
-            {file ? file.name : hint ?? 'Tap to upload'}
-          </Text>
-          <Text style={styles.uploadHint}>
-            {file ? 'File selected' : 'PDF or image'}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
-      </TouchableOpacity>
+
       {file ? (
-        <TouchableOpacity onPress={onClear} style={styles.clearFile}>
-          <Text style={styles.clearFileText}>Remove file</Text>
-        </TouchableOpacity>
+        <View style={styles.uploadSelected}>
+          {showPreview ? (
+            <Image source={{ uri: file.uri }} style={styles.uploadPreview} />
+          ) : (
+            <View style={styles.uploadIconWrap}>
+              <Ionicons name="document-text-outline" size={22} color={COLORS.primary} />
+            </View>
+          )}
+          <View style={styles.uploadTextWrap}>
+            <Text style={styles.uploadBtnText} numberOfLines={1}>
+              {file.name}
+            </Text>
+            <Text style={styles.uploadHint}>
+              {showPreview ? 'Photo selected' : 'File selected'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={onClear} hitSlop={10}>
+            <Text style={styles.clearFileText}>Remove</Text>
+          </TouchableOpacity>
+        </View>
       ) : null}
+
+      {showPreview && file ? (
+        <View style={styles.uploadLargePreviewWrap}>
+          <Image source={{ uri: file.uri }} style={styles.uploadLargePreview} />
+        </View>
+      ) : null}
+
+      <View style={styles.uploadActions}>
+        <TouchableOpacity
+          style={[styles.uploadActionBtn, busy === 'file' && styles.uploadBtnBusy]}
+          onPress={() => void pickFile()}
+          activeOpacity={0.85}
+          disabled={!!busy}
+        >
+          {busy === 'file' ? (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          ) : (
+            <Ionicons name="document-outline" size={20} color={COLORS.primary} />
+          )}
+          <Text style={styles.uploadActionTitle}>
+            {t('vendorSignup.chooseFile', { defaultValue: 'Choose File' })}
+          </Text>
+          <Text style={styles.uploadActionHint}>PDF / Docs</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.uploadActionBtn, busy === 'photo' && styles.uploadBtnBusy]}
+          onPress={() => void pickPhoto()}
+          activeOpacity={0.85}
+          disabled={!!busy}
+        >
+          {busy === 'photo' ? (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          ) : (
+            <Ionicons name="images-outline" size={20} color={COLORS.primary} />
+          )}
+          <Text style={styles.uploadActionTitle}>
+            {t('vendorSignup.choosePhoto', { defaultValue: 'Choose photo' })}
+          </Text>
+          <Text style={styles.uploadActionHint}>Gallery</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Modal
+        visible={fallbackOpen}
+        animationType="slide"
+        onRequestClose={() => setFallbackOpen(false)}
+      >
+        <SafeAreaView style={styles.filePickerModal}>
+          <View style={styles.filePickerHeader}>
+            <Text style={styles.filePickerTitle}>Choose File</Text>
+            <TouchableOpacity onPress={() => setFallbackOpen(false)} hitSlop={12}>
+              <Ionicons name="close" size={24} color={COLORS.text} />
+            </TouchableOpacity>
+          </View>
+          <WebView
+            originWhitelist={['*']}
+            source={{ html: FILE_PICKER_FALLBACK_HTML }}
+            onMessage={handleFallbackMessage}
+            style={styles.filePickerWebView}
+            javaScriptEnabled
+            domStorageEnabled
+            allowFileAccess
+            setSupportMultipleWindows={false}
+          />
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -158,25 +433,12 @@ const VendorSignupScreen: React.FC = () => {
       return null;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: forLogo ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.All,
-      quality: 0.85,
+      mediaTypes: ['images'],
+      quality: 0.8,
+      allowsEditing: false,
     });
     if (result.canceled || !result.assets?.[0]) return null;
-    const asset = result.assets[0];
-    let name = asset.fileName ?? asset.uri.split('/').pop() ?? (forLogo ? 'logo.jpg' : 'upload.jpg');
-    // Strip query params from URI-derived names
-    name = name.split('?')[0] || (forLogo ? 'logo.jpg' : 'upload.jpg');
-    if (!/\.[a-zA-Z0-9]+$/.test(name)) {
-      name = forLogo ? 'logo.jpg' : `${name}.jpg`;
-    }
-    const mimeType =
-      asset.mimeType ??
-      (name.toLowerCase().endsWith('.png')
-        ? 'image/png'
-        : name.toLowerCase().endsWith('.pdf')
-          ? 'application/pdf'
-          : 'image/jpeg');
-    return { uri: asset.uri, name, mimeType };
+    return fileFromAsset(result.assets[0], forLogo ? 'logo.jpg' : 'upload.jpg');
   }, [t]);
 
   const handleMapSelect = (a: AddressFromLocation, coords?: { latitude: number; longitude: number }) => {
@@ -371,11 +633,7 @@ const VendorSignupScreen: React.FC = () => {
             label={t('vendorSignup.tradeLicenseUpload')}
             file={tradeLicenseUpload}
             required
-            hint={t('vendorSignup.tapToUpload')}
-            onPick={async () => {
-              const f = await pickFile(false);
-              if (f) setTradeLicenseUpload(f);
-            }}
+            onPicked={setTradeLicenseUpload}
             onClear={() => setTradeLicenseUpload(null)}
           />
           <Input
@@ -436,11 +694,7 @@ const VendorSignupScreen: React.FC = () => {
             label={t('vendorSignup.emiratesIdUpload')}
             file={emiratesIdUpload}
             required
-            hint={t('vendorSignup.tapToUpload')}
-            onPick={async () => {
-              const f = await pickFile(false);
-              if (f) setEmiratesIdUpload(f);
-            }}
+            onPicked={setEmiratesIdUpload}
             onClear={() => setEmiratesIdUpload(null)}
           />
           </SectionCard>
@@ -695,6 +949,46 @@ const styles = StyleSheet.create({
   chipText: { fontSize: FONT_SIZES.sm, color: COLORS.text },
   chipTextActive: { color: COLORS.background, fontWeight: FONT_WEIGHTS.semiBold },
   uploadField: { marginBottom: SPACING.xs },
+  uploadSelected: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    backgroundColor: COLORS.surfaceLight,
+    marginBottom: SPACING.sm,
+  },
+  uploadActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  uploadActionBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary + '40',
+    borderStyle: 'dashed',
+    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    backgroundColor: COLORS.surfaceLight,
+  },
+  uploadBtnBusy: { opacity: 0.7 },
+  uploadActionTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+    textAlign: 'center',
+  },
+  uploadActionHint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
   uploadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -714,11 +1008,52 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  uploadPreview: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+  },
+  uploadLargePreviewWrap: {
+    marginTop: SPACING.sm,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  uploadLargePreview: {
+    width: '100%',
+    height: 180,
+    resizeMode: 'cover',
+  },
   uploadTextWrap: { flex: 1 },
   uploadBtnText: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.medium, color: COLORS.text },
   uploadHint: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, marginTop: 2 },
   clearFile: { marginTop: SPACING.xs },
   clearFileText: { fontSize: FONT_SIZES.sm, color: COLORS.error, fontWeight: FONT_WEIGHTS.medium },
+  filePickerModal: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  filePickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  filePickerTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+  },
+  filePickerWebView: {
+    flex: 1,
+    backgroundColor: COLORS.surfaceLight,
+  },
   logoPicker: {
     height: 120,
     borderRadius: BORDER_RADIUS.lg,

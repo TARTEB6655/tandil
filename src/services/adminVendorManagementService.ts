@@ -38,6 +38,8 @@ export interface AdminManagedVendorProduct {
   disabled_by_admin?: boolean;
   can_toggle: boolean;
   toggle_endpoint?: string;
+  can_delete?: boolean;
+  delete_endpoint?: string;
   revenue?: number;
 }
 
@@ -253,6 +255,7 @@ function mapProduct(row: Record<string, unknown>): AdminManagedVendorProduct {
   const price = asRecord(row.price) ?? {};
   const actions = asRecord(row.actions) ?? {};
   const toggle = asRecord(actions.toggle) ?? {};
+  const del = asRecord(actions.delete) ?? {};
   const priceFormatted = pickString(row.price_formatted) || undefined;
   const status = pickString(row.status).toLowerCase();
   const isEnabled =
@@ -260,6 +263,8 @@ function mapProduct(row: Record<string, unknown>): AdminManagedVendorProduct {
     row.is_available === true ||
     status === 'enabled' ||
     status === 'active';
+
+  const deleteEndpoint = normalizeApiPath(pickString(del.endpoint));
 
   return {
     id: pickString(row.vendor_product_id, row.id, row.product_id, product.id),
@@ -283,6 +288,8 @@ function mapProduct(row: Record<string, unknown>): AdminManagedVendorProduct {
     disabled_by_admin: row.disabled_by_admin === true,
     can_toggle: row.can_toggle === true,
     toggle_endpoint: normalizeApiPath(pickString(toggle.endpoint)),
+    can_delete: row.can_delete !== false,
+    delete_endpoint: deleteEndpoint || undefined,
     revenue: pickNumber(row.revenue, row.total_revenue),
   };
 }
@@ -562,6 +569,46 @@ export const adminVendorManagementService = {
           ax.response?.data?.error ||
           ax.message ||
           'Failed to toggle product.'
+      );
+    }
+  },
+
+  /**
+   * DELETE /admin/vendors/{vendor_id}/products/{vendor_product_id}
+   * Remove a vendor product listing.
+   */
+  async deleteProduct(
+    vendorId: string,
+    product: AdminManagedVendorProduct
+  ): Promise<void> {
+    const vendorProductId = product.vendor_product_id || product.id;
+    if (!vendorId || !vendorProductId) {
+      throw new Error('Missing vendor or product id for delete.');
+    }
+
+    const endpoint =
+      product.delete_endpoint ||
+      `/admin/vendors/${encodeURIComponent(vendorId)}/products/${encodeURIComponent(vendorProductId)}`;
+
+    try {
+      const response = await apiClient.delete(endpoint);
+      const body = asRecord(response.data) ?? {};
+      if (body.success === false) {
+        throw new Error(pickString(body.message) || 'Failed to delete product.');
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error && !('response' in error)) {
+        throw error;
+      }
+      const ax = error as {
+        response?: { data?: { message?: string; error?: string } };
+        message?: string;
+      };
+      throw new Error(
+        ax.response?.data?.message ||
+          ax.response?.data?.error ||
+          ax.message ||
+          'Failed to delete product.'
       );
     }
   },
