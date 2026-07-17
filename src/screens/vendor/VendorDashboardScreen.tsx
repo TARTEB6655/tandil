@@ -16,6 +16,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { vendorService, VendorDashboardStats } from '../../services/vendorService';
+import { getVendorNotifications } from '../../services/vendorNotificationService';
 import { useAppStore } from '../../store';
 import {
   VENDOR_SCREEN_BG,
@@ -36,6 +37,7 @@ const VendorDashboardScreen: React.FC = () => {
   const [stats, setStats] = useState<VendorDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   const storeName = user?.name || t('vendorDashboard.demoStore');
 
@@ -53,6 +55,9 @@ const VendorDashboardScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       load(false);
+      getVendorNotifications({ per_page: 1, page: 1 })
+        .then((res) => setNotificationCount(res.unreadCount ?? 0))
+        .catch(() => setNotificationCount(0));
     }, [load])
   );
 
@@ -120,6 +125,22 @@ const VendorDashboardScreen: React.FC = () => {
           badge={t('vendorDashboard.vendorPortal')}
           title={t('vendorDashboard.greeting', { name: storeName })}
           subtitle={t('vendorDashboard.subtitle')}
+          rightSlot={
+            <TouchableOpacity
+              style={styles.notificationIconButton}
+              onPress={() => navigation.navigate('Notifications')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="notifications-outline" size={22} color={COLORS.background} />
+              {notificationCount > 0 ? (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText} numberOfLines={1}>
+                    {notificationCount > 99 ? '99+' : notificationCount}
+                  </Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          }
         />
 
         {loading ? (
@@ -216,6 +237,33 @@ const VendorDashboardScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: VENDOR_SCREEN_BG },
   scrollContent: { paddingBottom: SPACING.xxl },
+  notificationIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.background,
+  },
   loader: { marginVertical: SPACING.xxl },
   highlightRow: {
     flexDirection: 'row',

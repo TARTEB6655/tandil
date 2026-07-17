@@ -105,6 +105,13 @@ const AdminSettingsScreen: React.FC = () => {
           type: 'navigation',
           onPress: () => setLanguageModalVisible(true),
         },
+        {
+          icon: 'document-text-outline',
+          titleKey: 'admin.settings.appContent.title',
+          subtitleKey: 'admin.settings.appContent.subtitle',
+          type: 'navigation',
+          onPress: () => navigation.navigate('AdminAppContentSettings'),
+        },
       ],
     },
     {

@@ -32,6 +32,7 @@ import VendorLocationAddressScreen from '../screens/vendor/VendorLocationAddress
 import VendorLiveChatScreen from '../screens/vendor/VendorLiveChatScreen';
 import VendorContactUsScreen from '../screens/vendor/VendorContactUsScreen';
 import VendorLegalDocumentScreen from '../screens/vendor/VendorLegalDocumentScreen';
+import VendorNotificationsScreen from '../screens/vendor/VendorNotificationsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator<VendorStackParamList>();
@@ -124,6 +125,7 @@ const VendorAppNavigator = () => {
       <Stack.Screen name="LiveChat" component={VendorLiveChatScreen} />
       <Stack.Screen name="ContactUs" component={VendorContactUsScreen} />
       <Stack.Screen name="LegalDocument" component={VendorLegalDocumentScreen} />
+      <Stack.Screen name="Notifications" component={VendorNotificationsScreen} />
     </Stack.Navigator>
   );
 };

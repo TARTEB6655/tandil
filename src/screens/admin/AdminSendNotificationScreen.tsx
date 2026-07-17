@@ -22,6 +22,7 @@ import { adminService, AdminUser, UsersResponse } from '../../services/adminServ
 
 const BROADCAST_ROLES = [
   { api: 'client', labelKey: 'admin.notificationStats.roles.client' },
+  { api: 'vendor', labelKey: 'admin.notificationStats.roles.vendor' },
   { api: 'technician', labelKey: 'admin.notificationStats.roles.technician' },
   { api: 'supervisor', labelKey: 'admin.notificationStats.roles.supervisor' },
   { api: 'area_manager', labelKey: 'admin.notificationStats.roles.area_manager' },
@@ -63,6 +64,8 @@ function userMatchesBroadcastRole(user: AdminUser, roleApi: string): boolean {
       return r === 'supervisor' || r === 'team_leader';
     case 'client':
       return r === 'client' || r === 'customer';
+    case 'vendor':
+      return r === 'vendor' || r === 'seller' || r === 'shop_vendor';
     case 'area_manager':
       return r === 'area_manager';
     case 'hr':
@@ -183,7 +186,7 @@ const AdminSendNotificationScreen: React.FC = () => {
         Alert.alert(t('common.error'), t('admin.sendNotification.validationRole'));
         return;
       }
-      if (!loadingUsers && roleUsers.length === 0) {
+      if (!selectAllInRole && !loadingUsers && roleUsers.length === 0) {
         Alert.alert(t('common.error'), t('admin.sendNotification.noUsersForRole'));
         return;
       }

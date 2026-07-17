@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,11 +13,24 @@ import { useNavigation } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
+import { fetchAppContactInfo } from '../../services/appInfoService';
+import { DEFAULT_CLIENT_CONTACT } from '../../types/appInfo';
 
 const HelpCenterScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const [contact, setContact] = useState(DEFAULT_CLIENT_CONTACT);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAppContactInfo('client').then((data) => {
+      if (!cancelled) setContact(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const faqRaw = (t('helpCenter.faqItems', { returnObjects: true }) as any[]) || [];
   const faqData = faqRaw.map((item: any) =>
@@ -26,8 +39,12 @@ const HelpCenterScreen: React.FC = () => {
       : { question: String(item ?? ''), answer: '' }
   );
 
-  const supportPhone = (t('helpCenter.contact.phone') || '+1234567890').replace(/\s*[()\-]\s*/g, '').trim() || '+1234567890';
-  const supportEmail = (t('helpCenter.contact.email') || 'support@tandil.com').trim() || 'support@tandil.com';
+  const supportPhone =
+    (contact.phone || contact.whatsappDial || t('helpCenter.contact.phone') || '')
+      .replace(/\s*[()\-]\s*/g, '')
+      .trim();
+  const supportEmail =
+    (contact.email || t('helpCenter.contact.email') || '').trim();
 
   const openPhone = () => {
     const url = `tel:${supportPhone}`;
@@ -148,14 +165,18 @@ const HelpCenterScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('helpCenter.contactInformation')}</Text>
           <View style={styles.contactCard}>
-            <View style={styles.contactItem}>
-              <Ionicons name="call-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.contactText}>{t('helpCenter.contact.phone')}</Text>
-            </View>
-            <View style={styles.contactItem}>
-              <Ionicons name="mail-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.contactText}>{t('helpCenter.contact.email')}</Text>
-            </View>
+            {supportPhone ? (
+              <View style={styles.contactItem}>
+                <Ionicons name="call-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.contactText}>{supportPhone}</Text>
+              </View>
+            ) : null}
+            {supportEmail ? (
+              <View style={styles.contactItem}>
+                <Ionicons name="mail-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.contactText}>{supportEmail}</Text>
+              </View>
+            ) : null}
             <View style={styles.contactItem}>
               <Ionicons name="time-outline" size={20} color={COLORS.primary} />
               <Text style={styles.contactText}>{t('helpCenter.contact.hours')}</Text>

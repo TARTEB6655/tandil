@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Linking,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,16 +19,11 @@ import {
   VendorPageHeader,
   VendorCard,
 } from '../../components/vendor/VendorUi';
-
-const CONTACT = {
-  company: 'Tandil',
-  website: 'https://tandil.ae',
-  websiteLabel: 'tandil.ae',
-  email: 'info@tandil.ae',
-  whatsappDisplay: '+971 569206959',
-  whatsappDial: '+971569206959',
-  country: 'United Arab Emirates',
-};
+import {
+  fetchAppContactInfo,
+  getDefaultContactInfo,
+} from '../../services/appInfoService';
+import type { AppContactInfo, AppInfoAudience } from '../../types/appInfo';
 
 type ContactMethod = {
   id: string;
@@ -39,9 +35,60 @@ type ContactMethod = {
   onPress: () => void;
 };
 
-const VendorContactUsScreen: React.FC = () => {
+interface ContactUsContentScreenProps {
+  audience?: AppInfoAudience;
+  title?: string;
+  subtitle?: string;
+  showLiveChat?: boolean;
+}
+
+export const ContactUsContentScreen: React.FC<ContactUsContentScreenProps> = ({
+  audience = 'vendor',
+  title,
+  subtitle,
+  showLiveChat = true,
+}) => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const [loading, setLoading] = useState(true);
+  const [contact, setContact] = useState<AppContactInfo | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchAppContactInfo(audience)
+      .then((data) => {
+        if (!cancelled) setContact(data);
+      })
+      .catch(() => {
+        if (!cancelled) setContact(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [audience]);
+
+  const defaultContact = getDefaultContactInfo(audience);
+  const contactInfo = contact ?? {
+    ...defaultContact,
+    heroTitle:
+      defaultContact.heroTitle ||
+      t('vendorContact.heroTitle', { defaultValue: 'Get in touch with Tandil' }),
+    heroText:
+      defaultContact.heroText ||
+      t('vendorContact.heroText', {
+        defaultValue:
+          'For any questions regarding these Terms, please contact us using any of the options below.',
+      }),
+    note:
+      defaultContact.note ||
+      t('vendorContact.note', {
+        defaultValue: 'Our support team typically responds within 24–48 hours on business days.',
+      }),
+  };
 
   const openLink = useCallback(async (url: string, errorMessage: string) => {
     try {
@@ -58,141 +105,166 @@ const VendorContactUsScreen: React.FC = () => {
 
   const openWebsite = useCallback(() => {
     openLink(
-      CONTACT.website,
+      contactInfo.website || 'https://tandil.ae',
       t('vendorContact.websiteError', { defaultValue: 'Could not open website.' })
     );
-  }, [openLink, t]);
+  }, [contactInfo.website, openLink, t]);
 
   const openEmail = useCallback(() => {
+    if (!contactInfo.email) return;
     openLink(
-      `mailto:${CONTACT.email}`,
+      `mailto:${contactInfo.email}`,
       t('vendorContact.emailError', { defaultValue: 'Could not open email app.' })
     );
-  }, [openLink, t]);
+  }, [contactInfo.email, openLink, t]);
 
   const openWhatsApp = useCallback(() => {
-    const digits = CONTACT.whatsappDial.replace(/\D/g, '');
+    const dial = contactInfo.whatsappDial || contactInfo.phone || '';
+    const digits = dial.replace(/\D/g, '');
+    if (!digits) return;
     openLink(
       `https://wa.me/${digits}`,
       t('vendorContact.whatsappError', { defaultValue: 'Could not open WhatsApp.' })
     );
-  }, [openLink, t]);
+  }, [contactInfo.phone, contactInfo.whatsappDial, openLink, t]);
 
   const methods: ContactMethod[] = [
-    {
-      id: 'website',
-      icon: 'globe-outline',
-      label: t('vendorContact.website', { defaultValue: 'Website' }),
-      value: CONTACT.websiteLabel,
-      hint: t('vendorContact.websiteHint', { defaultValue: 'Visit our official site' }),
-      color: '#2563EB',
-      onPress: openWebsite,
-    },
-    {
-      id: 'email',
-      icon: 'mail-outline',
-      label: t('vendorContact.email', { defaultValue: 'Email' }),
-      value: CONTACT.email,
-      hint: t('vendorContact.emailHint', { defaultValue: 'Send us your questions' }),
-      color: COLORS.primary,
-      onPress: openEmail,
-    },
-    {
-      id: 'whatsapp',
-      icon: 'logo-whatsapp',
-      label: t('vendorContact.whatsapp', { defaultValue: 'WhatsApp' }),
-      value: CONTACT.whatsappDisplay,
-      hint: t('vendorContact.whatsappHint', { defaultValue: 'Chat with our team' }),
-      color: '#25D366',
-      onPress: openWhatsApp,
-    },
+    ...(contactInfo.website
+      ? [{
+          id: 'website',
+          icon: 'globe-outline' as const,
+          label: t('vendorContact.website', { defaultValue: 'Website' }),
+          value: contactInfo.websiteLabel || contactInfo.website,
+          hint: t('vendorContact.websiteHint', { defaultValue: 'Visit our official site' }),
+          color: '#2563EB',
+          onPress: openWebsite,
+        }]
+      : []),
+    ...(contactInfo.email
+      ? [{
+          id: 'email',
+          icon: 'mail-outline' as const,
+          label: t('vendorContact.email', { defaultValue: 'Email' }),
+          value: contactInfo.email,
+          hint: t('vendorContact.emailHint', { defaultValue: 'Send us your questions' }),
+          color: COLORS.primary,
+          onPress: openEmail,
+        }]
+      : []),
+    ...(contactInfo.whatsappDial || contactInfo.phone
+      ? [{
+          id: 'whatsapp',
+          icon: 'logo-whatsapp' as const,
+          label: t('vendorContact.whatsapp', { defaultValue: 'WhatsApp' }),
+          value: contactInfo.whatsappDisplay || contactInfo.phone || '',
+          hint: t('vendorContact.whatsappHint', { defaultValue: 'Chat with our team' }),
+          color: '#25D366',
+          onPress: openWhatsApp,
+        }]
+      : []),
   ];
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <VendorPageHeader
-        title={t('vendorProfile.contactUs', { defaultValue: 'Contact Us' })}
-        subtitle={t('vendorContact.subtitle', { defaultValue: 'We are here to help vendors' })}
+        title={title ?? t('vendorProfile.contactUs', { defaultValue: 'Contact Us' })}
+        subtitle={
+          subtitle ??
+          t('vendorContact.subtitle', { defaultValue: 'We are here to help vendors' })
+        }
         onBack={() => navigation.goBack()}
       />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-      >
-        <View style={styles.hero}>
-          <View style={styles.heroDecor} />
-          <View style={styles.heroIconWrap}>
-            <Ionicons name="headset" size={28} color={COLORS.background} />
-          </View>
-          <Text style={styles.heroTitle}>
-            {t('vendorContact.heroTitle', { defaultValue: 'Get in touch with Tandil' })}
-          </Text>
-          <Text style={styles.heroText}>
-            {t('vendorContact.heroText', {
-              defaultValue:
-                'For any questions regarding these Terms, please contact us using any of the options below.',
-            })}
-          </Text>
+      {loading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
-
-        <VendorCard style={styles.brandCard}>
-          <View style={styles.brandRow}>
-            <View style={styles.brandLogo}>
-              <Text style={styles.brandLogoText}>T</Text>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scroll}
+        >
+          <View style={styles.hero}>
+            <View style={styles.heroDecor} />
+            <View style={styles.heroIconWrap}>
+              <Ionicons name="headset" size={28} color={COLORS.background} />
             </View>
-            <View>
-              <Text style={styles.brandName}>{CONTACT.company}</Text>
-              <View style={styles.locationRow}>
-                <Ionicons name="location-outline" size={14} color={COLORS.textSecondary} />
-                <Text style={styles.brandLocation}>{CONTACT.country}</Text>
+            <Text style={styles.heroTitle}>
+              {contactInfo.heroTitle ||
+                t('vendorContact.heroTitle', { defaultValue: 'Get in touch with Tandil' })}
+            </Text>
+            <Text style={styles.heroText}>
+              {contactInfo.heroText ||
+                t('vendorContact.heroText', {
+                  defaultValue:
+                    'For any questions regarding these Terms, please contact us using any of the options below.',
+                })}
+            </Text>
+          </View>
+
+          <VendorCard style={styles.brandCard}>
+            <View style={styles.brandRow}>
+              <View style={styles.brandLogo}>
+                <Text style={styles.brandLogoText}>T</Text>
+              </View>
+              <View>
+                <Text style={styles.brandName}>{contactInfo.company || 'Tandil'}</Text>
+                {contactInfo.country ? (
+                  <View style={styles.locationRow}>
+                    <Ionicons name="location-outline" size={14} color={COLORS.textSecondary} />
+                    <Text style={styles.brandLocation}>{contactInfo.country}</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
-          </View>
-        </VendorCard>
+          </VendorCard>
 
-        <Text style={styles.sectionTitle}>
-          {t('vendorContact.reachUs', { defaultValue: 'Reach us' })}
-        </Text>
-
-        {methods.map((method) => (
-          <TouchableOpacity
-            key={method.id}
-            style={styles.methodCard}
-            onPress={method.onPress}
-            activeOpacity={0.88}
-          >
-            <View style={[styles.methodIcon, { backgroundColor: method.color + '18' }]}>
-              <Ionicons name={method.icon} size={24} color={method.color} />
-            </View>
-            <View style={styles.methodContent}>
-              <Text style={styles.methodLabel}>{method.label}</Text>
-              <Text style={styles.methodValue}>{method.value}</Text>
-              <Text style={styles.methodHint}>{method.hint}</Text>
-            </View>
-            <View style={[styles.methodAction, { backgroundColor: method.color + '14' }]}>
-              <Ionicons name="arrow-forward" size={18} color={method.color} />
-            </View>
-          </TouchableOpacity>
-        ))}
-
-        <VendorCard style={styles.noteCard}>
-          <Ionicons name="information-circle-outline" size={20} color={COLORS.primary} />
-          <Text style={styles.noteText}>
-            {t('vendorContact.note', {
-              defaultValue:
-                'Our support team typically responds within 24–48 hours on business days.',
-            })}
+          <Text style={styles.sectionTitle}>
+            {t('vendorContact.reachUs', { defaultValue: 'Reach us' })}
           </Text>
-        </VendorCard>
 
-        <TouchableOpacity style={styles.liveChatBtn} onPress={() => navigation.navigate('LiveChat')}>
-          <Ionicons name="chatbubbles-outline" size={20} color={COLORS.background} />
-          <Text style={styles.liveChatText}>
-            {t('vendorContact.openLiveChat', { defaultValue: 'Open Live Chat' })}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
+          {methods.map((method) => (
+            <TouchableOpacity
+              key={method.id}
+              style={styles.methodCard}
+              onPress={method.onPress}
+              activeOpacity={0.88}
+            >
+              <View style={[styles.methodIcon, { backgroundColor: method.color + '18' }]}>
+                <Ionicons name={method.icon} size={24} color={method.color} />
+              </View>
+              <View style={styles.methodContent}>
+                <Text style={styles.methodLabel}>{method.label}</Text>
+                <Text style={styles.methodValue}>{method.value}</Text>
+                <Text style={styles.methodHint}>{method.hint}</Text>
+              </View>
+              <View style={[styles.methodAction, { backgroundColor: method.color + '14' }]}>
+                <Ionicons name="arrow-forward" size={18} color={method.color} />
+              </View>
+            </TouchableOpacity>
+          ))}
+
+          <VendorCard style={styles.noteCard}>
+            <Ionicons name="information-circle-outline" size={20} color={COLORS.primary} />
+            <Text style={styles.noteText}>
+              {contactInfo.note ||
+                t('vendorContact.note', {
+                  defaultValue:
+                    'Our support team typically responds within 24–48 hours on business days.',
+                })}
+            </Text>
+          </VendorCard>
+
+          {showLiveChat ? (
+            <TouchableOpacity style={styles.liveChatBtn} onPress={() => navigation.navigate('LiveChat')}>
+              <Ionicons name="chatbubbles-outline" size={20} color={COLORS.background} />
+              <Text style={styles.liveChatText}>
+                {t('vendorContact.openLiveChat', { defaultValue: 'Open Live Chat' })}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -200,6 +272,7 @@ const VendorContactUsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: VENDOR_SCREEN_BG },
   scroll: { padding: SPACING.lg, paddingBottom: SPACING.xxl },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   hero: {
     backgroundColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.xl,
@@ -355,5 +428,7 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.bold,
   },
 });
+
+const VendorContactUsScreen: React.FC = () => <ContactUsContentScreen />;
 
 export default VendorContactUsScreen;

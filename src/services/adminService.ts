@@ -777,7 +777,7 @@ export const adminService = {
     type: 'all' | 'role' | 'users';
     role?: string;
     userIds?: number[];
-  }): Promise<{ success?: boolean; message?: string; data?: unknown }> => {
+  }): Promise<{ success?: boolean; status?: boolean; message?: string; data?: unknown }> => {
     const formData = new FormData();
     formData.append('title', params.title.trim());
     formData.append('message', params.message.trim());

@@ -38,6 +38,7 @@ import { getExclusiveOffers, PublicExclusiveOffer } from '../../services/exclusi
 import { buildFullImageUrl } from '../../config/api';
 import { WeatherData } from '../../services/weatherService';
 import { getClientNotifications } from '../../services/clientNotificationService';
+import { getClientLoyaltyDashboard } from '../../services/loyaltyService';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { useIsAuthenticated } from '../../store';
 import {
@@ -82,6 +83,7 @@ const HomeScreen: React.FC = () => {
         : null;
   const weatherPromptedRef = useRef(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [loyaltyPoints, setLoyaltyPoints] = useState(user?.loyaltyPoints ?? 0);
   const { count: cartItemCount } = useCartBadgeCount();
 
   useFocusEffect(
@@ -89,7 +91,12 @@ const HomeScreen: React.FC = () => {
       getClientNotifications({ per_page: 1, page: 1 })
         .then((res) => setUnreadNotificationCount(res.unreadCount ?? 0))
         .catch(() => setUnreadNotificationCount(0));
-    }, [])
+      if (isAuthenticated) {
+        getClientLoyaltyDashboard()
+          .then((dashboard) => setLoyaltyPoints(dashboard.points))
+          .catch(() => setLoyaltyPoints(user?.loyaltyPoints ?? 0));
+      }
+    }, [isAuthenticated, user?.loyaltyPoints])
   );
 
   const recentOrders = Array.isArray(orders) ? orders.slice(0, 3) : [];
@@ -835,7 +842,7 @@ const HomeScreen: React.FC = () => {
             <View>
               <Text style={styles.loyaltyTitle}>{t('home.loyaltyPoints')}</Text>
               <Text style={styles.loyaltyPoints}>
-                {user?.loyaltyPoints || 0} {t('common.points')}
+                {loyaltyPoints} {t('common.points')}
               </Text>
             </View>
           </View>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -6,133 +6,247 @@ import {
   ScrollView,
   TouchableOpacity,
   FlatList,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
-import { useAppStore } from '../../store';
+import {
+  getClientLoyaltyDashboard,
+  redeemClientLoyaltyReward,
+  LoyaltyDashboard,
+  LoyaltyReward,
+  LoyaltyTransaction,
+} from '../../services/loyaltyService';
 
 const LoyaltyPointsScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
   const { t } = useTranslation();
-  const { user } = useAppStore();
+  const [dashboard, setDashboard] = useState<LoyaltyDashboard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [redeemingRewardId, setRedeemingRewardId] = useState<string | null>(null);
 
-  const loyaltyPoints = user?.loyaltyPoints || 0;
-  const availableRewards = [
-    { id: '1', nameKey: 'loyaltyPoints.rewards.freeCleaning', points: 500 },
-    { id: '2', nameKey: 'loyaltyPoints.rewards.premiumPolish', points: 300 },
-    { id: '3', nameKey: 'loyaltyPoints.rewards.expressService', points: 200 },
-    { id: '4', nameKey: 'loyaltyPoints.rewards.waterproofing', points: 400 },
-  ].map(r => ({
-    id: r.id,
-    name: t(`${r.nameKey}.name`),
-    description: t(`${r.nameKey}.description`),
-    points: r.points,
-  }));
+  const loadLoyalty = useCallback(async (refresh = false) => {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+    try {
+      setDashboard(await getClientLoyaltyDashboard());
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : err instanceof Error
+            ? err.message
+            : undefined;
+      setError(message || t('loyaltyPoints.loadFailed', { defaultValue: 'Unable to load loyalty points.' }));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [t]);
 
-  const recentTransactions = [
-    { id: '1', type: 'earned' as const, points: 50, descKey: 'loyaltyPoints.transactionOrderCompleted', descParams: { id: '12345' }, date: '2024-01-15' },
-    { id: '2', type: 'redeemed' as const, points: -100, descKey: 'loyaltyPoints.transactionRedeemed', descParams: { service: t('loyaltyPoints.rewards.expressService.name') }, date: '2024-01-10' },
-    { id: '3', type: 'earned' as const, points: 75, descKey: 'loyaltyPoints.transactionOrderCompleted', descParams: { id: '12340' }, date: '2024-01-08' },
-  ].map(tx => ({ ...tx, description: t(tx.descKey, tx.descParams) }));
+  useFocusEffect(
+    useCallback(() => {
+      loadLoyalty();
+    }, [loadLoyalty])
+  );
 
-  const renderReward = ({ item }: { item: any }) => (
+  const loyaltyPoints = dashboard?.points ?? 0;
+  const availableRewards = dashboard?.rewards ?? [];
+  const recentTransactions = dashboard?.transactions ?? [];
+
+  const redeemReward = useCallback(async (reward: LoyaltyReward) => {
+    setRedeemingRewardId(reward.id);
+    try {
+      const result = await redeemClientLoyaltyReward(reward.id);
+      await loadLoyalty(true);
+      Alert.alert(
+        t('common.success', { defaultValue: 'Success' }),
+        result.message
+      );
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : err instanceof Error
+            ? err.message
+            : undefined;
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        message ||
+          t('loyaltyPoints.redeemFailed', {
+            defaultValue: 'Unable to redeem this reward.',
+          })
+      );
+    } finally {
+      setRedeemingRewardId(null);
+    }
+  }, [loadLoyalty, t]);
+
+  const confirmRedeem = useCallback((reward: LoyaltyReward) => {
+    Alert.alert(
+      t('loyaltyPoints.redeem', { defaultValue: 'Redeem' }),
+      t('loyaltyPoints.redeemConfirmation', {
+        defaultValue: `Redeem ${reward.title} for ${reward.pointsRequired} points?`,
+        reward: reward.title,
+        points: reward.pointsRequired,
+      }),
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('loyaltyPoints.redeem', { defaultValue: 'Redeem' }),
+          onPress: () => redeemReward(reward),
+        },
+      ]
+    );
+  }, [redeemReward, t]);
+
+  const renderReward = ({ item }: { item: LoyaltyReward }) => (
     <TouchableOpacity style={styles.rewardCard}>
       <View style={styles.rewardContent}>
-        <Text style={styles.rewardName}>{item.name}</Text>
+        <Text style={styles.rewardName}>{item.title}</Text>
         <Text style={styles.rewardDescription}>{item.description}</Text>
         <View style={styles.rewardFooter}>
-          <Text style={styles.rewardPoints}>{item.points} {t('common.points')}</Text>
-          <TouchableOpacity 
+          <Text style={styles.rewardPoints}>
+            {item.pointsRequired} {t('common.points')}
+          </Text>
+          <TouchableOpacity
             style={[
               styles.redeemButton,
-              loyaltyPoints >= item.points && styles.redeemButtonActive
+              item.canRedeem && styles.redeemButtonActive,
             ]}
-            disabled={loyaltyPoints < item.points}
+            disabled={!item.canRedeem || redeemingRewardId !== null}
+            onPress={() => confirmRedeem(item)}
           >
-            <Text style={[
-              styles.redeemButtonText,
-              loyaltyPoints >= item.points && styles.redeemButtonTextActive
-            ]}>
-              {loyaltyPoints >= item.points ? t('loyaltyPoints.redeem') : t('loyaltyPoints.notEnoughPoints')}
-            </Text>
+            {redeemingRewardId === item.id ? (
+              <ActivityIndicator size="small" color={COLORS.background} />
+            ) : (
+              <Text
+                style={[
+                  styles.redeemButtonText,
+                  item.canRedeem && styles.redeemButtonTextActive,
+                ]}
+              >
+                {item.canRedeem
+                  ? t('loyaltyPoints.redeem')
+                  : t('loyaltyPoints.notEnoughPoints')}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
   );
 
-  const renderTransaction = ({ item }: { item: any }) => (
+  const renderTransaction = ({ item }: { item: LoyaltyTransaction }) => (
     <View style={styles.transactionItem}>
       <View style={styles.transactionIcon}>
-        <Ionicons 
-          name={item.type === 'earned' ? 'add-circle' : 'remove-circle'} 
-          size={24} 
-          color={item.type === 'earned' ? COLORS.success : COLORS.error} 
+        <Ionicons
+          name={item.type === 'earned' ? 'add-circle' : 'remove-circle'}
+          size={24}
+          color={item.type === 'earned' ? COLORS.success : COLORS.error}
         />
       </View>
       <View style={styles.transactionContent}>
         <Text style={styles.transactionDescription}>{item.description}</Text>
         <Text style={styles.transactionDate}>{item.date}</Text>
       </View>
-      <Text style={[
-        styles.transactionPoints,
-        { color: item.type === 'earned' ? COLORS.success : COLORS.error }
-      ]}>
-        {item.type === 'earned' ? '+' : ''}{item.points}
+      <Text
+        style={[
+          styles.transactionPoints,
+          { color: item.type === 'earned' ? COLORS.success : COLORS.error },
+        ]}
+      >
+        {item.type === 'earned' ? '+' : ''}
+        {item.points}
       </Text>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <Header 
-        title={t('loyaltyPoints.title')} 
-        showBack={true}
-        rightComponent={
-          <TouchableOpacity style={styles.infoButton}>
-            <Ionicons name="information-circle-outline" size={24} color={COLORS.text} />
-          </TouchableOpacity>
-        }
+      <Header
+        title={t('loyaltyPoints.title')}
+        showBack
       />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Points Summary */}
-        <View style={styles.pointsCard}>
-          <View style={styles.pointsHeader}>
-            <Ionicons name="star" size={32} color={COLORS.warning} />
-            <Text style={styles.pointsTitle}>{t('loyaltyPoints.yourPoints')}</Text>
+      {loading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      ) : error && !dashboard ? (
+        <View style={styles.centered}>
+          <Ionicons name="alert-circle-outline" size={44} color={COLORS.error} />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => loadLoyalty()}>
+            <Text style={styles.retryText}>
+              {t('common.retry', { defaultValue: 'Retry' })}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadLoyalty(true)}
+              tintColor={COLORS.primary}
+            />
+          }
+        >
+          <View style={styles.pointsCard}>
+            <View style={styles.pointsHeader}>
+              <Ionicons name="star" size={32} color={COLORS.warning} />
+              <Text style={styles.pointsTitle}>{t('loyaltyPoints.yourPoints')}</Text>
+            </View>
+            <Text style={styles.pointsValue}>{loyaltyPoints}</Text>
+            <Text style={styles.pointsDescription}>
+              {dashboard?.earnInfo || t('loyaltyPoints.earnInfo')}
+            </Text>
           </View>
-          <Text style={styles.pointsValue}>{loyaltyPoints}</Text>
-          <Text style={styles.pointsDescription}>
-            {t('loyaltyPoints.earnInfo')}
-          </Text>
-        </View>
 
-        {/* Available Rewards */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('loyaltyPoints.availableRewards')}</Text>
-          <FlatList
-            data={availableRewards}
-            renderItem={renderReward}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-          />
-        </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('loyaltyPoints.availableRewards')}</Text>
+            {availableRewards.length ? (
+              <FlatList
+                data={availableRewards}
+                renderItem={renderReward}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+              />
+            ) : (
+              <Text style={styles.emptyText}>
+                {t('loyaltyPoints.noRewards', { defaultValue: 'No rewards are available yet.' })}
+              </Text>
+            )}
+          </View>
 
-        {/* Recent Transactions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('loyaltyPoints.recentTransactions')}</Text>
-          <FlatList
-            data={recentTransactions}
-            renderItem={renderTransaction}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-          />
-        </View>
-      </ScrollView>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('loyaltyPoints.recentTransactions')}</Text>
+            {recentTransactions.length ? (
+              <FlatList
+                data={recentTransactions}
+                renderItem={renderTransaction}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+              />
+            ) : (
+              <Text style={styles.emptyText}>
+                {t('loyaltyPoints.noTransactions', {
+                  defaultValue: 'No loyalty transactions yet.',
+                })}
+              </Text>
+            )}
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 };
@@ -158,8 +272,29 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
   },
-  infoButton: {
-    padding: SPACING.sm,
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  errorText: {
+    marginTop: SPACING.md,
+    marginBottom: SPACING.md,
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.md,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+  },
+  retryText: {
+    color: COLORS.background,
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   pointsCard: {
     backgroundColor: COLORS.primary,
@@ -200,6 +335,12 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
     marginBottom: SPACING.md,
+  },
+  emptyText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    textAlign: 'center',
+    paddingVertical: SPACING.lg,
   },
   rewardCard: {
     backgroundColor: COLORS.surface,

@@ -20,6 +20,7 @@ const I18N_KEY: Record<AppInfoPageKey, string> = {
   who_we_are: 'whoWeAre',
   privacy_policy: 'privacyPolicy',
   terms_conditions: 'termsConditions',
+  contact_us: 'contactUs',
 };
 
 /** Strip simple HTML tags for plain-text display. */

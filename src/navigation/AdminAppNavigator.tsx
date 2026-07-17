@@ -35,6 +35,7 @@ import AdminAddServiceScreen from '../screens/admin/AdminAddServiceScreen';
 import AdminEditServiceScreen from '../screens/admin/AdminEditServiceScreen';
 import AdminBannersScreen from '../screens/admin/AdminBannersScreen';
 import AdminProductSettingsScreen from '../screens/admin/AdminProductSettingsScreen';
+import AdminAppContentSettingsScreen from '../screens/admin/AdminAppContentSettingsScreen';
 import AdminMaintenancePhotosScreen from '../screens/admin/AdminMaintenancePhotosScreen';
 import AdminProfileEditScreen from '../screens/admin/AdminProfileEditScreen';
 import AdminSupportTicketsScreen from '../screens/admin/AdminSupportTicketsScreen';
@@ -178,6 +179,7 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminEditService" component={AdminEditServiceScreen} />
         <Stack.Screen name="AdminBanners" component={AdminBannersScreen} />
         <Stack.Screen name="AdminProductSettings" component={AdminProductSettingsScreen} />
+        <Stack.Screen name="AdminAppContentSettings" component={AdminAppContentSettingsScreen} />
         <Stack.Screen name="AdminMaintenancePhotos" component={AdminMaintenancePhotosScreen} />
         <Stack.Screen name="AdminProfileEdit" component={AdminProfileEditScreen} />
         <Stack.Screen name="AdminSupportTickets" component={AdminSupportTicketsScreen} />

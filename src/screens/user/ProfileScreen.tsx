@@ -242,6 +242,17 @@ const ProfileScreen: React.FC = () => {
       },
     },
     {
+      icon: 'mail-outline',
+      title: t('profile.contactUs', { defaultValue: 'Contact Us' }),
+      onPress: () => {
+        try {
+          navigation.navigate('ContactUs');
+        } catch (error) {
+          console.error('ProfileScreen: Navigation error to Contact Us:', error);
+        }
+      },
+    },
+    {
       icon: 'document-text-outline',
       title: t('profile.about.privacyPolicy'),
       onPress: () => openAppInfo('privacy_policy'),

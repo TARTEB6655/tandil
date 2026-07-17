@@ -274,6 +274,7 @@ export type UserStackParamList = {
   Wallet: undefined;
   RateReview: { orderId: string };
   HelpCenter: undefined;
+  ContactUs: undefined;
   SubmitTicket: undefined;
   MyTickets: undefined;
   SupportTicketChat: { ticket: { id: number; ticket_number: string; subject: string; status: string; created_at: string; updated_at: string } };
@@ -358,4 +359,5 @@ export type VendorStackParamList = {
   LiveChat: undefined;
   ContactUs: undefined;
   LegalDocument: { document: 'terms' | 'privacy' };
+  Notifications: undefined;
 }; 

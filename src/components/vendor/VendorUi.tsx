@@ -16,24 +16,29 @@ export function VendorHeroBanner({
   title,
   subtitle,
   badge,
+  rightSlot,
 }: {
   title: string;
   subtitle?: string;
   badge?: string;
+  rightSlot?: React.ReactNode;
 }) {
   return (
     <View style={ui.hero}>
       <View style={ui.heroDecor1} />
       <View style={ui.heroDecor2} />
-      <View style={ui.heroContent}>
-        {badge ? (
-          <View style={ui.heroBadge}>
-            <Ionicons name="storefront" size={14} color={COLORS.background} />
-            <Text style={ui.heroBadgeText}>{badge}</Text>
-          </View>
-        ) : null}
-        <Text style={ui.heroTitle}>{title}</Text>
-        {subtitle ? <Text style={ui.heroSubtitle}>{subtitle}</Text> : null}
+      <View style={ui.heroRow}>
+        <View style={ui.heroContent}>
+          {badge ? (
+            <View style={ui.heroBadge}>
+              <Ionicons name="storefront" size={14} color={COLORS.background} />
+              <Text style={ui.heroBadgeText}>{badge}</Text>
+            </View>
+          ) : null}
+          <Text style={ui.heroTitle}>{title}</Text>
+          {subtitle ? <Text style={ui.heroSubtitle}>{subtitle}</Text> : null}
+        </View>
+        {rightSlot ? <View style={ui.heroRightSlot}>{rightSlot}</View> : null}
       </View>
     </View>
   );
@@ -201,7 +206,14 @@ const ui = StyleSheet.create({
     bottom: -20,
     left: -20,
   },
-  heroContent: { zIndex: 1 },
+  heroRow: {
+    zIndex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  heroContent: { flex: 1 },
+  heroRightSlot: { marginLeft: SPACING.md },
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',

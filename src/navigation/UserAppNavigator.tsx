@@ -33,6 +33,7 @@ import CheckoutScreen from '../screens/user/CheckoutScreen';
 import RateReviewScreen from '../screens/user/RateReviewScreen';
 import SettingsScreen from '../screens/user/SettingsScreen';
 import HelpCenterScreen from '../screens/user/HelpCenterScreen';
+import ClientContactUsScreen from '../screens/user/ClientContactUsScreen';
 import SubmitTicketScreen from '../screens/user/SubmitTicketScreen';
 import MyTicketsScreen from '../screens/user/MyTicketsScreen';
 import SupportTicketChatScreen from '../screens/user/SupportTicketChatScreen';
@@ -142,6 +143,7 @@ const UserAppNavigator = () => {
       <Stack.Screen name="RateReview" component={RateReviewScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+      <Stack.Screen name="ContactUs" component={ClientContactUsScreen} />
       <Stack.Screen name="SubmitTicket" component={SubmitTicketScreen} />
       <Stack.Screen name="MyTickets" component={MyTicketsScreen} />
       <Stack.Screen name="SupportTicketChat" component={SupportTicketChatScreen} />
