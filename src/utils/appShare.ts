@@ -2,6 +2,9 @@ import { Alert, Linking, Platform, Share } from 'react-native';
 import Constants from 'expo-constants';
 import type { TFunction } from 'i18next';
 
+const IOS_APP_STORE_URL = 'https://apps.apple.com/au/app/tandilapp/id6757382373';
+const IOS_APP_STORE_ID = '6757382373';
+
 function getShareUrl(): string {
   const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
   const fromConfig = typeof extra?.shareAppUrl === 'string' ? extra.shareAppUrl.trim() : '';
@@ -9,14 +12,10 @@ function getShareUrl(): string {
   if (Platform.OS === 'android') {
     return 'https://play.google.com/store/apps/details?id=com.tandilapp.tandil';
   }
-  const iosId = typeof extra?.iosAppStoreId === 'string' ? extra.iosAppStoreId.trim() : '';
-  if (iosId) return `https://apps.apple.com/app/id${iosId}`;
-  return 'https://tandil.app';
-}
-
-function getIosAppStoreId(): string {
-  const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
-  return typeof extra?.iosAppStoreId === 'string' ? extra.iosAppStoreId.trim() : '';
+  const iosId =
+    (typeof extra?.iosAppStoreId === 'string' ? extra.iosAppStoreId.trim() : '') ||
+    IOS_APP_STORE_ID;
+  return `https://apps.apple.com/app/id${iosId}`;
 }
 
 /** Opens the native share sheet (Mail, WhatsApp, Messages, etc. on iOS). */
@@ -42,23 +41,7 @@ export async function shareApp(t: TFunction): Promise<void> {
 export async function rateApp(t: TFunction): Promise<void> {
   try {
     if (Platform.OS === 'ios') {
-      const appId = getIosAppStoreId();
-      if (appId) {
-        const reviewUrl = `https://apps.apple.com/app/id${appId}?action=write-review`;
-        const canOpen = await Linking.canOpenURL(reviewUrl);
-        if (canOpen) {
-          await Linking.openURL(reviewUrl);
-          return;
-        }
-      }
-      Alert.alert(
-        t('profile.rateApp.title', { defaultValue: 'Rate the App' }),
-        t('profile.rateApp.iosFallback', {
-          defaultValue:
-            'Thank you for using Tandil! Once the app is on the App Store, you can rate us from the store listing.',
-        }),
-        [{ text: t('common.ok', 'OK') }]
-      );
+      await Linking.openURL(IOS_APP_STORE_URL);
       return;
     }
 
@@ -70,10 +53,20 @@ export async function rateApp(t: TFunction): Promise<void> {
       await Linking.openURL(webPlay);
     }
   } catch {
-    Alert.alert(
-      t('common.error', 'Error'),
-      t('profile.rateApp.failed', { defaultValue: 'Could not open the app store. Please try again later.' }),
-      [{ text: t('common.ok', 'OK') }]
-    );
+    try {
+      await Linking.openURL(
+        Platform.OS === 'ios'
+          ? IOS_APP_STORE_URL
+          : 'https://play.google.com/store/apps/details?id=com.tandilapp.tandil'
+      );
+    } catch {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t('profile.rateApp.failed', {
+          defaultValue: 'Could not open the app store. Please try again later.',
+        }),
+        [{ text: t('common.ok', 'OK') }]
+      );
+    }
   }
 }

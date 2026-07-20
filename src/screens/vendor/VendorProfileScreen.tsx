@@ -103,8 +103,6 @@ function menuAction(id: string): string | null {
       return 'businessInfo';
     case 'location_address':
       return 'location';
-    case 'payment_methods':
-      return 'payment';
     case 'performance_analytics':
       return 'analytics';
     case 'support_team':
@@ -174,7 +172,10 @@ const VendorProfileScreen: React.FC = () => {
   const accountMenuItems =
     profile?.account_settings?.length
       ? profile.account_settings
-          .filter((item) => !isPartnershipMenuId(item.id))
+          .filter(
+            (item) =>
+              !isPartnershipMenuId(item.id) && item.id !== 'payment_methods'
+          )
           .map((item) => {
             const action = menuAction(item.id);
             if (!action) return null;
@@ -205,11 +206,6 @@ const VendorProfileScreen: React.FC = () => {
             action: 'location',
           },
           {
-            icon: 'card-outline',
-            label: t('vendorProfile.paymentMethods', { defaultValue: 'Payment Methods' }),
-            action: 'payment',
-          },
-          {
             icon: 'analytics-outline',
             label: t('vendorProfile.analytics', { defaultValue: 'Performance Analytics' }),
             action: 'analytics',
@@ -235,11 +231,6 @@ const VendorProfileScreen: React.FC = () => {
     {
       title: t('vendorProfile.supportHelp', { defaultValue: 'Support & Help' }),
       items: [
-        {
-          icon: 'help-circle-outline',
-          label: t('vendorProfile.helpCenter', { defaultValue: 'Help Center' }),
-          action: 'help',
-        },
         {
           icon: 'chatbubble-outline',
           label: t('vendorProfile.liveChat', { defaultValue: 'Live Chat' }),
@@ -275,12 +266,6 @@ const VendorProfileScreen: React.FC = () => {
       case 'location':
         navigation.navigate('LocationAddress');
         break;
-      case 'payment':
-        Alert.alert(
-          t('vendorProfile.paymentMethods', { defaultValue: 'Payment Methods' }),
-          t('vendorProfile.comingSoon', { defaultValue: 'Coming soon!' })
-        );
-        break;
       case 'analytics':
         navigation.navigate('Analytics');
         break;
@@ -290,12 +275,6 @@ const VendorProfileScreen: React.FC = () => {
       case 'support':
         Alert.alert(
           t('vendorProfile.supportTeam', { defaultValue: 'Support Team' }),
-          t('vendorProfile.comingSoon', { defaultValue: 'Coming soon!' })
-        );
-        break;
-      case 'help':
-        Alert.alert(
-          t('vendorProfile.helpCenter', { defaultValue: 'Help Center' }),
           t('vendorProfile.comingSoon', { defaultValue: 'Coming soon!' })
         );
         break;

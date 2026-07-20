@@ -11,10 +11,12 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
+import { useIsAuthenticated } from '../../store';
+import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import {
   getClientLoyaltyDashboard,
   redeemClientLoyaltyReward,
@@ -24,7 +26,9 @@ import {
 } from '../../services/loyaltyService';
 
 const LoyaltyPointsScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const isAuthenticated = useIsAuthenticated();
   const [dashboard, setDashboard] = useState<LoyaltyDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -32,6 +36,13 @@ const LoyaltyPointsScreen: React.FC = () => {
   const [redeemingRewardId, setRedeemingRewardId] = useState<string | null>(null);
 
   const loadLoyalty = useCallback(async (refresh = false) => {
+    if (!isAuthenticated) {
+      setDashboard(null);
+      setError(null);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     if (refresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
@@ -49,7 +60,7 @@ const LoyaltyPointsScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [t]);
+  }, [isAuthenticated, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -176,7 +187,22 @@ const LoyaltyPointsScreen: React.FC = () => {
         showBack
       />
 
-      {loading ? (
+      {!isAuthenticated ? (
+        <View style={styles.centered}>
+          <Ionicons name="log-in-outline" size={64} color={COLORS.textSecondary} />
+          <Text style={styles.errorText}>
+            {t('loyaltyPoints.loginToView', {
+              defaultValue: 'Log in to see your loyalty points.',
+            })}
+          </Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => navigateToClientAuth(navigation)}
+          >
+            <Text style={styles.retryText}>{t('auth.login', 'Log in')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
