@@ -609,27 +609,44 @@ export async function getSupervisorTeamStats(): Promise<SupervisorTeamStatsData 
  * status should be "sent_to_client". Requires Bearer token.
  */
 export async function finalizeSupervisorVisitReport(params: {
-  visit_id: number;
+  visit_id: number | string;
   supervisor_notes: string;
   recommendations: string[];
 }): Promise<{ success: boolean; message?: string }> {
+  const visitId = String(params.visit_id ?? '').trim();
+  if (!visitId) {
+    return { success: false, message: 'Visit ID is missing.' };
+  }
+
   const body = {
     status: 'sent_to_client',
     supervisor_notes: params.supervisor_notes.trim(),
     recommendations: params.recommendations,
   };
-  const response = await apiClient.post<{ success?: boolean; message?: string }>(
-    `/supervisor/visits/${params.visit_id}/finalize`,
-    body,
-    { timeout: 15000, headers: { 'Content-Type': 'application/json', Accept: 'application/json' } }
-  );
-  if (response.data?.success) {
-    return { success: true, message: (response.data as any)?.message };
+
+  try {
+    const response = await apiClient.post<{ success?: boolean; message?: string }>(
+      `/supervisor/visits/${encodeURIComponent(visitId)}/finalize`,
+      body,
+      { timeout: 15000, headers: { 'Content-Type': 'application/json', Accept: 'application/json' } }
+    );
+    if (response.data?.success) {
+      return { success: true, message: response.data?.message };
+    }
+    return {
+      success: false,
+      message: response.data?.message ?? 'Failed to finalize report.',
+    };
+  } catch (error: unknown) {
+    const ax = error as {
+      response?: { data?: { message?: string } };
+      message?: string;
+    };
+    return {
+      success: false,
+      message: ax.response?.data?.message || ax.message || 'Failed to finalize report.',
+    };
   }
-  return {
-    success: false,
-    message: (response.data as any)?.message ?? 'Failed to finalize report.',
-  };
 }
 
 /**

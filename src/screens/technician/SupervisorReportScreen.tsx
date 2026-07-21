@@ -33,7 +33,8 @@ const SupervisorReportScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const reportId = (route.params as { reportId?: number })?.reportId;
+  const reportId = (route.params as { reportId?: number; visitId?: number })?.reportId;
+  const routeVisitId = (route.params as { reportId?: number; visitId?: number })?.visitId;
 
   const [report, setReport] = useState<SupervisorReportDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,7 +95,13 @@ const SupervisorReportScreen: React.FC = () => {
       return;
     }
     if (!report) return;
-    const visitId = report.visit_id;
+
+    const visitId = report.visit_id ?? report.visit?.id ?? routeVisitId;
+    if (visitId == null || visitId === '') {
+      Alert.alert(t('common.error'), t('supervisorReport.visitIdMissing', { defaultValue: 'Visit ID is missing for this report.' }));
+      return;
+    }
+
     const recommendations = selectedOptions.map(opt => t(`supervisorReport.${opt.label}`));
     const customerName = report.visit?.client_name ?? report.location ?? 'client';
     const confirm = await new Promise<boolean>((resolve) => {
@@ -171,6 +178,7 @@ const SupervisorReportScreen: React.FC = () => {
     ? dayjs(report.submitted_at).format('h:mm A')
     : (report.visit?.scheduled_at ? dayjs(report.visit.scheduled_at).format('h:mm A') : '—');
   const displayLocation = report.location || (report.visit?.client_name ?? '—');
+  const isAlreadySent = String(report.status || '').toLowerCase() === 'sent_to_client';
 
   return (
     <View style={styles.container}>
@@ -318,12 +326,21 @@ const SupervisorReportScreen: React.FC = () => {
 
         {/* Submit Button */}
         <View style={styles.section}>
-          <Button
-            title={submitting ? t('supervisorReport.sending') : t('supervisorReport.submitButton')}
-            onPress={handleSubmitReport}
-            style={styles.submitButton}
-            disabled={submitting}
-          />
+          {isAlreadySent ? (
+            <View style={styles.sentBanner}>
+              <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} />
+              <Text style={styles.sentBannerText}>
+                {t('supervisorReport.alreadySent', { defaultValue: 'This report has already been sent to the client.' })}
+              </Text>
+            </View>
+          ) : (
+            <Button
+              title={submitting ? t('supervisorReport.sending') : t('supervisorReport.submitButton')}
+              onPress={handleSubmitReport}
+              style={styles.submitButton}
+              disabled={submitting}
+            />
+          )}
         </View>
 
       </ScrollView>
@@ -527,6 +544,22 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     width: '100%',
+  },
+  sentBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.primary + '12',
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+  },
+  sentBannerText: {
+    flex: 1,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.medium,
   },
 });
 

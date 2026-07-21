@@ -213,7 +213,12 @@ function mapVendor(row: Record<string, unknown>): AdminManagedVendor {
       pickString(row.logo_url, row.logo, business.logo_url, row.profile_picture_url)
     ),
     status: pickString(row.status) || undefined,
-    status_label: pickString(row.status_label, row.status) || undefined,
+    status_label:
+      pickString(row.status_label) ||
+      (pickString(row.status)
+        ? pickString(row.status).charAt(0).toUpperCase() +
+          pickString(row.status).slice(1).replace(/_/g, ' ')
+        : undefined),
     products_count: pickNumber(
       row.products_count,
       row.total_products,
@@ -405,6 +410,7 @@ export const adminVendorManagementService = {
         page,
         per_page: perPage,
         sort,
+        include_suspended: 1,
         ...(search ? { search } : {}),
       },
     });
@@ -609,6 +615,73 @@ export const adminVendorManagementService = {
           ax.response?.data?.error ||
           ax.message ||
           'Failed to delete product.'
+      );
+    }
+  },
+
+  /**
+   * POST /admin/vendors/{vendor_id}/account-status
+   * Suspend or reactivate a vendor account.
+   * Body: { action: "suspend" | "activate", notes?: string }
+   */
+  async updateVendorAccountStatus(
+    vendorId: string,
+    action: 'suspend' | 'activate',
+    notes?: string
+  ): Promise<{ message: string; status?: string; status_label?: string }> {
+    if (!vendorId) {
+      throw new Error('Missing vendor id for account status update.');
+    }
+
+    try {
+      const response = await apiClient.post(
+        `/admin/vendors/${encodeURIComponent(vendorId)}/account-status`,
+        {
+          action,
+          notes:
+            notes ||
+            (action === 'suspend'
+              ? 'Suspended from admin mobile app'
+              : 'Reactivated from admin mobile app'),
+        },
+        { timeout: 20000 }
+      );
+      const body = asRecord(response.data) ?? {};
+      if (body.success === false) {
+        throw new Error(
+          pickString(body.message) || 'Failed to update vendor account status.'
+        );
+      }
+
+      const data = asRecord(body.data) ?? {};
+      const vendorRow = asRecord(data.vendor) ?? {};
+      const status = pickString(vendorRow.status, data.status) || undefined;
+      const statusLabel =
+        pickString(vendorRow.status_label, data.status_label) ||
+        (status
+          ? status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')
+          : undefined);
+
+      return {
+        message:
+          pickString(body.message) ||
+          (action === 'suspend' ? 'Vendor suspended.' : 'Vendor activated.'),
+        status,
+        status_label: statusLabel,
+      };
+    } catch (error: unknown) {
+      if (error instanceof Error && !('response' in error)) {
+        throw error;
+      }
+      const ax = error as {
+        response?: { data?: { message?: string; error?: string } };
+        message?: string;
+      };
+      throw new Error(
+        ax.response?.data?.message ||
+          ax.response?.data?.error ||
+          ax.message ||
+          'Failed to update vendor account status.'
       );
     }
   },

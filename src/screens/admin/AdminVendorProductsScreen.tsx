@@ -159,6 +159,7 @@ const AdminVendorProductsScreen: React.FC = () => {
   const [hasMore, setHasMore] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [suspending, setSuspending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
@@ -194,7 +195,8 @@ const AdminVendorProductsScreen: React.FC = () => {
                 defaultValue: 'Failed to load vendor products.',
               })
         );
-        if (pageNum === 1) {
+        // Never wipe an already-loaded vendor on refresh failure (e.g. after suspend).
+        if (pageNum === 1 && !isRefresh) {
           setProducts([]);
           setVendor(null);
           setSummary(null);
@@ -389,6 +391,111 @@ const AdminVendorProductsScreen: React.FC = () => {
     vendorNameParam ||
     t('adminVendorManagement.vendorProducts', { defaultValue: 'Vendor Products' });
 
+  const isVendorSuspended =
+    String(vendor?.status || '').toLowerCase().includes('suspend') ||
+    String(vendor?.status_label || '').toLowerCase().includes('suspend');
+
+  const accountStatusLabel = isVendorSuspended
+    ? t('adminVendorManagement.suspended', { defaultValue: 'Suspended' })
+    : vendor?.status_label ||
+      t('adminVendorManagement.approved', { defaultValue: 'Approved' });
+
+  const applyAccountStatus = (next: 'suspended' | 'approved', statusLabel?: string) => {
+    setVendor((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: next,
+            status_label:
+              statusLabel ||
+              (next === 'suspended'
+                ? t('adminVendorManagement.suspended', { defaultValue: 'Suspended' })
+                : t('adminVendorManagement.approved', { defaultValue: 'Approved' })),
+          }
+        : prev
+    );
+  };
+
+  const updateAccountStatus = async (action: 'suspend' | 'activate') => {
+    if (!vendorId || suspending) return;
+    setSuspending(true);
+    setError(null);
+    try {
+      const result = await adminVendorManagementService.updateVendorAccountStatus(
+        vendorId,
+        action
+      );
+      const nextStatus =
+        result.status?.toLowerCase().includes('suspend') || action === 'suspend'
+          ? 'suspended'
+          : 'approved';
+      applyAccountStatus(nextStatus, result.status_label);
+      // Do not hard-reload detail after suspend/activate — some backends hide
+      // suspended vendors from the management detail endpoint, which looked like
+      // the vendor was deleted. Status from the account-status response is enough.
+      Alert.alert(
+        t('common.success', { defaultValue: 'Success' }),
+        result.message
+      );
+    } catch (err: unknown) {
+      Alert.alert(
+        t('common.error'),
+        err instanceof Error
+          ? err.message
+          : t('adminVendorManagement.accountStatusFailed', {
+              defaultValue: 'Failed to update vendor account status.',
+            })
+      );
+    } finally {
+      setSuspending(false);
+    }
+  };
+
+  const handleSuspendVendor = () => {
+    if (!vendorId || suspending || isVendorSuspended) return;
+
+    Alert.alert(
+      t('adminVendorManagement.suspendVendor', {
+        defaultValue: 'Suspend Vendor Account',
+      }),
+      t('adminVendorManagement.suspendConfirm', {
+        defaultValue: 'Are you sure you want to suspend this vendor account?',
+      }),
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('adminVendorManagement.suspend', { defaultValue: 'Suspend' }),
+          style: 'destructive',
+          onPress: () => {
+            updateAccountStatus('suspend');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReactivateVendor = () => {
+    if (!vendorId || suspending || !isVendorSuspended) return;
+
+    Alert.alert(
+      t('adminVendorManagement.reactivateVendor', {
+        defaultValue: 'Reactivate Vendor Account',
+      }),
+      t('adminVendorManagement.reactivateConfirm', {
+        defaultValue: 'Are you sure you want to reactivate this vendor account?',
+      }),
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('adminVendorManagement.reactivate', { defaultValue: 'Reactivate' }),
+          onPress: () => {
+            updateAccountStatus('activate');
+          },
+        },
+      ]
+    );
+  };
+
   const revenueDisplay =
     summary?.total_revenue_formatted ||
     `${summary?.currency || 'AED'} ${Math.round(summary?.total_revenue ?? 0)}`;
@@ -452,13 +559,15 @@ const AdminVendorProductsScreen: React.FC = () => {
             <View style={styles.headerBlock}>
               <View style={styles.hero}>
                 <View style={styles.heroDecor} />
-                <TouchableOpacity
-                  style={styles.backBtn}
-                  onPress={() => navigation.goBack()}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="arrow-back" size={22} color="#fff" />
-                </TouchableOpacity>
+                <View style={styles.heroTopRow}>
+                  <TouchableOpacity
+                    style={styles.backBtn}
+                    onPress={() => navigation.goBack()}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="arrow-back" size={22} color="#fff" />
+                  </TouchableOpacity>
+                </View>
 
                 <View style={styles.vendorBanner}>
                   <VendorLogo uri={vendor?.logo_url} />
@@ -481,13 +590,70 @@ const AdminVendorProductsScreen: React.FC = () => {
                         {vendor.phone}
                       </Text>
                     ) : null}
-                    {vendor?.status_label ? (
-                      <View style={styles.vendorStatusBadge}>
-                        <Text style={styles.vendorStatusText}>{vendor.status_label}</Text>
-                      </View>
-                    ) : null}
+                    <View
+                      style={[
+                        styles.vendorStatusBadge,
+                        isVendorSuspended && styles.vendorStatusBadgeSuspended,
+                      ]}
+                    >
+                      <Text style={styles.vendorStatusText}>{accountStatusLabel}</Text>
+                    </View>
                   </View>
                 </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.accountActionBtn,
+                    isVendorSuspended
+                      ? styles.accountActionBtnReactivate
+                      : styles.accountActionBtnSuspend,
+                    suspending && styles.accountActionBtnDisabled,
+                  ]}
+                  onPress={isVendorSuspended ? handleReactivateVendor : handleSuspendVendor}
+                  disabled={suspending}
+                  activeOpacity={0.88}
+                >
+                  {suspending ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={isVendorSuspended ? COLORS.primary : COLORS.error}
+                    />
+                  ) : (
+                    <>
+                      <View
+                        style={[
+                          styles.accountActionIconWrap,
+                          isVendorSuspended
+                            ? styles.accountActionIconReactivate
+                            : styles.accountActionIconSuspend,
+                        ]}
+                      >
+                        <Ionicons
+                          name={isVendorSuspended ? 'play' : 'pause'}
+                          size={14}
+                          color="#fff"
+                        />
+                      </View>
+                      <Text
+                        style={[
+                          styles.accountActionBtnText,
+                          isVendorSuspended
+                            ? styles.accountActionBtnTextReactivate
+                            : styles.accountActionBtnTextSuspend,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {isVendorSuspended
+                          ? t('adminVendorManagement.reactivateVendor', {
+                              defaultValue: 'Reactivate Vendor Account',
+                            })
+                          : t('adminVendorManagement.suspendVendor', {
+                              defaultValue: 'Suspend Vendor Account',
+                            })}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
 
               <View style={styles.metricsRow}>
@@ -581,6 +747,11 @@ const styles = StyleSheet.create({
     borderRadius: 70,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
   backBtn: {
     width: 40,
     height: 40,
@@ -588,7 +759,52 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SPACING.md,
+  },
+  accountActionBtn: {
+    marginTop: SPACING.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    minHeight: 48,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+  },
+  accountActionBtnSuspend: {
+    borderColor: 'rgba(255,255,255,0.55)',
+  },
+  accountActionBtnReactivate: {
+    borderColor: 'rgba(255,255,255,0.55)',
+  },
+  accountActionBtnDisabled: {
+    opacity: 0.7,
+  },
+  accountActionIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountActionIconSuspend: {
+    backgroundColor: COLORS.error,
+  },
+  accountActionIconReactivate: {
+    backgroundColor: COLORS.primary,
+  },
+  accountActionBtnText: {
+    flexShrink: 1,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  accountActionBtnTextSuspend: {
+    color: COLORS.error,
+  },
+  accountActionBtnTextReactivate: {
+    color: COLORS.primary,
   },
   vendorBanner: {
     flexDirection: 'row',
@@ -621,6 +837,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: BORDER_RADIUS.round,
+  },
+  vendorStatusBadgeSuspended: {
+    backgroundColor: 'rgba(220, 53, 69, 0.85)',
   },
   vendorStatusText: {
     fontSize: 10,

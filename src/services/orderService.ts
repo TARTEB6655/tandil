@@ -4,7 +4,10 @@
  */
 import apiClient from './api';
 import type { AxiosError } from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Order, OrderStatus, Address, PaymentMethod } from '../types';
+
+const RATED_ORDERS_STORAGE_KEY = 'client_rated_order_ids';
 
 export interface ShopOrderLineItem {
   id: number;
@@ -220,6 +223,13 @@ export interface OrderTrackData {
   };
   maintenance_photos: unknown[];
   can_cancel: boolean;
+  /** Whether the client can still rate this order (preferred). */
+  can_rate?: boolean;
+  has_rated?: boolean;
+  is_rated?: boolean;
+  rating?: number | null;
+  customer_rating?: number | null;
+  review?: string | null;
 }
 
 export interface GetOrderTrackResponse {
@@ -308,6 +318,87 @@ export async function getCancelledOrderTrack(
     return { data: body.data, message: body.message };
   }
   return { data: null, message: body?.message };
+}
+
+/**
+ * POST /orders/:id/rate — rate a completed/delivered order.
+ * Body: { rating: number, review: string }
+ */
+export async function rateClientOrder(params: {
+  orderId: string | number;
+  rating: number;
+  review: string;
+}): Promise<{ success: boolean; message?: string }> {
+  const id = encodeURIComponent(String(params.orderId));
+  try {
+    const response = await apiClient.post<{ success?: boolean; message?: string }>(
+      `/orders/${id}/rate`,
+      {
+        rating: params.rating,
+        review: params.review.trim(),
+      },
+      {
+        timeout: 20000,
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      }
+    );
+    const body = response.data;
+    if (body?.success === true) {
+      await markOrderAsRatedLocally(params.orderId);
+      return { success: true, message: body.message };
+    }
+    if (response.status >= 200 && response.status < 300 && body?.success !== false) {
+      await markOrderAsRatedLocally(params.orderId);
+      return { success: true, message: body?.message };
+    }
+    return { success: false, message: body?.message || 'Could not submit rating.' };
+  } catch (e) {
+    const ax = e as AxiosError<{ message?: string }>;
+    return {
+      success: false,
+      message: ax.response?.data?.message || ax.message || 'Could not submit rating.',
+    };
+  }
+}
+
+async function getRatedOrderIds(): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(RATED_ORDERS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Persist that this order was rated so Rate Service stays hidden after submit. */
+export async function markOrderAsRatedLocally(orderId: string | number): Promise<void> {
+  const id = String(orderId);
+  const ids = await getRatedOrderIds();
+  if (ids.includes(id)) return;
+  ids.push(id);
+  await AsyncStorage.setItem(RATED_ORDERS_STORAGE_KEY, JSON.stringify(ids));
+}
+
+export async function isOrderRatedLocally(orderId: string | number): Promise<boolean> {
+  const ids = await getRatedOrderIds();
+  return ids.includes(String(orderId));
+}
+
+/** True when this order should no longer show the Rate Service button. */
+export function isOrderAlreadyRated(track: OrderTrackData | null | undefined): boolean {
+  if (!track) return false;
+
+  if (track.can_rate === false) return true;
+  if (track.has_rated === true || track.is_rated === true) return true;
+
+  const ratingValue = Number(track.rating ?? track.customer_rating ?? 0);
+  if (Number.isFinite(ratingValue) && ratingValue > 0) return true;
+
+  if (typeof track.review === 'string' && track.review.trim().length > 0) return true;
+
+  return false;
 }
 
 export function maintenancePhotoUrl(entry: unknown): string | null {

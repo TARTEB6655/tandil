@@ -230,8 +230,31 @@ const NotificationsScreen: React.FC = () => {
     const kind = notificationKind(item);
     const { title, message } = rowTitleAndMessage(item, t);
     const isUnread = !item.read_at;
+    const data = (item.data || {}) as {
+      report_id?: number;
+      visit_id?: number;
+      order_id?: number;
+    };
+    const canOpenReport =
+      kind === 'report_finalized' ||
+      kind === 'report_generated' ||
+      data.report_id != null ||
+      data.visit_id != null;
+
     return (
-      <View style={[styles.notificationItem, isUnread && styles.notificationUnread]}>
+      <TouchableOpacity
+        style={[styles.notificationItem, isUnread && styles.notificationUnread]}
+        activeOpacity={canOpenReport ? 0.88 : 1}
+        disabled={!canOpenReport}
+        onPress={() => {
+          if (!canOpenReport) return;
+          navigation.navigate('ClientVisitReport', {
+            reportId: data.report_id,
+            visitId: data.visit_id,
+            orderId: data.order_id,
+          });
+        }}
+      >
         <View style={styles.leadingColumn}>
           <TouchableOpacity
             style={styles.checkboxTouchable}
@@ -257,9 +280,19 @@ const NotificationsScreen: React.FC = () => {
           <Text style={styles.notificationTitle}>{title}</Text>
           {message ? <Text style={styles.notificationMessage}>{message}</Text> : null}
           <Text style={styles.notificationTime}>{dayjs(item.created_at).format('DD MMM YYYY, hh:mm A')}</Text>
+          {canOpenReport ? (
+            <Text style={styles.viewReportHint}>
+              {t('clientVisitReport.tapToView', {
+                defaultValue: 'Tap to view notes, photos, and recommendations',
+              })}
+            </Text>
+          ) : null}
         </View>
         {isUnread ? <View style={styles.unreadDot} /> : null}
-      </View>
+        {canOpenReport ? (
+          <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+        ) : null}
+      </TouchableOpacity>
     );
   };
 
@@ -532,6 +565,12 @@ const styles = StyleSheet.create({
   notificationTime: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
+  },
+  viewReportHint: {
+    marginTop: 6,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
   },
   unreadDot: {
     width: 8,

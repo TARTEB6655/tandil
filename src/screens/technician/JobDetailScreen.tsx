@@ -38,7 +38,7 @@ const JobDetailScreen: React.FC = () => {
   useEffect(() => {
     if (!visitId) {
       setLoadingDetail(false);
-      setDetailError(t('technician.jobDetail.invalidJob', 'Invalid job/visit.'));
+      setDetailError(t('technician.jobDetail.invalidJob'));
       return;
     }
     setLoadingDetail(true);
@@ -58,7 +58,7 @@ const JobDetailScreen: React.FC = () => {
       })
       .catch(() => {
         setDetail(null);
-        setDetailError(t('technician.jobDetail.loadFailed', 'Failed to load job details.'));
+        setDetailError(t('technician.jobDetail.loadFailed'));
       })
       .finally(() => setLoadingDetail(false));
   }, [visitId, t]);
@@ -84,7 +84,10 @@ const JobDetailScreen: React.FC = () => {
     serviceDescription: svc?.description ?? '',
     address: address?.address ?? '—',
     scheduledTime: svc?.time ?? '—',
-    estimatedDuration: svc?.duration_minutes != null ? `${svc.duration_minutes} min` : '—',
+    estimatedDuration:
+      svc?.duration_minutes != null
+        ? t('technician.jobDetail.durationMinutes', { count: svc.duration_minutes })
+        : '—',
     specialInstructions: detail?.special_instructions ?? null,
     price: svc?.price,
     priceDisplay: svc?.price_display,
@@ -97,19 +100,21 @@ const JobDetailScreen: React.FC = () => {
     
     // Simulate API call
     setTimeout(() => {
-      setJobStatus(newStatus);
       setIsLoading(false);
-      Alert.alert('Status Updated', `Job status updated to ${newStatus.replace('_', ' ')}`);
+      Alert.alert(
+        t('technician.jobDetail.statusUpdatedTitle'),
+        t('technician.jobDetail.statusUpdatedBody', { status: getStatusLabel(newStatus) })
+      );
     }, 1000);
   };
 
   const handleCompleteJob = () => {
     Alert.alert(
-      'Complete Job',
-      'Are you sure you want to mark this job as completed?',
+      t('technician.jobDetail.completeJobTitle'),
+      t('technician.jobDetail.completeJobConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Complete', onPress: () => handleStatusUpdate('completed') },
+        { text: t('technician.cancel'), style: 'cancel' },
+        { text: t('technician.jobDetail.complete'), onPress: () => handleStatusUpdate('completed') },
       ]
     );
   };
@@ -117,20 +122,20 @@ const JobDetailScreen: React.FC = () => {
   const handleCallCustomer = () => {
     if (job.customerPhone && job.customerPhone !== '—') {
       Linking.openURL(`tel:${job.customerPhone}`).catch(() =>
-        Alert.alert(t('technician.error', 'Error'), t('technician.jobDetail.callNotAvailable', 'Cannot place call.'))
+        Alert.alert(t('technician.error'), t('technician.jobDetail.callNotAvailable'))
       );
     } else {
-      Alert.alert(t('technician.error', 'Error'), t('technician.jobDetail.noPhone', 'No phone number available.'));
+      Alert.alert(t('technician.error'), t('technician.jobDetail.noPhone'));
     }
   };
 
   const handleMessageCustomer = () => {
     if (job.customerEmail && job.customerEmail !== '—') {
       Linking.openURL(`mailto:${job.customerEmail}`).catch(() =>
-        Alert.alert(t('technician.error', 'Error'), t('technician.jobDetail.emailNotAvailable', 'Cannot open email.'))
+        Alert.alert(t('technician.error'), t('technician.jobDetail.emailNotAvailable'))
       );
     } else {
-      Alert.alert(t('technician.error', 'Error'), t('technician.jobDetail.noEmail', 'No email available.'));
+      Alert.alert(t('technician.error'), t('technician.jobDetail.noEmail'));
     }
   };
 
@@ -138,7 +143,7 @@ const JobDetailScreen: React.FC = () => {
     if (address?.address && address.address !== '—') {
       const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address.address)}`;
       Linking.openURL(url).catch(() =>
-        Alert.alert(t('technician.error', 'Error'), t('technician.jobDetail.directionsNotAvailable', 'Cannot open maps.'))
+        Alert.alert(t('technician.error'), t('technician.jobDetail.directionsNotAvailable'))
       );
     }
   };
@@ -147,7 +152,7 @@ const JobDetailScreen: React.FC = () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(t('technician.error', 'Error'), t('technician.allowPhotos', 'Please allow photo access to add images.'));
+        Alert.alert(t('technician.error'), t('technician.allowPhotos'));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -162,30 +167,30 @@ const JobDetailScreen: React.FC = () => {
         else setAfterPhotos((prev) => [...prev, uri]);
       }
     } catch (err: any) {
-      Alert.alert(t('technician.error', 'Error'), err?.message ?? 'Failed to pick image.');
+      Alert.alert(t('technician.error'), err?.message ?? t('technician.jobDetail.pickImageFailed'));
     }
   };
 
   const handleSubmitReport = () => {
     const visitIdNum = Number(visitId);
     if (!visitId || Number.isNaN(visitIdNum)) {
-      Alert.alert(t('technician.error', 'Error'), t('technician.jobDetail.invalidJob', 'Invalid job/visit.'));
+      Alert.alert(t('technician.error'), t('technician.jobDetail.invalidJob'));
       return;
     }
     const hasNotes = fieldNotes.trim().length > 0;
     const hasBefore = beforePhotos.length > 0;
     const hasAfter = afterPhotos.length > 0;
     if (!hasNotes && !hasBefore && !hasAfter) {
-      Alert.alert(t('technician.error', 'Required'), t('technician.jobDetail.addFieldNotes', 'Please add notes or at least one photo before submitting.'));
+      Alert.alert(t('technician.jobDetail.required'), t('technician.jobDetail.addFieldNotes'));
       return;
     }
     Alert.alert(
-      t('technician.jobDetail.submitReport', 'Submit Report'),
-      t('technician.jobDetail.submitReportConfirm', 'Submit field report to supervisor?'),
+      t('technician.jobDetail.submitReport'),
+      t('technician.jobDetail.submitReportConfirm'),
       [
-        { text: t('technician.cancel', 'Cancel'), style: 'cancel' },
+        { text: t('technician.cancel'), style: 'cancel' },
         {
-          text: t('technician.jobDetail.submit', 'Submit'),
+          text: t('technician.jobDetail.submit'),
           onPress: async () => {
             setSubmittingReport(true);
             try {
@@ -198,12 +203,12 @@ const JobDetailScreen: React.FC = () => {
               setSubmittingReport(false);
               if (result.success) {
                 Alert.alert(
-                  t('technician.success', 'Success'),
-                  t('technician.jobDetail.reportSubmitted', 'Field report submitted successfully!'),
-                  [{ text: t('technician.ok', 'OK'), onPress: () => navigation.goBack() }]
+                  t('technician.success'),
+                  t('technician.jobDetail.reportSubmitted'),
+                  [{ text: t('technician.ok'), onPress: () => navigation.goBack() }]
                 );
               } else {
-                Alert.alert(t('technician.error', 'Error'), result.message ?? t('technician.jobDetail.reportFailed', 'Failed to submit report.'));
+                Alert.alert(t('technician.error'), result.message ?? t('technician.jobDetail.reportFailed'));
               }
             } catch (err: any) {
               setSubmittingReport(false);
@@ -213,8 +218,8 @@ const JobDetailScreen: React.FC = () => {
                   ? (Object.values(err.response.data.errors).flat() as string[]).join(', ')
                   : null) ??
                 err?.message ??
-                t('technician.jobDetail.reportFailed', 'Failed to submit report.');
-              Alert.alert(t('technician.error', 'Error'), typeof msg === 'string' ? msg : JSON.stringify(msg));
+                t('technician.jobDetail.reportFailed');
+              Alert.alert(t('technician.error'), typeof msg === 'string' ? msg : JSON.stringify(msg));
             }
           },
         },
@@ -236,13 +241,14 @@ const JobDetailScreen: React.FC = () => {
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'assigned': return 'Assigned';
-      case 'in_progress': return 'In Progress';
-      case 'accepted': return 'Accepted';
-      case 'completed': return 'Completed';
-      case 'cancelled': return 'Cancelled';
-      case 'rejected': return 'Rejected';
-      default: return status || 'Unknown';
+      case 'assigned': return t('technician.status.assigned');
+      case 'in_progress': return t('technician.status.inProgress');
+      case 'accepted': return t('technician.status.accepted');
+      case 'completed': return t('technician.status.completed');
+      case 'cancelled': return t('technician.status.cancelled');
+      case 'rejected': return t('technician.status.rejected');
+      case 'pending': return t('technician.status.pending');
+      default: return status || t('technician.jobDetail.unknown');
     }
   };
 
@@ -258,7 +264,7 @@ const JobDetailScreen: React.FC = () => {
         </View>
         <View style={styles.centeredContent}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>{t('technician.jobDetail.loading', 'Loading job details...')}</Text>
+          <Text style={styles.loadingText}>{t('technician.jobDetail.loading')}</Text>
         </View>
       </View>
     );
@@ -305,14 +311,18 @@ const JobDetailScreen: React.FC = () => {
                 {getStatusLabel(jobStatus)}
               </Text>
             </View>
-            <Text style={styles.jobId}>{typeof job.jobNumber === 'string' && job.jobNumber.startsWith('job_') ? job.jobNumber : `Job ${job.jobNumber}`}</Text>
+            <Text style={styles.jobId}>
+              {typeof job.jobNumber === 'string' && job.jobNumber.startsWith('job_')
+                ? job.jobNumber
+                : t('technician.jobDetail.jobLabel', { id: job.jobNumber })}
+            </Text>
           </View>
           <Text style={styles.jobDate}>{job.date}</Text>
         </View>
 
         {/* Service Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Service Information</Text>
+          <Text style={styles.sectionTitle}>{t('technician.jobDetail.serviceInformation')}</Text>
           <View style={styles.serviceCard}>
             <Text style={styles.serviceName}>{job.service}</Text>
             {job.serviceDescription ? <Text style={styles.serviceDescription}>{job.serviceDescription}</Text> : null}
@@ -337,7 +347,7 @@ const JobDetailScreen: React.FC = () => {
 
         {/* Customer Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Customer Information</Text>
+          <Text style={styles.sectionTitle}>{t('technician.jobDetail.customerInformation')}</Text>
           <View style={styles.customerCard}>
             <Text style={styles.customerName}>{job.customerName}</Text>
             <View style={styles.customerDetails}>
@@ -355,17 +365,21 @@ const JobDetailScreen: React.FC = () => {
 
         {/* Address */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Service Address</Text>
+          <Text style={styles.sectionTitle}>{t('technician.jobDetail.serviceAddress')}</Text>
           <View style={styles.addressCard}>
             <View style={styles.addressHeader}>
               <Ionicons name="location-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.addressTitle}>{address?.label ?? 'Service Location'}</Text>
+              <Text style={styles.addressTitle}>
+                {!address?.label || address.label === 'Service Location'
+                  ? t('technician.jobDetail.serviceLocation')
+                  : address.label}
+              </Text>
             </View>
             <Text style={styles.addressText}>{job.address}</Text>
             {address?.get_directions !== false && (
               <TouchableOpacity style={styles.directionsButton} onPress={handleGetDirections}>
                 <Ionicons name="navigate-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.directionsText}>Get Directions</Text>
+                <Text style={styles.directionsText}>{t('technician.jobDetail.getDirections')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -374,7 +388,7 @@ const JobDetailScreen: React.FC = () => {
         {/* Special Instructions */}
         {job.specialInstructions && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Special Instructions</Text>
+            <Text style={styles.sectionTitle}>{t('technician.jobDetail.specialInstructions')}</Text>
             <View style={styles.instructionsCard}>
               <Text style={styles.instructionsText}>{job.specialInstructions}</Text>
             </View>
@@ -384,11 +398,11 @@ const JobDetailScreen: React.FC = () => {
         {/* Field Notes */}
         {actions.can_submit_field_report && (jobStatus === 'in_progress' || jobStatus === 'accepted') && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Field Notes</Text>
+            <Text style={styles.sectionTitle}>{t('technician.jobDetail.fieldNotes')}</Text>
             <View style={styles.notesCard}>
               <TextInput
                 style={styles.notesInput}
-                placeholder="Enter observations, issues found, work completed..."
+                placeholder={t('technician.jobDetail.fieldNotesPlaceholder')}
                 value={fieldNotes}
                 onChangeText={setFieldNotes}
                 multiline
@@ -403,9 +417,9 @@ const JobDetailScreen: React.FC = () => {
         {/* Photo Upload - Before / After */}
         {actions.can_submit_field_report && (jobStatus === 'in_progress' || jobStatus === 'accepted') && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Before / After Photos</Text>
+            <Text style={styles.sectionTitle}>{t('technician.jobDetail.beforeAfterPhotos')}</Text>
             <View style={styles.photosCard}>
-              <Text style={styles.photoGroupTitle}>Before</Text>
+              <Text style={styles.photoGroupTitle}>{t('technician.jobDetail.before')}</Text>
               <View style={styles.photosGrid}>
                 {beforePhotos.map((photo, index) => (
                   <View key={`b-${index}`} style={styles.photoItem}>
@@ -420,11 +434,11 @@ const JobDetailScreen: React.FC = () => {
                 ))}
                 <TouchableOpacity style={styles.uploadButton} onPress={() => handleUploadPhoto('before')}>
                   <Ionicons name="camera-outline" size={32} color={COLORS.primary} />
-                  <Text style={styles.uploadButtonText}>Add Before</Text>
+                  <Text style={styles.uploadButtonText}>{t('technician.jobDetail.addBefore')}</Text>
                 </TouchableOpacity>
               </View>
 
-              <Text style={[styles.photoGroupTitle, { marginTop: SPACING.md }]}>After</Text>
+              <Text style={[styles.photoGroupTitle, { marginTop: SPACING.md }]}>{t('technician.jobDetail.after')}</Text>
               <View style={styles.photosGrid}>
                 {afterPhotos.map((photo, index) => (
                   <View key={`a-${index}`} style={styles.photoItem}>
@@ -439,7 +453,7 @@ const JobDetailScreen: React.FC = () => {
                 ))}
                 <TouchableOpacity style={styles.uploadButton} onPress={() => handleUploadPhoto('after')}>
                   <Ionicons name="camera-outline" size={32} color={COLORS.primary} />
-                  <Text style={styles.uploadButtonText}>Add After</Text>
+                  <Text style={styles.uploadButtonText}>{t('technician.jobDetail.addAfter')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -449,11 +463,11 @@ const JobDetailScreen: React.FC = () => {
         {/* Job Actions – show section and "Actions" title only when at least one button is visible */}
         {hasAnyAction && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Actions</Text>
+            <Text style={styles.sectionTitle}>{t('technician.jobDetail.actions')}</Text>
             <View style={styles.actionsContainer}>
               {hasStartVisit && (
                 <Button
-                  title="Start Visit"
+                  title={t('technician.jobDetail.startVisit')}
                   onPress={() => handleStatusUpdate('in_progress')}
                   disabled={isLoading}
                   style={styles.actionButton}
@@ -461,7 +475,7 @@ const JobDetailScreen: React.FC = () => {
               )}
               {hasSubmitReport && (
                 <Button
-                  title="Submit Field Report to Supervisor"
+                  title={t('technician.jobDetail.submitFieldReport')}
                   onPress={handleSubmitReport}
                   disabled={isLoading || submittingReport}
                   loading={submittingReport}
@@ -470,7 +484,7 @@ const JobDetailScreen: React.FC = () => {
               )}
               {hasCompleteVisit && (
                 <Button
-                  title="Complete Visit"
+                  title={t('technician.jobDetail.completeVisit')}
                   onPress={handleCompleteJob}
                   disabled={isLoading}
                   variant="outline"
@@ -479,7 +493,7 @@ const JobDetailScreen: React.FC = () => {
               )}
               {hasCallCustomer && (
                 <Button
-                  title="Call Customer"
+                  title={t('technician.jobDetail.callCustomer')}
                   variant="outline"
                   onPress={handleCallCustomer}
                   style={styles.actionButton}

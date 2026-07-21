@@ -23,6 +23,7 @@ import BookingFormScreen from '../screens/user/BookingFormScreen';
 import OrderSummaryScreen from '../screens/user/OrderSummaryScreen';
 import CategoryProductsScreen from '../screens/user/CategoryProductsScreen';
 import OrderTrackingScreen from '../screens/user/OrderTrackingScreen';
+import ClientVisitReportScreen from '../screens/user/ClientVisitReportScreen';
 import OrderHistoryScreen from '../screens/user/OrderHistoryScreen';
 import LoyaltyPointsScreen from '../screens/user/LoyaltyPointsScreen';
 import NotificationsScreen from '../screens/user/NotificationsScreen';
@@ -126,6 +127,7 @@ const UserAppNavigator = () => {
       
       {/* Order Screens */}
       <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
+      <Stack.Screen name="ClientVisitReport" component={ClientVisitReportScreen} />
       <Stack.Screen name="OrderHistory" component={OrderHistoryScreen} />
       <Stack.Screen name="LoyaltyPoints" component={LoyaltyPointsScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />

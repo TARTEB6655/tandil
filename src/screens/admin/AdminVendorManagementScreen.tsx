@@ -120,8 +120,24 @@ const AdminVendorManagementScreen: React.FC = () => {
               </Text>
             ) : null}
             {item.status_label ? (
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusBadgeText}>{item.status_label}</Text>
+              <View
+                style={[
+                  styles.statusBadge,
+                  String(item.status || item.status_label)
+                    .toLowerCase()
+                    .includes('suspend') && styles.statusBadgeSuspended,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusBadgeText,
+                    String(item.status || item.status_label)
+                      .toLowerCase()
+                      .includes('suspend') && styles.statusBadgeTextSuspended,
+                  ]}
+                >
+                  {item.status_label}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -496,6 +512,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.primary,
+  },
+  statusBadgeSuspended: {
+    backgroundColor: COLORS.error + '18',
+  },
+  statusBadgeTextSuspended: {
+    color: COLORS.error,
   },
   chevronWrap: {
     width: 32,

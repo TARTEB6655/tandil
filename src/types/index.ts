@@ -262,6 +262,13 @@ export type UserStackParamList = {
     };
   };
   OrderTracking: { orderId: string; useCancelledTrack?: boolean };
+  ClientVisitReport: {
+    reportId?: string | number;
+    visitId?: string | number;
+    orderId?: string | number;
+    report?: unknown;
+    preview?: boolean;
+  };
   OrderHistory: undefined;
   LoyaltyPoints: undefined;
   Offers: undefined;
@@ -272,7 +279,7 @@ export type UserStackParamList = {
   Cart: undefined;
   Checkout: undefined;
   Wallet: undefined;
-  RateReview: { orderId: string };
+  RateReview: { orderId: string; serviceName?: string; orderNumber?: string };
   HelpCenter: undefined;
   ContactUs: undefined;
   SubmitTicket: undefined;
@@ -314,7 +321,7 @@ export type TechnicianStackParamList = {
   SetVacation: { initialVacations?: Array<{ start_date: string; end_date: string; reason?: string }> };
   ServiceAreas: { initialServiceAreas?: string[] };
   ServiceAreasSettings: undefined;
-  SupervisorReport: { reportId: number };
+  SupervisorReport: { reportId: number; visitId?: number };
   Memberships: undefined;
   MembershipCheckout: { tier: MembershipTier };
   HelpCenter: undefined;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { useTranslation } from 'react-i18next';
 import Header from '../../components/common/Header';
@@ -20,10 +20,16 @@ import {
   cancelClientOrder,
   getCancelledOrderTrack,
   getOrderTrack,
+  isOrderAlreadyRated,
+  isOrderRatedLocally,
   maintenancePhotoUrl,
   type OrderTrackData,
 } from '../../services/orderService';
 import { buildFullImageUrl } from '../../config/api';
+import {
+  ClientVisitReport,
+  extractReportFromOrderTrack,
+} from '../../services/clientVisitReportService';
 
 function resolveTrackPhotoUrl(entry: unknown): string | null {
   const raw = maintenancePhotoUrl(entry);
@@ -41,6 +47,8 @@ const OrderTrackingScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [visitReport, setVisitReport] = useState<ClientVisitReport | null>(null);
+  const [alreadyRated, setAlreadyRated] = useState(false);
 
   const load = useCallback(async () => {
     if (orderId == null || orderId === '') {
@@ -52,12 +60,49 @@ const OrderTrackingScreen: React.FC = () => {
     setError(null);
     try {
       const loader = useCancelledTrack ? getCancelledOrderTrack : getOrderTrack;
-      const { data, message } = await loader(orderId);
+      const [{ data, message }, ratedLocally] = await Promise.all([
+        loader(orderId),
+        isOrderRatedLocally(orderId),
+      ]);
       if (data) {
         setTrack(data);
+        setAlreadyRated(ratedLocally || isOrderAlreadyRated(data));
+        const embedded = extractReportFromOrderTrack(data);
+        const serviceReport = (data as any)?.service_report;
+        const status = String(serviceReport?.status ?? '').toLowerCase();
+
+        // Requirement: show Service Report card ONLY when track API says sent_to_client.
+        if (!status.includes('sent_to_client')) {
+          setVisitReport(null);
+        } else {
+          const embeddedStatus = String(
+            embedded.report?.status ?? embedded.report?.visit?.status ?? ''
+          ).toLowerCase();
+          if (embedded.report && embeddedStatus.includes('sent_to_client')) {
+            setVisitReport(embedded.report);
+          } else {
+            setVisitReport({
+              id: serviceReport?.report_id ?? embedded.report?.id ?? '',
+              visit_id: serviceReport?.visit_id ?? embedded.visitId,
+              status: serviceReport?.status ?? 'sent_to_client',
+              technician_name: undefined,
+              employee_id: undefined,
+              location: undefined,
+              service: undefined,
+              submitted_at: undefined,
+              technician_notes: null,
+              supervisor_notes: null,
+              recommendations: [],
+              before_photos: [],
+              after_photos: [],
+            });
+          }
+        }
       } else {
         setError(message || t('orders.trackLoadFailed', 'Could not load tracking.'));
         setTrack(null);
+        setVisitReport(null);
+        setAlreadyRated(ratedLocally);
       }
     } catch (e: unknown) {
       const msg =
@@ -66,14 +111,18 @@ const OrderTrackingScreen: React.FC = () => {
         t('orders.trackLoadFailed', 'Could not load tracking.');
       setError(msg);
       setTrack(null);
+      setVisitReport(null);
+      setAlreadyRated(false);
     } finally {
       setLoading(false);
     }
   }, [orderId, t, useCancelledTrack]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const handleCancelOrder = () => {
     Alert.alert(
@@ -125,7 +174,14 @@ const OrderTrackingScreen: React.FC = () => {
 
   const handleRateService = () => {
     try {
-      navigation.navigate('RateReview', { orderId: String(orderId) });
+      const productName =
+        track?.order?.items?.[0]?.product?.name ||
+        undefined;
+      navigation.navigate('RateReview', {
+        orderId: String(orderId),
+        orderNumber: track?.order_number_short || track?.order_number || String(orderId),
+        serviceName: productName,
+      });
     } catch {
       // ignore
     }
@@ -161,6 +217,7 @@ const OrderTrackingScreen: React.FC = () => {
 
   const statusLower = track?.tracking?.status?.toLowerCase() ?? '';
   const isDone = statusLower === 'completed' || statusLower === 'delivered';
+  const canShowRateService = isDone && !alreadyRated;
   const thumb = Math.min(Dimensions.get('window').width - SPACING.lg * 2, 120);
 
   if (loading && !track) {
@@ -228,6 +285,52 @@ const OrderTrackingScreen: React.FC = () => {
                 ))}
               </View>
             </ScrollView>
+          </View>
+        ) : null}
+
+        {visitReport ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {t('clientVisitReport.title', { defaultValue: 'Service Report' })}
+            </Text>
+            <TouchableOpacity
+              style={styles.reportCard}
+              activeOpacity={0.88}
+              onPress={() =>
+                navigation.navigate('ClientVisitReport', {
+                  orderId,
+                  reportId: visitReport.id,
+                  visitId: visitReport.visit_id,
+                })
+              }
+            >
+              <View style={styles.reportIconWrap}>
+                <Ionicons name="document-text" size={22} color={COLORS.primary} />
+              </View>
+              <View style={styles.reportMeta}>
+                <Text style={styles.reportTitle}>
+                  {t('clientVisitReport.readyTitle', {
+                    defaultValue: 'Your service report is ready',
+                  })}
+                </Text>
+                <Text style={styles.reportSubtitle} numberOfLines={2}>
+                  {visitReport.supervisor_notes ||
+                    visitReport.service ||
+                    t('clientVisitReport.tapToView', {
+                      defaultValue: 'Tap to view notes, photos, and recommendations',
+                    })}
+                </Text>
+                {visitReport.recommendations && visitReport.recommendations.length > 0 ? (
+                  <Text style={styles.reportRecCount}>
+                    {t('clientVisitReport.recommendationCount', {
+                      defaultValue: '{{count}} recommendations',
+                      count: visitReport.recommendations.length,
+                    })}
+                  </Text>
+                ) : null}
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.primary} />
+            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -321,9 +424,9 @@ const OrderTrackingScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {(isDone || track.can_cancel) ? (
+      {(canShowRateService || (!isDone && track.can_cancel)) ? (
         <View style={styles.bottomActions}>
-          {isDone ? (
+          {canShowRateService ? (
             <TouchableOpacity style={styles.rateButton} onPress={handleRateService} activeOpacity={0.88}>
               <Ionicons name="star" size={20} color={COLORS.background} />
               <Text style={styles.rateButtonText}>{t('orders.rateService', 'Rate service')}</Text>
@@ -462,6 +565,54 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  reportCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    backgroundColor: COLORS.background,
+    borderRadius: 18,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  reportCardEmpty: {
+    opacity: 0.95,
+  },
+  reportIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reportMeta: { flex: 1 },
+  reportTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+  },
+  reportTitleMuted: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.textSecondary,
+  },
+  reportSubtitle: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  reportRecCount: {
+    marginTop: 6,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
+  reportLoadingText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
   },
   orderCard: {
     backgroundColor: COLORS.background,
