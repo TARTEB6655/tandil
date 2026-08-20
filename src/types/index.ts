@@ -279,6 +279,8 @@ export type UserStackParamList = {
   Cart: undefined;
   Checkout: undefined;
   Wallet: undefined;
+  AddMoney: undefined;
+  WalletTopUpPayment: { amount: number; currency?: string };
   RateReview: { orderId: string; serviceName?: string; orderNumber?: string };
   HelpCenter: undefined;
   ContactUs: undefined;
@@ -286,6 +288,15 @@ export type UserStackParamList = {
   MyTickets: undefined;
   SupportTicketChat: { ticket: { id: number; ticket_number: string; subject: string; status: string; created_at: string; updated_at: string } };
   Memberships: undefined;
+  MembershipCheckout: {
+    mode?: 'purchase' | 'renew' | 'upgrade';
+    planKey: string;
+    planTitle: string;
+    amount: number;
+    currency?: string;
+    planId?: string | number;
+    membershipId?: number;
+  };
   PersonalInfo: undefined;
   Addresses: undefined;
   AddAddress: undefined;
@@ -323,13 +334,24 @@ export type TechnicianStackParamList = {
   ServiceAreasSettings: undefined;
   SupervisorReport: { reportId: number; visitId?: number };
   Memberships: undefined;
-  MembershipCheckout: { tier: MembershipTier };
+  MembershipCheckout: {
+    mode?: 'purchase' | 'renew' | 'upgrade';
+    planKey?: string;
+    planTitle?: string;
+    amount?: number;
+    currency?: string;
+    planId?: string | number;
+    membershipId?: number;
+    /** @deprecated legacy */
+    tier?: MembershipTier;
+  };
   HelpCenter: undefined;
   SubmitTicket: undefined;
   MyTickets: undefined;
   SupportTicketChat: { ticket: { id: number; ticket_number: string; subject: string; status: string; created_at: string; updated_at: string } };
   Notifications: undefined;
   LeaveStatus: undefined;
+  TechnicianJobCalendar: undefined;
 };
 
 export type DeliveryStackParamList = {
@@ -341,7 +363,17 @@ export type DeliveryStackParamList = {
   Profile: undefined;
   Settings: undefined;
   Memberships: undefined;
-  MembershipCheckout: { tier: MembershipTier };
+  MembershipCheckout: {
+    mode?: 'purchase' | 'renew' | 'upgrade';
+    planKey?: string;
+    planTitle?: string;
+    amount?: number;
+    currency?: string;
+    planId?: string | number;
+    membershipId?: number;
+    /** @deprecated legacy */
+    tier?: MembershipTier;
+  };
 };
 
 export type VendorStackParamList = {

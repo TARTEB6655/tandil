@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { UserStackParamList } from '../types';
@@ -7,6 +7,11 @@ import {
   DashboardTabIcon,
   useDashboardTabOptions,
 } from '../components/common/DashboardTabBar';
+
+import CompletePhoneModal from '../components/auth/CompletePhoneModal';
+import { authService } from '../services/authService';
+import { updateUserPhone, getUserProfile, getProfilePhone } from '../services/userService';
+import { useAppStore, useIsAuthenticated, useUser } from '../store';
 
 // Tab Screens
 import HomeScreen from '../screens/user/HomeScreen';
@@ -48,6 +53,8 @@ import AddAddressScreen from '../screens/user/AddAddressScreen';
 import EditAddressScreen from '../screens/user/EditAddressScreen';
 import PaymentMethodsScreen from '../screens/user/PaymentMethodsScreen';
 import WalletScreen from '../screens/user/WalletScreen';
+import AddMoneyScreen from '../screens/user/AddMoneyScreen';
+import WalletTopUpPaymentScreen from '../screens/user/WalletTopUpPaymentScreen';
 import AppInfoContentScreen from '../screens/user/AppInfoContentScreen';
 import VendorCompareScreen from '../screens/user/VendorCompareScreen';
 import ShopVendorStoreScreen from '../screens/user/ShopVendorStoreScreen';
@@ -109,12 +116,75 @@ const TabNavigator = () => {
 
 // Main Stack Navigator
 const UserAppNavigator = () => {
+  const user = useUser();
+  const isAuthenticated = useIsAuthenticated();
+  const setUser = useAppStore((s) => s.setUser);
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+
+  const evaluatePhonePrompt = useCallback(async () => {
+    if (!isAuthenticated || !user) {
+      setShowPhoneModal(false);
+      return;
+    }
+
+    const localPhone = String(user.phone || '').trim();
+    if (localPhone) {
+      await authService.setPhonePromptPending(false);
+      setShowPhoneModal(false);
+      return;
+    }
+
+    try {
+      const profile = await getUserProfile();
+      const profilePhone = getProfilePhone(profile);
+      if (profilePhone) {
+        const updated = await authService.updateStoredUserPhone(profilePhone);
+        if (updated) setUser(updated);
+        setShowPhoneModal(false);
+        return;
+      }
+    } catch {
+      // ignore — may still show prompt from pending social flag
+    }
+
+    const pending = await authService.isPhonePromptPending();
+    // Only prompt after Google/Apple (pending flag), not for every empty-phone session.
+    setShowPhoneModal(pending);
+  }, [isAuthenticated, setUser, user]);
+
+  useEffect(() => {
+    void evaluatePhonePrompt();
+  }, [evaluatePhonePrompt]);
+
+  const handleSavePhone = useCallback(
+    async (phone: string) => {
+      const result = await updateUserPhone(phone);
+      if (!result.success) {
+        throw new Error(
+          result.message || 'Could not save your phone number. Please try again.'
+        );
+      }
+      const fromApi =
+        result.data?.phone ?? result.data?.phone_number ?? result.data?.mobile ?? phone;
+      const updated = await authService.updateStoredUserPhone(String(fromApi));
+      if (updated) {
+        setUser(updated);
+      } else if (user) {
+        setUser({ ...user, phone: String(fromApi) });
+        await authService.setPhonePromptPending(false);
+      }
+      setShowPhoneModal(false);
+    },
+    [setUser, user]
+  );
+
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
+    <>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
       <Stack.Screen name="Main" component={TabNavigator} />
       
       {/* Service Screens */}
@@ -157,10 +227,19 @@ const UserAppNavigator = () => {
       <Stack.Screen name="EditAddress" component={EditAddressScreen} />
       <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />
       <Stack.Screen name="Wallet" component={WalletScreen} />
+      <Stack.Screen name="AddMoney" component={AddMoneyScreen} />
+      <Stack.Screen name="WalletTopUpPayment" component={WalletTopUpPaymentScreen} />
       <Stack.Screen name="AppInfoContent" component={AppInfoContentScreen} />
       <Stack.Screen name="VendorCompare" component={VendorCompareScreen} />
       <Stack.Screen name="ShopVendorStore" component={ShopVendorStoreScreen} />
-    </Stack.Navigator>
+      </Stack.Navigator>
+
+      <CompletePhoneModal
+        visible={showPhoneModal && !!isAuthenticated}
+        onSubmit={handleSavePhone}
+        required
+      />
+    </>
   );
 };
 

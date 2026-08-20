@@ -86,7 +86,10 @@ const JobDetailScreen: React.FC = () => {
     scheduledTime: svc?.time ?? '—',
     estimatedDuration:
       svc?.duration_minutes != null
-        ? t('technician.jobDetail.durationMinutes', { count: svc.duration_minutes })
+        ? t('technician.jobDetail.durationMinutes', {
+            count: svc.duration_minutes,
+            defaultValue: '{{count}} mins',
+          })
         : '—',
     specialInstructions: detail?.special_instructions ?? null,
     price: svc?.price,
@@ -248,7 +251,9 @@ const JobDetailScreen: React.FC = () => {
       case 'cancelled': return t('technician.status.cancelled');
       case 'rejected': return t('technician.status.rejected');
       case 'pending': return t('technician.status.pending');
-      default: return status || t('technician.jobDetail.unknown');
+      case 'pending_acceptance':
+        return t('technician.status.pendingAcceptance', 'Pending acceptance');
+      default: return status.replace(/_/g, ' ') || t('technician.jobDetail.unknown');
     }
   };
 
@@ -322,7 +327,9 @@ const JobDetailScreen: React.FC = () => {
 
         {/* Service Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('technician.jobDetail.serviceInformation')}</Text>
+          <Text style={styles.sectionTitle}>
+            {t('technician.jobDetail.serviceInformation', 'Service Information')}
+          </Text>
           <View style={styles.serviceCard}>
             <Text style={styles.serviceName}>{job.service}</Text>
             {job.serviceDescription ? <Text style={styles.serviceDescription}>{job.serviceDescription}</Text> : null}
@@ -347,7 +354,9 @@ const JobDetailScreen: React.FC = () => {
 
         {/* Customer Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('technician.jobDetail.customerInformation')}</Text>
+          <Text style={styles.sectionTitle}>
+            {t('technician.jobDetail.customerInformation', 'Customer Information')}
+          </Text>
           <View style={styles.customerCard}>
             <Text style={styles.customerName}>{job.customerName}</Text>
             <View style={styles.customerDetails}>
@@ -365,13 +374,15 @@ const JobDetailScreen: React.FC = () => {
 
         {/* Address */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('technician.jobDetail.serviceAddress')}</Text>
+          <Text style={styles.sectionTitle}>
+            {t('technician.jobDetail.serviceAddress', 'Service Address')}
+          </Text>
           <View style={styles.addressCard}>
             <View style={styles.addressHeader}>
               <Ionicons name="location-outline" size={20} color={COLORS.primary} />
               <Text style={styles.addressTitle}>
                 {!address?.label || address.label === 'Service Location'
-                  ? t('technician.jobDetail.serviceLocation')
+                  ? t('technician.jobDetail.serviceLocation', 'Service location')
                   : address.label}
               </Text>
             </View>
@@ -379,7 +390,9 @@ const JobDetailScreen: React.FC = () => {
             {address?.get_directions !== false && (
               <TouchableOpacity style={styles.directionsButton} onPress={handleGetDirections}>
                 <Ionicons name="navigate-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.directionsText}>{t('technician.jobDetail.getDirections')}</Text>
+                <Text style={styles.directionsText}>
+                  {t('technician.jobDetail.getDirections', 'Get directions')}
+                </Text>
               </TouchableOpacity>
             )}
           </View>

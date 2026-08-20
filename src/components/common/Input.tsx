@@ -32,6 +32,26 @@ interface InputProps {
   style?: ViewStyle;
   inputStyle?: TextStyle;
   maxLength?: number;
+  /** Override iOS/Android autofill (e.g. 'none' / 'off' to avoid wiping nearby fields). */
+  textContentType?:
+    | 'none'
+    | 'username'
+    | 'password'
+    | 'newPassword'
+    | 'oneTimeCode'
+    | 'organizationName'
+    | 'emailAddress'
+    | 'telephoneNumber'
+    | 'name';
+  autoComplete?:
+    | 'off'
+    | 'username'
+    | 'password'
+    | 'new-password'
+    | 'email'
+    | 'tel'
+    | 'name'
+    | 'organization';
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -53,6 +73,8 @@ export const Input: React.FC<InputProps> = ({
   style,
   inputStyle,
   maxLength,
+  textContentType,
+  autoComplete,
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -114,8 +136,11 @@ export const Input: React.FC<InputProps> = ({
           maxLength={maxLength}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          textContentType={secureTextEntry ? 'newPassword' : undefined}
-          autoComplete={secureTextEntry ? 'password-new' : undefined}
+          textContentType={
+            textContentType ?? (secureTextEntry ? 'oneTimeCode' : undefined)
+          }
+          autoComplete={autoComplete ?? (secureTextEntry ? 'off' : undefined)}
+          importantForAutofill={secureTextEntry ? 'no' : undefined}
           underlineColorAndroid="transparent"
         />
         {(rightIcon || secureTextEntry) && (

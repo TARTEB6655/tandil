@@ -378,9 +378,12 @@ const AvailabilityScreen: React.FC = () => {
               <Text style={styles.quickActionText}>{t('technician.availability.serviceAreas')}</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.quickAction}>
-              <Ionicons name="settings-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.quickActionText}>{t('technician.availability.advancedSettings')}</Text>
+            <TouchableOpacity
+              style={styles.quickAction}
+              onPress={() => navigation.navigate('TechnicianJobCalendar')}
+            >
+              <Ionicons name="calendar" size={24} color={COLORS.primary} />
+              <Text style={styles.quickActionText}>Job calendar</Text>
             </TouchableOpacity>
           </View>
         </View>

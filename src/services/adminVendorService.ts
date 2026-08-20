@@ -120,6 +120,8 @@ export function mergeVendorPreview(
     phone: detail.phone || preview.phone,
     vendor_type: detail.vendor_type || preview.vendor_type,
     vendor_type_label: mergeOptional(detail.vendor_type_label, preview.vendor_type_label),
+    vendor_types:
+      detail.vendor_types?.length ? detail.vendor_types : preview.vendor_types,
     emirate: detail.emirate || preview.emirate,
     city: mergeOptional(detail.city, preview.city),
     address: mergeOptional(detail.address, preview.address),

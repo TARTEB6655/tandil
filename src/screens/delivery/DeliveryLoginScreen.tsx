@@ -15,6 +15,17 @@ import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { useTranslation } from 'react-i18next';
 
+function goToRoleSelection(navigation: any) {
+  let rootNavigator = navigation;
+  while (rootNavigator.getParent?.()) {
+    rootNavigator = rootNavigator.getParent();
+  }
+  rootNavigator.reset?.({
+    index: 0,
+    routes: [{ name: 'RoleSelection' }],
+  });
+}
+
 const DeliveryLoginScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
@@ -105,7 +116,7 @@ const DeliveryLoginScreen: React.FC = () => {
         {/* Back to Role Selection */}
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.navigate('RoleSelection')}
+          onPress={() => goToRoleSelection(navigation)}
         >
           <Ionicons name="arrow-back" size={20} color={COLORS.textSecondary} />
           <Text style={styles.backButtonText}>{t('splash.skip')}</Text>

@@ -71,14 +71,15 @@ export interface UserProfileUpdateParams {
 /**
  * POST /api/user/profile (form-data)
  * Updates customer personal information. Requires Bearer token (customer token).
- * Sends: name, email, phone, profile_picture (file).
+ * Sends: name, email, phone (always when provided, including empty to clear), profile_picture (file).
  * If your backend returns 405, it may expect PUT; we use POST to match common form-data update flows.
  */
 export async function updateUserProfile(params: UserProfileUpdateParams): Promise<UserProfileData | null> {
   const formData = new FormData();
   if (params.name != null) formData.append('name', params.name);
   if (params.email != null) formData.append('email', params.email);
-  if (params.phone != null) formData.append('phone', params.phone);
+  // Include phone even when empty so clients can clear the number.
+  if (params.phone !== undefined) formData.append('phone', params.phone);
   if (params.profile_picture?.uri) {
     formData.append('profile_picture', {
       uri: params.profile_picture.uri,
@@ -93,6 +94,54 @@ export async function updateUserProfile(params: UserProfileUpdateParams): Promis
     return response.data.data;
   }
   return null;
+}
+
+/**
+ * PUT /api/user/phone
+ * Update phone only (used after Google/Apple signup). Body: { phone }.
+ * Falls back to POST if the server rejects PUT.
+ */
+export async function updateUserPhone(phone: string): Promise<{
+  success: boolean;
+  message?: string;
+  data?: UserProfileData | null;
+}> {
+  const trimmed = phone.trim();
+  const body = { phone: trimmed };
+
+  const tryRequest = async (method: 'put' | 'post') => {
+    const response = await apiClient.request<UserProfileResponse>({
+      method,
+      url: '/user/phone',
+      data: body,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      timeout: 15000,
+    });
+    return response.data;
+  };
+
+  try {
+    const data = await tryRequest('put');
+    return {
+      success: data?.success !== false,
+      message: data?.message,
+      data: data?.data ?? null,
+    };
+  } catch (err: unknown) {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+    if (status === 405 || status === 404) {
+      const data = await tryRequest('post');
+      return {
+        success: data?.success !== false,
+        message: data?.message,
+        data: data?.data ?? null,
+      };
+    }
+    throw err;
+  }
 }
 
 /** Address from GET /api/user/addresses */

@@ -20,6 +20,7 @@ import EditUserScreen from '../screens/admin/EditUserScreen';
 import AdminSettingsScreen from '../screens/admin/AdminSettingsScreen';
 import AdminSubscriptionsScreen from '../screens/admin/AdminSubscriptionsScreen';
 import EditSubscriptionScreen from '../screens/admin/EditSubscriptionScreen';
+import AdminAddSubscriptionScreen from '../screens/admin/AdminAddSubscriptionScreen';
 import AdminTipsScreen from '../screens/admin/AdminTipsScreen';
 import AdminProductsScreen from '../screens/admin/AdminProductsScreen';
 import AdminAddProductScreen from '../screens/admin/AdminAddProductScreen';
@@ -34,6 +35,7 @@ import AdminServicesScreen from '../screens/admin/AdminServicesScreen';
 import AdminAddServiceScreen from '../screens/admin/AdminAddServiceScreen';
 import AdminEditServiceScreen from '../screens/admin/AdminEditServiceScreen';
 import AdminBannersScreen from '../screens/admin/AdminBannersScreen';
+import AdminVideoBannerScreen from '../screens/admin/AdminVideoBannerScreen';
 import AdminProductSettingsScreen from '../screens/admin/AdminProductSettingsScreen';
 import AdminAppContentSettingsScreen from '../screens/admin/AdminAppContentSettingsScreen';
 import AdminMaintenancePhotosScreen from '../screens/admin/AdminMaintenancePhotosScreen';
@@ -62,12 +64,29 @@ import AdminOperationalAreasScreen from '../screens/admin/AdminOperationalAreasS
 import AdminOrderStatisticsScreen from '../screens/admin/AdminOrderStatisticsScreen';
 import AdminWalletMonitoringScreen from '../screens/admin/AdminWalletMonitoringScreen';
 import AdminWalletClientDetailScreen from '../screens/admin/AdminWalletClientDetailScreen';
+import AdminLoyaltyScreen from '../screens/admin/AdminLoyaltyScreen';
+import AdminLoyaltySettingsScreen from '../screens/admin/AdminLoyaltySettingsScreen';
+import AdminLoyaltyRewardsScreen from '../screens/admin/AdminLoyaltyRewardsScreen';
+import AdminLoyaltyRewardFormScreen from '../screens/admin/AdminLoyaltyRewardFormScreen';
+import AdminLoyaltyCustomersScreen from '../screens/admin/AdminLoyaltyCustomersScreen';
+import AdminLoyaltyCustomerDetailScreen from '../screens/admin/AdminLoyaltyCustomerDetailScreen';
+import AdminLoyaltyCampaignsScreen from '../screens/admin/AdminLoyaltyCampaignsScreen';
+import AdminLoyaltyCampaignFormScreen from '../screens/admin/AdminLoyaltyCampaignFormScreen';
+import AdminLoyaltyReportsScreen from '../screens/admin/AdminLoyaltyReportsScreen';
 import AdminTopSellingProductsScreen from '../screens/admin/AdminTopSellingProductsScreen';
 import AdminVendorSignupRequestsScreen from '../screens/admin/AdminVendorSignupRequestsScreen';
 import AdminVendorLiveChatSessionsScreen from '../screens/admin/AdminVendorLiveChatSessionsScreen';
 import AdminVendorLiveChatScreen from '../screens/admin/AdminVendorLiveChatScreen';
 import AdminVendorManagementScreen from '../screens/admin/AdminVendorManagementScreen';
+import AdminVendorFormScreen from '../screens/admin/AdminVendorFormScreen';
 import AdminVendorProductsScreen from '../screens/admin/AdminVendorProductsScreen';
+import AdminVendorTypesEmiratesScreen from '../screens/admin/AdminVendorTypesEmiratesScreen';
+import AdminSchedulingScreen from '../screens/admin/AdminSchedulingScreen';
+import AdminSchedulingSettingsScreen from '../screens/admin/AdminSchedulingSettingsScreen';
+import AdminSchedulingSlotsScreen from '../screens/admin/AdminSchedulingSlotsScreen';
+import AdminSchedulingBlocksScreen from '../screens/admin/AdminSchedulingBlocksScreen';
+import AdminSchedulingCalendarScreen from '../screens/admin/AdminSchedulingCalendarScreen';
+import AdminJobBookingDetailScreen from '../screens/admin/AdminJobBookingDetailScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -161,6 +180,7 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="EditUser" component={EditUserScreen} />
         <Stack.Screen name="AdminSubscriptions" component={AdminSubscriptionsScreen} />
         <Stack.Screen name="EditSubscription" component={EditSubscriptionScreen} />
+        <Stack.Screen name="AdminAddSubscription" component={AdminAddSubscriptionScreen} />
         <Stack.Screen name="AdminTips" component={AdminTipsScreen} />
         <Stack.Screen name="AdminProducts" component={AdminProductsScreen} />
         <Stack.Screen name="AdminAddProduct" component={AdminAddProductScreen} />
@@ -178,6 +198,7 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminAddService" component={AdminAddServiceScreen} />
         <Stack.Screen name="AdminEditService" component={AdminEditServiceScreen} />
         <Stack.Screen name="AdminBanners" component={AdminBannersScreen} />
+        <Stack.Screen name="AdminVideoBanner" component={AdminVideoBannerScreen} />
         <Stack.Screen name="AdminProductSettings" component={AdminProductSettingsScreen} />
         <Stack.Screen name="AdminAppContentSettings" component={AdminAppContentSettingsScreen} />
         <Stack.Screen name="AdminMaintenancePhotos" component={AdminMaintenancePhotosScreen} />
@@ -205,12 +226,29 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminOrderStatistics" component={AdminOrderStatisticsScreen} />
         <Stack.Screen name="AdminWalletMonitoring" component={AdminWalletMonitoringScreen} />
         <Stack.Screen name="AdminWalletClientDetail" component={AdminWalletClientDetailScreen} />
+        <Stack.Screen name="AdminLoyalty" component={AdminLoyaltyScreen} />
+        <Stack.Screen name="AdminLoyaltySettings" component={AdminLoyaltySettingsScreen} />
+        <Stack.Screen name="AdminLoyaltyRewards" component={AdminLoyaltyRewardsScreen} />
+        <Stack.Screen name="AdminLoyaltyRewardForm" component={AdminLoyaltyRewardFormScreen} />
+        <Stack.Screen name="AdminLoyaltyCustomers" component={AdminLoyaltyCustomersScreen} />
+        <Stack.Screen name="AdminLoyaltyCustomerDetail" component={AdminLoyaltyCustomerDetailScreen} />
+        <Stack.Screen name="AdminLoyaltyCampaigns" component={AdminLoyaltyCampaignsScreen} />
+        <Stack.Screen name="AdminLoyaltyCampaignForm" component={AdminLoyaltyCampaignFormScreen} />
+        <Stack.Screen name="AdminLoyaltyReports" component={AdminLoyaltyReportsScreen} />
         <Stack.Screen name="AdminTopSellingProducts" component={AdminTopSellingProductsScreen} />
         <Stack.Screen name="AdminVendorSignupRequests" component={AdminVendorSignupRequestsScreen} />
         <Stack.Screen name="AdminVendorLiveChatSessions" component={AdminVendorLiveChatSessionsScreen} />
         <Stack.Screen name="AdminVendorLiveChat" component={AdminVendorLiveChatScreen} />
         <Stack.Screen name="AdminVendorManagement" component={AdminVendorManagementScreen} />
+        <Stack.Screen name="AdminVendorForm" component={AdminVendorFormScreen} />
         <Stack.Screen name="AdminVendorProducts" component={AdminVendorProductsScreen} />
+        <Stack.Screen name="AdminVendorTypesEmirates" component={AdminVendorTypesEmiratesScreen} />
+        <Stack.Screen name="AdminScheduling" component={AdminSchedulingScreen} />
+        <Stack.Screen name="AdminSchedulingSettings" component={AdminSchedulingSettingsScreen} />
+        <Stack.Screen name="AdminSchedulingSlots" component={AdminSchedulingSlotsScreen} />
+        <Stack.Screen name="AdminSchedulingBlocks" component={AdminSchedulingBlocksScreen} />
+        <Stack.Screen name="AdminSchedulingCalendar" component={AdminSchedulingCalendarScreen} />
+        <Stack.Screen name="AdminJobBookingDetail" component={AdminJobBookingDetailScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

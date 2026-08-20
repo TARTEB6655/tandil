@@ -288,6 +288,15 @@ export interface SupervisorAssignment {
   price: string;
   price_display: string;
   job_time: string;
+  /** Assignment date YYYY-MM-DD from GET /supervisor/assignments/:id */
+  date?: string | null;
+  booking_date?: string | null;
+  booking_slot?: string | null;
+  slot_start_time?: string | null;
+  slot_end_time?: string | null;
+  /** Booked time slot (HH:mm or display string); null if not set */
+  time_slot?: string | { start_time?: string; end_time?: string; start?: string; end?: string } | null;
+  scheduled_time?: string | null;
   supervisor_name?: string;
   notes?: string | null;
   created_at?: string;

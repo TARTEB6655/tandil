@@ -99,6 +99,13 @@ const AdminSettingsScreen: React.FC = () => {
           onPress: () => navigation.navigate('AdminBanners'),
         },
         {
+          icon: 'videocam',
+          titleKey: 'admin.settings.videoBanner.title',
+          subtitleKey: 'admin.settings.videoBanner.subtitle',
+          type: 'navigation',
+          onPress: () => navigation.navigate('AdminVideoBanner'),
+        },
+        {
           icon: 'language',
           titleKey: 'admin.settings.languageRegion.title',
           subtitleKey: 'admin.settings.languageRegion.subtitle',
@@ -136,6 +143,13 @@ const AdminSettingsScreen: React.FC = () => {
           type: 'navigation',
           onPress: () => navigation.navigate('AdminVendorLiveChatSessions'),
         },
+        {
+          icon: 'leaf-outline',
+          titleKey: 'admin.settings.vendorTypesEmirates.title',
+          subtitleKey: 'admin.settings.vendorTypesEmirates.subtitle',
+          type: 'navigation',
+          onPress: () => navigation.navigate('AdminVendorTypesEmirates'),
+        },
       ],
     },
     {
@@ -163,6 +177,18 @@ const AdminSettingsScreen: React.FC = () => {
       ],
     },
     {
+      titleKey: 'admin.settings.loyaltySection',
+      items: [
+        {
+          icon: 'diamond-outline',
+          titleKey: 'admin.settings.loyalty.title',
+          subtitleKey: 'admin.settings.loyalty.subtitle',
+          type: 'navigation',
+          onPress: () => navigation.navigate('AdminLoyalty'),
+        },
+      ],
+    },
+    {
       titleKey: 'admin.settings.zonesAndTeamsSection',
       items: [
         {
@@ -178,6 +204,18 @@ const AdminSettingsScreen: React.FC = () => {
           subtitleKey: 'admin.settings.operationalAreas.subtitle',
           type: 'navigation',
           onPress: () => navigation.navigate('AdminOperationalAreas'),
+        },
+      ],
+    },
+    {
+      titleKey: 'admin.settings.jobSchedulingSection',
+      items: [
+        {
+          icon: 'calendar-outline',
+          titleKey: 'admin.settings.jobScheduling.title',
+          subtitleKey: 'admin.settings.jobScheduling.subtitle',
+          type: 'navigation',
+          onPress: () => navigation.navigate('AdminScheduling'),
         },
       ],
     },

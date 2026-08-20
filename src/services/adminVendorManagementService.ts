@@ -19,6 +19,60 @@ export interface AdminManagedVendor {
   orders_count?: number;
 }
 
+export type AdminVendorFormStatus = 'approved' | 'under_review' | 'pending';
+/** @deprecated Use AdminVendorFormStatus */
+export type AdminVendorCreateStatus = AdminVendorFormStatus;
+
+export type AdminVendorUploadFile = {
+  uri: string;
+  name: string;
+  mimeType: string;
+};
+
+/** Shared fields for create/update vendor multipart form-data. */
+export type AdminVendorFormPayload = {
+  company_name: string;
+  authorized_person_name: string;
+  email: string;
+  phone: string;
+  trade_license_number: string;
+  address: string;
+  logo?: AdminVendorUploadFile | null;
+  vat_number?: string;
+  vendor_types: string[];
+  emirate: string;
+  city?: string;
+  latitude?: number;
+  longitude?: number;
+  map_address?: string;
+  bank_name?: string;
+  iban: string;
+  account_holder_name: string;
+  delivery_radius_km: number;
+  opens_at: string;
+  closes_at: string;
+  minimum_order_amount: number;
+  terms_accepted?: boolean;
+  /** Optional: approved (default), under_review, pending */
+  status?: AdminVendorFormStatus;
+};
+
+/** Payload for POST /admin/vendors (multipart form-data). */
+export type AdminCreateVendorPayload = AdminVendorFormPayload & {
+  trade_license: AdminVendorUploadFile;
+  emirates_id: AdminVendorUploadFile;
+  password: string;
+  password_confirmation: string;
+};
+
+/** Payload for POST /admin/vendors/:id (multipart). Files/password optional if unchanged. */
+export type AdminUpdateVendorPayload = AdminVendorFormPayload & {
+  trade_license?: AdminVendorUploadFile | null;
+  emirates_id?: AdminVendorUploadFile | null;
+  password?: string;
+  password_confirmation?: string;
+};
+
 export interface AdminManagedVendorProduct {
   id: string;
   vendor_product_id?: string;
@@ -85,6 +139,144 @@ export interface AdminVendorManagementDetail {
   };
   revenue: number;
   currency: string;
+}
+
+function normalizeUploadUri(uri: string): string {
+  if (!uri) return uri;
+  if (uri.startsWith('file://') || uri.startsWith('content://') || uri.startsWith('http')) {
+    return uri;
+  }
+  if (uri.startsWith('/')) return `file://${uri}`;
+  return uri;
+}
+
+function guessMimeType(name: string, fallback = 'application/octet-stream'): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  return fallback;
+}
+
+function appendVendorFile(form: FormData, key: string, file?: AdminVendorUploadFile | null) {
+  if (!file?.uri) return;
+  const name = file.name?.trim() || `${key}.jpg`;
+  const type = file.mimeType?.trim() || guessMimeType(name);
+  form.append(key, {
+    uri: normalizeUploadUri(file.uri),
+    name,
+    type,
+  } as unknown as Blob);
+}
+
+function buildGoogleMapsLocation(params: {
+  latitude?: number;
+  longitude?: number;
+  map_address?: string;
+}): string {
+  if (params.latitude != null && params.longitude != null) {
+    return `${params.latitude},${params.longitude}`;
+  }
+  return params.map_address?.trim() ?? '';
+}
+
+function extractApiMessage(body: unknown, fallback: string): string {
+  if (!body || typeof body !== 'object') return fallback;
+  const root = body as Record<string, unknown>;
+  if (typeof root.message === 'string' && root.message.trim()) {
+    return root.message.trim();
+  }
+  const errors = root.errors;
+  if (errors && typeof errors === 'object') {
+    for (const value of Object.values(errors as Record<string, unknown>)) {
+      if (Array.isArray(value) && value[0] != null) return String(value[0]);
+      if (typeof value === 'string' && value.trim()) return value;
+    }
+  }
+  return fallback;
+}
+
+function buildVendorFormData(params: AdminUpdateVendorPayload): FormData {
+  const form = new FormData();
+  form.append('company_name', params.company_name.trim());
+  form.append('authorized_person_name', params.authorized_person_name.trim());
+  form.append('email', params.email.trim());
+  form.append('phone', params.phone.trim());
+  form.append('trade_license_number', params.trade_license_number.trim());
+  form.append('address', params.address.trim());
+  Array.from(new Set((params.vendor_types || []).map((type) => type.trim()).filter(Boolean))).forEach(
+    (type) => {
+      form.append('vendor_type[]', type);
+    }
+  );
+  form.append('emirate', params.emirate.trim());
+  if (params.city?.trim()) {
+    form.append('city', params.city.trim());
+  }
+  form.append('google_maps_location', buildGoogleMapsLocation(params));
+  if (params.bank_name?.trim()) {
+    form.append('bank_name', params.bank_name.trim());
+  }
+  form.append('iban', params.iban.trim());
+  form.append('account_holder_name', params.account_holder_name.trim());
+  form.append('delivery_radius', String(params.delivery_radius_km));
+  form.append('opens_at', params.opens_at.trim());
+  form.append('closes_at', params.closes_at.trim());
+  form.append('minimum_order_amount', String(params.minimum_order_amount));
+  form.append('terms_accepted', params.terms_accepted === false ? '0' : '1');
+  form.append('status', params.status || 'approved');
+
+  if (params.vat_number?.trim()) {
+    form.append('vat_number', params.vat_number.trim());
+  }
+
+  if (params.password) {
+    form.append('password', params.password);
+    form.append('password_confirmation', params.password_confirmation || params.password);
+  }
+
+  appendVendorFile(form, 'trade_license', params.trade_license);
+  appendVendorFile(form, 'emirates_id', params.emirates_id);
+  if (params.logo) {
+    appendVendorFile(form, 'logo', params.logo);
+  }
+
+  return form;
+}
+
+function parseVendorMutationResponse(
+  responseData: unknown,
+  fallbackMessage: string
+): { message: string; vendor?: AdminManagedVendor } {
+  const body = asRecord(responseData) ?? {};
+  if (body.success === false) {
+    throw new Error(extractApiMessage(body, fallbackMessage));
+  }
+  const data = asRecord(body.data) ?? body;
+  const vendorRow = asRecord(data.vendor) ?? asRecord(data.item) ?? data;
+  const vendor =
+    vendorRow && (pickString(vendorRow.id, vendorRow.vendor_id) || vendorRow.business_name)
+      ? mapVendor(vendorRow)
+      : undefined;
+  return {
+    message: pickString(body.message) || fallbackMessage,
+    vendor,
+  };
+}
+
+function throwVendorMutationError(error: unknown, fallback: string): never {
+  if (error instanceof Error && !('response' in error)) {
+    throw error;
+  }
+  const ax = error as {
+    response?: { data?: unknown };
+    message?: string;
+  };
+  if (ax.response?.data) {
+    throw new Error(extractApiMessage(ax.response.data, ax.message || fallback));
+  }
+  throw error instanceof Error ? error : new Error(fallback);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -390,6 +582,86 @@ function parsePagination(
 }
 
 export const adminVendorManagementService = {
+  /**
+   * POST /admin/vendors (multipart form-data)
+   * Creates a vendor from admin. status: approved | under_review | pending (default approved).
+   */
+  async createVendor(params: AdminCreateVendorPayload): Promise<{
+    message: string;
+    vendor?: AdminManagedVendor;
+  }> {
+    if (!params.trade_license?.uri) {
+      throw new Error('Trade license file is required.');
+    }
+    if (!params.emirates_id?.uri) {
+      throw new Error('Emirates ID file is required.');
+    }
+    if (!params.password || params.password.length < 6) {
+      throw new Error('Password must be at least 6 characters.');
+    }
+    if (params.password !== params.password_confirmation) {
+      throw new Error('Password confirmation does not match.');
+    }
+    if (!buildGoogleMapsLocation(params)) {
+      throw new Error('Google Maps location is required.');
+    }
+
+    const form = buildVendorFormData(params);
+    try {
+      const response = await apiClient.post('/admin/vendors', form, {
+        timeout: 120000,
+        headers: { Accept: 'application/json' },
+        transformRequest: [(data) => data],
+      });
+      return parseVendorMutationResponse(response.data, 'Vendor created successfully.');
+    } catch (error: unknown) {
+      throwVendorMutationError(error, 'Failed to create vendor.');
+    }
+  },
+
+  /**
+   * POST /admin/vendors/:vendor_id (multipart form-data)
+   * Full update. Files/password optional when unchanged. status: approved | under_review | pending.
+   */
+  async updateVendor(
+    vendorId: string | number,
+    params: AdminUpdateVendorPayload
+  ): Promise<{
+    message: string;
+    vendor?: AdminManagedVendor;
+  }> {
+    if (!vendorId && vendorId !== 0) {
+      throw new Error('Vendor id is required.');
+    }
+    if (params.password) {
+      if (params.password.length < 6) {
+        throw new Error('Password must be at least 6 characters.');
+      }
+      if (params.password !== (params.password_confirmation || '')) {
+        throw new Error('Password confirmation does not match.');
+      }
+    }
+    if (!buildGoogleMapsLocation(params)) {
+      throw new Error('Google Maps location is required.');
+    }
+
+    const form = buildVendorFormData(params);
+    try {
+      const response = await apiClient.post(
+        `/admin/vendors/${encodeURIComponent(String(vendorId))}`,
+        form,
+        {
+          timeout: 120000,
+          headers: { Accept: 'application/json' },
+          transformRequest: [(data) => data],
+        }
+      );
+      return parseVendorMutationResponse(response.data, 'Vendor updated successfully.');
+    } catch (error: unknown) {
+      throwVendorMutationError(error, 'Failed to update vendor.');
+    }
+  },
+
   /**
    * GET /admin/vendors/management?per_page=15&sort=newest
    * Returns summary + vendor items for the management home page.

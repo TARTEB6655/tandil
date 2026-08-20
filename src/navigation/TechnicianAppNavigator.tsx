@@ -40,6 +40,7 @@ import MyTicketsScreen from '../screens/user/MyTicketsScreen';
 import SupportTicketChatScreen from '../screens/user/SupportTicketChatScreen';
 import TechnicianNotificationsScreen from '../screens/technician/TechnicianNotificationsScreen';
 import TechnicianLeaveStatusScreen from '../screens/technician/TechnicianLeaveStatusScreen';
+import TechnicianJobCalendarScreen from '../screens/technician/TechnicianJobCalendarScreen';
 
 /** Technician uses own notifications screen (GET /technician/notifications); alias for Stack.Screen */
 const NotificationsScreen = TechnicianNotificationsScreen;
@@ -147,6 +148,7 @@ const TechnicianAppNavigator = () => {
         <Stack.Screen name="SupportTicketChat" component={SupportTicketChatScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="LeaveStatus" component={TechnicianLeaveStatusScreen} />
+        <Stack.Screen name="TechnicianJobCalendar" component={TechnicianJobCalendarScreen} />
       </Stack.Navigator>
     </SafeAreaView>
   );

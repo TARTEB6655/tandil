@@ -5,7 +5,7 @@ import { isApplePayEnabled } from './payments';
 // Get API base URL from app.json extra config
 // Works in both development and production builds
 function getApiBaseUrl(): string {
-  const fallback = 'https://phpstack-1180784-6050385.cloudwaysapps.com/api';
+  const fallback = 'https://app.tandil.ae/api';
   
   try {
     // Try expoConfig first (works in development and some production builds)
@@ -52,7 +52,7 @@ export function getStripePublishableKey(): string {
     return fromEnv.trim();
   }
   // Last resort for release builds if Constants.extra was not embedded (avoids Stripe white screen).
-  const fromAppJson = 'pk_live_51TObSk0dvmhfzUoqeXMFztTOzAQ366Y0ZaNvM6us9fvjswiUh80L13EtFAwgjwkH1klyZcagiYZ6MGcFYK7HrYAT00lH8Jrade';
+  const fromAppJson = 'pk_test_51TSVvUP3hJZSveSoC6j7aN98lUeEiBcVH1YP0rhoAYYktKMi4P2cARXftPw4zCkQUxfuT4tKnjd1TI5B9Zyb553o00r9bdyECz';
   return fromAppJson;
 }
 
@@ -91,7 +91,7 @@ export function getStripeMerchantIdentifier(): string {
 // For development, you can also use:
 // export const API_BASE_URL = __DEV__ 
 //   ? Constants.expoConfig?.extra?.apiBaseUrlDev || 'http://192.168.1.100:8000/api'
-//   : Constants.expoConfig?.extra?.apiBaseUrl || 'https://phpstack-1180784-6050385.cloudwaysapps.com/api';
+//   : Constants.expoConfig?.extra?.apiBaseUrl || 'https://app.tandil.ae/api';
 
 export const API_CONFIG = {
   baseURL: API_BASE_URL,

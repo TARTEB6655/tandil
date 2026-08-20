@@ -20,6 +20,18 @@ import { authService } from '../../services/authService';
 import { useAppStore } from '../../store';
 import { roleMatchesPortal } from '../../utils/sessionRestore';
 
+function goToRoleSelection(navigation: any) {
+  let rootNavigator = navigation;
+  while (rootNavigator.getParent?.()) {
+    rootNavigator = rootNavigator.getParent();
+  }
+  // Always land on Roles — never goBack() (Admin/other apps can sit under Vendor in the stack).
+  rootNavigator.reset?.({
+    index: 0,
+    routes: [{ name: 'RoleSelection' }],
+  });
+}
+
 const VendorLoginScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
@@ -85,12 +97,7 @@ const VendorLoginScreen: React.FC = () => {
   };
 
   const handleBack = () => {
-    const root = navigation.getParent();
-    if (root?.canGoBack?.()) {
-      root.goBack();
-      return;
-    }
-    root?.navigate?.('RoleSelection');
+    goToRoleSelection(navigation);
   };
 
   return (

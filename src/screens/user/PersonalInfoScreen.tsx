@@ -114,18 +114,21 @@ const PersonalInfoScreen: React.FC = () => {
       const updated = await updateUserProfile({
         name: trimmedName,
         email: trimmedEmail,
-        phone: phone.trim() || undefined,
+        // Always send phone (including "") so clearing it actually updates the profile.
+        phone: phone.trim(),
         profile_picture: profilePicture ?? undefined,
       });
       if (updated) {
         setProfile(updated);
         setProfilePicture(null);
         if (user) {
+          const nextPhone =
+            updated.phone ?? updated.phone_number ?? updated.mobile ?? phone.trim();
           setUser({
             ...user,
             name: updated.name,
             email: updated.email,
-            phone: updated.phone ?? updated.phone_number ?? updated.mobile ?? user.phone,
+            phone: nextPhone != null ? String(nextPhone) : '',
           });
         }
         Alert.alert(t('personalInfo.success', 'Saved'), t('personalInfo.savedMessage', 'Profile updated successfully.'), [

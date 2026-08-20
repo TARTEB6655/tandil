@@ -2,36 +2,30 @@ import { Alert, Linking, Platform, Share } from 'react-native';
 import Constants from 'expo-constants';
 import type { TFunction } from 'i18next';
 
-const IOS_APP_STORE_URL = 'https://apps.apple.com/au/app/tandilapp/id6757382373';
-const IOS_APP_STORE_ID = '6757382373';
+const IOS_APP_STORE_URL = 'https://apps.apple.com/au/app/tandil/id6757382373';
 
 function getShareUrl(): string {
+  if (Platform.OS === 'ios') return IOS_APP_STORE_URL;
   const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
   const fromConfig = typeof extra?.shareAppUrl === 'string' ? extra.shareAppUrl.trim() : '';
   if (fromConfig) return fromConfig;
-  if (Platform.OS === 'android') {
-    return 'https://play.google.com/store/apps/details?id=com.tandilapp.tandil';
-  }
-  const iosId =
-    (typeof extra?.iosAppStoreId === 'string' ? extra.iosAppStoreId.trim() : '') ||
-    IOS_APP_STORE_ID;
-  return `https://apps.apple.com/app/id${iosId}`;
+  return 'https://play.google.com/store/apps/details?id=com.tandilapp.tandil';
 }
 
-/** Opens the native share sheet (Mail, WhatsApp, Messages, etc. on iOS). */
+/** Opens the native share sheet (Mail, WhatsApp, Messages, etc.). */
 export async function shareApp(t: TFunction): Promise<void> {
   const url = getShareUrl();
   const message = t('profile.shareApp.message', {
-    defaultValue: 'Check out Tandil — services and shop in one app.',
+    url,
+    defaultValue:
+      '🌿 Tandil is now available on the App Store 🇦🇪\n\nOne platform for all your garden and farm needs:\nInspection, Design, Execution, Products, and Equipment.\n\nDownload Tandil, try it, and share your feedback and rating with us 🤍👇\n\nApp Link: {{url}}',
   });
   const title = t('profile.shareApp.title', { defaultValue: 'Share Tandil' });
 
   try {
-    if (Platform.OS === 'ios') {
-      await Share.share({ message: `${message}\n${url}`, url, title });
-    } else {
-      await Share.share({ message: `${message}\n${url}`, title });
-    }
+    // iOS ignores `message` when `url` is a local image file, so share text + store link only.
+    // The App Store link still shows the official Tandil icon as a preview in Messages / WhatsApp.
+    await Share.share({ title, message });
   } catch {
     // user dismissed
   }

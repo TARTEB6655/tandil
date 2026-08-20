@@ -3,7 +3,7 @@
     "name": "Tandil",
     "slug": "tandil",
     "scheme": "tandil",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -41,8 +41,8 @@
       "eas": {
         "projectId": "ab7770a2-8b25-4bf7-b582-d7f34caa6238"
       },
-      "apiBaseUrl": "https://phpstack-1180784-6050385.cloudwaysapps.com/api",
-      "stripePublishableKey": "pk_live_51TObSk0dvmhfzUoqeXMFztTOzAQ366Y0ZaNvM6us9fvjswiUh80L13EtFAwgjwkH1klyZcagiYZ6MGcFYK7HrYAT00lH8Jrade",
+      "apiBaseUrl": "https://app.tandil.ae/api",
+      "stripePublishableKey": "pk_test_51TSVvUP3hJZSveSoC6j7aN98lUeEiBcVH1YP0rhoAYYktKMi4P2cARXftPw4zCkQUxfuT4tKnjd1TI5B9Zyb553o00r9bdyECz",
       "enableApplePay": true,
       "stripeMerchantIdentifier": "merchant.com.tandilapp.uae",
       "googleIosClientId": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com"

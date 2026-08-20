@@ -39,9 +39,10 @@ const AuthScreen: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const finishClientSession = useCallback(
-    async (response: LoginResponse) => {
+    async (response: LoginResponse, options?: { fromSocial?: boolean }) => {
       const effectiveRole =
         response.data?.role ||
         response.data?.user?.role ||
@@ -57,6 +58,10 @@ const AuthScreen: React.FC = () => {
       if (appUser) {
         setUser(appUser);
         setAuthenticated(true);
+        const needsPhone = !String(appUser.phone || '').trim();
+        if (options?.fromSocial && needsPhone) {
+          await authService.setPhonePromptPending(true);
+        }
         navigation.reset({
           index: 0,
           routes: [{ name: 'UserApp' }],
@@ -68,32 +73,64 @@ const AuthScreen: React.FC = () => {
 
   const validateForm = (): boolean => {
     setError(null);
+    setPhoneError(null);
 
     if (!email.trim()) {
-      setError(t('auth.errorEmailRequired', 'Email is required'));
+      const msg = t('auth.errorEmailRequired', 'Email is required');
+      setError(msg);
+      if (!isLogin) {
+        Alert.alert(t('auth.signupError', 'Registration Error'), msg);
+      }
       return false;
     }
 
     if (!password.trim()) {
-      setError(t('auth.errorPasswordRequired', 'Password is required'));
+      const msg = t('auth.errorPasswordRequired', 'Password is required');
+      setError(msg);
+      if (!isLogin) {
+        Alert.alert(t('auth.signupError', 'Registration Error'), msg);
+      }
       return false;
     }
 
     if (!isLogin) {
       if (!name.trim()) {
-        setError(t('auth.errorNameRequired', 'Name is required'));
+        const msg = t('auth.errorNameRequired', 'Name is required');
+        setError(msg);
+        Alert.alert(t('auth.signupError', 'Registration Error'), msg);
         return false;
       }
-      if (!phone.trim()) {
-        setError(t('auth.errorPhoneRequired', 'Phone number is required'));
+
+      const trimmedPhone = phone.trim();
+      const phoneDigits = trimmedPhone.replace(/\D/g, '');
+      if (!trimmedPhone) {
+        const msg = t('auth.errorPhoneRequired', 'Phone number is required');
+        setError(msg);
+        setPhoneError(msg);
+        Alert.alert(t('auth.signupError', 'Registration Error'), msg);
         return false;
       }
+      if (phoneDigits.length < 8) {
+        const msg = t(
+          'auth.errorPhoneInvalid',
+          'Please enter a valid phone number (at least 8 digits)'
+        );
+        setError(msg);
+        setPhoneError(msg);
+        Alert.alert(t('auth.signupError', 'Registration Error'), msg);
+        return false;
+      }
+
       if (password !== confirmPassword) {
-        setError(t('auth.errorPasswordMismatch', 'Passwords do not match'));
+        const msg = t('auth.errorPasswordMismatch', 'Passwords do not match');
+        setError(msg);
+        Alert.alert(t('auth.signupError', 'Registration Error'), msg);
         return false;
       }
       if (password.length < 6) {
-        setError(t('auth.errorPasswordShort', 'Password must be at least 6 characters'));
+        const msg = t('auth.errorPasswordShort', 'Password must be at least 6 characters');
+        setError(msg);
+        Alert.alert(t('auth.signupError', 'Registration Error'), msg);
         return false;
       }
     }
@@ -166,6 +203,7 @@ const AuthScreen: React.FC = () => {
   const switchMode = (login: boolean) => {
     setIsLogin(login);
     setError(null);
+    setPhoneError(null);
   };
 
   return (
@@ -236,7 +274,7 @@ const AuthScreen: React.FC = () => {
 
             {!isLogin ? (
               <Input
-                label={t('auth.nameLabel')}
+                label={`${t('auth.nameLabel')} *`}
                 placeholder={t('auth.namePlaceholder')}
                 value={name}
                 onChangeText={(text) => {
@@ -262,15 +300,17 @@ const AuthScreen: React.FC = () => {
 
             {!isLogin ? (
               <Input
-                label={t('auth.phoneLabel')}
+                label={`${t('auth.phoneLabel')} *`}
                 placeholder={t('auth.phonePlaceholder')}
                 value={phone}
                 onChangeText={(text) => {
                   setPhone(text);
                   setError(null);
+                  setPhoneError(null);
                 }}
                 keyboardType="phone-pad"
                 leftIcon="call-outline"
+                error={phoneError || undefined}
               />
             ) : null}
 
@@ -342,7 +382,7 @@ const AuthScreen: React.FC = () => {
                 </View>
                 <ClientSocialLogin
                   disabled={loading}
-                  onSuccess={finishClientSession}
+                  onSuccess={(res) => finishClientSession(res, { fromSocial: true })}
                   onError={(msg) => {
                     setError(msg);
                     Alert.alert(isLogin ? t('auth.login') : t('auth.signup'), msg);

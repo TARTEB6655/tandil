@@ -30,6 +30,51 @@ import {
   ClientVisitReport,
   extractReportFromOrderTrack,
 } from '../../services/clientVisitReportService';
+import { formatTimeOptionLabel } from '../../utils/schedulingTimeOptions';
+
+function formatBookingDate(raw?: string | null, locale = 'en-US'): string {
+  const v = String(raw ?? '').trim();
+  if (!v) return '—';
+  const ymd = v.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (ymd) {
+    const d = new Date(`${ymd[1]}T12:00:00`);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString(locale, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    }
+  }
+  const parsed = new Date(v);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString(locale, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+  return v;
+}
+
+function formatSlotClock(raw: string): string {
+  const match = raw.trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return raw.trim();
+  return formatTimeOptionLabel(`${match[1].padStart(2, '0')}:${match[2]}`);
+}
+
+function formatBookingSlot(summary?: {
+  booking_slot?: string | null;
+  slot_start_time?: string | null;
+  slot_end_time?: string | null;
+} | null): string {
+  const start = String(summary?.slot_start_time ?? '').trim();
+  const end = String(summary?.slot_end_time ?? '').trim();
+  if (start && end) return `${formatSlotClock(start)} – ${formatSlotClock(end)}`;
+  if (start) return formatSlotClock(start);
+  const slot = String(summary?.booking_slot ?? '').trim();
+  return slot || '—';
+}
 
 function resolveTrackPhotoUrl(entry: unknown): string | null {
   const raw = maintenancePhotoUrl(entry);
@@ -201,19 +246,21 @@ const OrderTrackingScreen: React.FC = () => {
     summary?.job_duration ||
     firstItemProduct?.job_duration ||
     null;
+  const loc =
+    i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'ur' ? 'ur-PK' : 'en-US';
   const placedDate =
     summary?.placed_at != null
       ? (() => {
           const d = new Date(summary.placed_at);
-          if (isNaN(d.getTime())) return '—';
-          const loc =
-            i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'ur' ? 'ur-PK' : 'en-US';
+          if (Number.isNaN(d.getTime())) return '—';
           return `${d.toLocaleDateString(loc)} ${d.toLocaleTimeString(loc, {
             hour: '2-digit',
             minute: '2-digit',
           })}`;
         })()
       : '—';
+  const bookingDateLabel = formatBookingDate(summary?.booking_date, loc);
+  const bookingSlotLabel = formatBookingSlot(summary);
 
   const statusLower = track?.tracking?.status?.toLowerCase() ?? '';
   const isDone = statusLower === 'completed' || statusLower === 'delivered';
@@ -247,7 +294,7 @@ const OrderTrackingScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Header title={t('orders.trackingTitle', 'Order tracking')} showBack={true} />
+      <Header title={t('orders.trackingTitle', { defaultValue: 'Order tracking' })} showBack={true} />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.heroCard}>
@@ -343,8 +390,34 @@ const OrderTrackingScreen: React.FC = () => {
                   <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
                 </View>
                 <View style={styles.orderInfoText}>
-                  <Text style={styles.orderInfoLabel}>{t('booking.date', 'Placed')}</Text>
+                  <Text style={styles.orderInfoLabel}>
+                    {t('booking.orderDate', { defaultValue: 'Order date' })}
+                  </Text>
                   <Text style={styles.orderInfoValue}>{placedDate}</Text>
+                </View>
+              </View>
+
+              <View style={styles.orderInfoItem}>
+                <View style={styles.orderInfoIcon}>
+                  <Ionicons name="calendar" size={18} color={COLORS.primary} />
+                </View>
+                <View style={styles.orderInfoText}>
+                  <Text style={styles.orderInfoLabel}>
+                    {t('booking.bookingDate', { defaultValue: 'Booking date' })}
+                  </Text>
+                  <Text style={styles.orderInfoValue}>{bookingDateLabel}</Text>
+                </View>
+              </View>
+
+              <View style={styles.orderInfoItem}>
+                <View style={styles.orderInfoIcon}>
+                  <Ionicons name="time-outline" size={18} color={COLORS.primary} />
+                </View>
+                <View style={styles.orderInfoText}>
+                  <Text style={styles.orderInfoLabel}>
+                    {t('booking.timeSlot', { defaultValue: 'Time slot' })}
+                  </Text>
+                  <Text style={styles.orderInfoValue}>{bookingSlotLabel}</Text>
                 </View>
               </View>
 
@@ -364,7 +437,23 @@ const OrderTrackingScreen: React.FC = () => {
                 </View>
                 <View style={styles.orderInfoText}>
                   <Text style={styles.orderInfoLabel}>{t('booking.payment', 'Payment')}</Text>
-                  <Text style={styles.orderInfoValue}>{summary?.payment_method ?? '—'}</Text>
+                  <Text style={styles.orderInfoValue}>
+                    {(() => {
+                      const raw = (summary?.payment_method || '').toString().trim();
+                      if (!raw) return '—';
+                      const n = raw.toLowerCase().replace(/[\s_-]+/g, '');
+                      if (n.includes('card') || n.includes('credit') || n.includes('stripe')) {
+                        return t('booking.paymentMethods.card', { defaultValue: raw });
+                      }
+                      if (n.includes('cash')) {
+                        return t('booking.paymentMethods.cash', { defaultValue: raw });
+                      }
+                      if (n.includes('wallet')) {
+                        return t('booking.paymentMethods.wallet', { defaultValue: raw });
+                      }
+                      return raw;
+                    })()}
+                  </Text>
                 </View>
               </View>
 

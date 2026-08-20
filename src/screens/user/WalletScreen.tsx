@@ -8,9 +8,10 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
+import { Button } from '../../components/common/Button';
 import { useTranslation } from 'react-i18next';
 import { getWalletSummary, WalletCredit, WalletSummaryData } from '../../services/walletService';
 import { getShopSettings } from '../../services/shopSettingsService';
@@ -36,6 +37,7 @@ function creditReasonLabel(t: (key: string, options?: { defaultValue?: string })
 
 const WalletScreen: React.FC = () => {
   const { t } = useTranslation();
+  const navigation = useNavigation<any>();
   const [summary, setSummary] = useState<WalletSummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +140,12 @@ const WalletScreen: React.FC = () => {
                     })}
                   </Text>
                 ) : null}
+                <Button
+                  title={t('wallet.addMoney.cta', 'Add Money')}
+                  onPress={() => navigation.navigate('AddMoney')}
+                  style={styles.addMoneyBtn}
+                  icon={<Ionicons name="add-circle-outline" size={18} color={COLORS.background} style={{ marginRight: 6 }} />}
+                />
               </View>
             </View>
 
@@ -242,6 +250,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
     paddingHorizontal: SPACING.sm,
+  },
+  addMoneyBtn: {
+    marginTop: SPACING.lg,
+    alignSelf: 'stretch',
   },
   sectionTitle: {
     fontSize: FONT_SIZES.lg,

@@ -1,6 +1,6 @@
 {
   "name": "tandil",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -39,6 +39,7 @@
     "expo-location": "~18.1.6",
     "expo-sharing": "~13.1.5",
     "expo-status-bar": "~2.2.3",
+    "expo-video": "~2.2.2",
     "expo-web-browser": "~14.2.0",
     "fbjs": "^3.0.5",
     "i18next": "^25.3.2",

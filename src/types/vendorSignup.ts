@@ -11,6 +11,8 @@ export interface VendorSignupRequest {
   phone: string;
   vendor_type: string;
   vendor_type_label?: string;
+  /** Slugs from API (multi-select). Prefer this over comma-separated `vendor_type`. */
+  vendor_types?: string[];
   emirate: string;
   city?: string;
   address?: string;
@@ -33,6 +35,11 @@ export interface VendorSignupRequest {
   completion_percent?: number;
   submitted_at_formatted?: string;
   status: VendorSignupStatus;
+  /**
+   * Raw account status for admin form chips: approved | under_review | pending.
+   * Prefer this over `status` (which collapses under_review → pending for signup lists).
+   */
+  account_status?: string;
   status_label?: string;
   created_at: string;
   updated_at?: string;

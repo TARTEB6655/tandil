@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -85,13 +85,49 @@ const AdminDashboardScreen: React.FC = () => {
   const [profileLoading, setProfileLoading] = useState(true);
   const [topProducts, setTopProducts] = useState<AdminTopSellingProduct[]>([]);
   const [topProductsLoading, setTopProductsLoading] = useState(true);
+  const scrollRef = useRef<ScrollView>(null);
+  const adminControlsOffsetY = useRef(0);
+  const pendingRestoreAdminControls = useRef(false);
+  const [adminControlsRestoreToken, setAdminControlsRestoreToken] = useState(0);
+
+  /** Open an Admin Controls destination, then return scroll to that section on back. */
+  const openAdminControl = useCallback(
+    (screen: string, params?: Record<string, unknown>) => {
+      pendingRestoreAdminControls.current = true;
+      if (params) {
+        navigation.navigate(screen as never, params as never);
+      } else {
+        navigation.navigate(screen as never);
+      }
+    },
+    [navigation]
+  );
+
+  const scrollToAdminControls = useCallback(() => {
+    const yFromLayout = adminControlsOffsetY.current;
+    if (yFromLayout > 0) {
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, yFromLayout - SPACING.md),
+        animated: false,
+      });
+      return;
+    }
+    // Admin Controls is the last section — end of scroll is the reliable fallback.
+    scrollRef.current?.scrollToEnd({ animated: false });
+  }, []);
+
+  const hasLoadedStatsRef = useRef(false);
+  const hasLoadedActivitiesRef = useRef(false);
+  const hasLoadedProductsRef = useRef(false);
+  const hasLoadedVendorRequestsRef = useRef(false);
 
   const fetchStatistics = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!hasLoadedStatsRef.current) setLoading(true);
       const response = await adminService.getDashboardStatistics({ period: timeRange });
       if (response.success && response.data) {
         setStatistics(response.data);
+        hasLoadedStatsRef.current = true;
       }
     } catch (error: any) {
       console.error('Error fetching dashboard statistics:', error);
@@ -112,6 +148,7 @@ const AdminDashboardScreen: React.FC = () => {
           active_subscriptions: fallbackData,
           monthly_revenue: fallbackData,
         });
+        hasLoadedStatsRef.current = true;
     } finally {
       setLoading(false);
     }
@@ -123,14 +160,15 @@ const AdminDashboardScreen: React.FC = () => {
 
   const fetchRecentActivities = useCallback(async () => {
     try {
-      setActivitiesLoading(true);
+      // Soft refresh: keep list visible so scroll position does not jump on back.
+      if (!hasLoadedActivitiesRef.current) setActivitiesLoading(true);
       const response = await adminService.getRecentActivities({ limit: 20 });
       const list = response.data ?? [];
       const now = Date.now();
       // Only show past activities: exclude future created_at and exclude timestamp text like "3 weeks from now"
       const pastOnly = list.filter((a: AdminActivity) => {
-        const t = new Date(a.created_at || 0).getTime();
-        const isPastDate = t > 0 && t <= now;
+        const stamp = new Date(a.created_at || 0).getTime();
+        const isPastDate = stamp > 0 && stamp <= now;
         const timestampStr = (a.timestamp || '').toLowerCase();
         const isFutureLabel = timestampStr.includes('from now');
         return isPastDate && !isFutureLabel;
@@ -153,9 +191,11 @@ const AdminDashboardScreen: React.FC = () => {
         };
       });
       setRecentActivities(mapped);
+      hasLoadedActivitiesRef.current = true;
     } catch (error: any) {
       console.error('Error fetching recent activities:', error);
       setRecentActivities([]);
+      hasLoadedActivitiesRef.current = true;
     } finally {
       setActivitiesLoading(false);
     }
@@ -216,11 +256,13 @@ const AdminDashboardScreen: React.FC = () => {
 
   const fetchTopSellingProducts = useCallback(async () => {
     try {
-      setTopProductsLoading(true);
+      if (!hasLoadedProductsRef.current) setTopProductsLoading(true);
       const res = await adminService.getTopSellingProducts({ limit: 10, include_unsold: 1 });
       setTopProducts(Array.isArray(res.data) ? res.data : []);
+      hasLoadedProductsRef.current = true;
     } catch (_) {
       setTopProducts([]);
+      hasLoadedProductsRef.current = true;
     } finally {
       setTopProductsLoading(false);
     }
@@ -228,11 +270,13 @@ const AdminDashboardScreen: React.FC = () => {
 
   const fetchRecentVendorRequests = useCallback(async () => {
     try {
-      setVendorRequestsLoading(true);
+      if (!hasLoadedVendorRequestsRef.current) setVendorRequestsLoading(true);
       const res = await adminVendorService.getRecentRequests(3);
       setRecentVendorRequests(res.items);
+      hasLoadedVendorRequestsRef.current = true;
     } catch (_) {
       setRecentVendorRequests([]);
+      hasLoadedVendorRequestsRef.current = true;
     } finally {
       setVendorRequestsLoading(false);
     }
@@ -249,8 +293,57 @@ const AdminDashboardScreen: React.FC = () => {
       fetchDashboardProfile();
       fetchTopSellingProducts();
       fetchRecentVendorRequests();
-    }, [fetchStatistics, fetchRecentActivities, fetchPendingReportsCount, fetchNewOrdersCount, fetchSupportTicketsCount, fetchUnreadNotificationsCount, fetchDashboardProfile, fetchTopSellingProducts, fetchRecentVendorRequests])
+
+      if (pendingRestoreAdminControls.current) {
+        // Force restore effect to run even when loading flags do not toggle.
+        setAdminControlsRestoreToken((n) => n + 1);
+      }
+    }, [
+      fetchStatistics,
+      fetchRecentActivities,
+      fetchPendingReportsCount,
+      fetchNewOrdersCount,
+      fetchSupportTicketsCount,
+      fetchUnreadNotificationsCount,
+      fetchDashboardProfile,
+      fetchTopSellingProducts,
+      fetchRecentVendorRequests,
+    ])
   );
+
+  // After returning from an Admin Controls screen, wait until dashboard sections finish
+  // reloading so content height is stable, then scroll back to Admin Controls (not Vendor Requests).
+  useEffect(() => {
+    if (!pendingRestoreAdminControls.current) return;
+    if (loading || activitiesLoading || vendorRequestsLoading || topProductsLoading) return;
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled || !pendingRestoreAdminControls.current) return;
+      scrollToAdminControls();
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        scrollToAdminControls();
+        pendingRestoreAdminControls.current = false;
+      });
+    }, 100);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    adminControlsRestoreToken,
+    loading,
+    activitiesLoading,
+    vendorRequestsLoading,
+    topProductsLoading,
+    recentVendorRequests,
+    topProducts,
+    recentActivities,
+    statistics,
+    scrollToAdminControls,
+  ]);
 
   const greetingText = profile?.greeting?.trim() || t(getGreetingKey());
   const adminName = profile?.name?.trim() || '';
@@ -537,6 +630,7 @@ const AdminDashboardScreen: React.FC = () => {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
@@ -958,66 +1052,122 @@ const AdminDashboardScreen: React.FC = () => {
         </View>
 
         {/* Admin Actions */}
-        <View style={styles.section}>
+        <View
+          style={styles.section}
+          onLayout={(event) => {
+            adminControlsOffsetY.current = event.nativeEvent.layout.y;
+            if (pendingRestoreAdminControls.current) {
+              scrollRef.current?.scrollTo({
+                y: Math.max(0, event.nativeEvent.layout.y - SPACING.md),
+                animated: false,
+              });
+            }
+          }}
+        >
           <Text style={styles.sectionTitle}>{t('admin.dashboard.adminControls')}</Text>
           <View style={styles.adminActions}>
-            <TouchableOpacity style={styles.adminAction} onPress={() => navigation.navigate('UsersTab' as never)}>
+            <TouchableOpacity style={styles.adminAction} onPress={() => openAdminControl('UsersTab')}>
               <View style={styles.adminActionIcon}>
                 <Ionicons name="people-outline" size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.adminActionText}>{t('admin.dashboard.manageUsers')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.adminAction} onPress={() => navigation.navigate('AdminSubscriptions' as never)}>
+            <TouchableOpacity
+              style={styles.adminAction}
+              onPress={() => openAdminControl('AdminSubscriptions')}
+            >
               <View style={styles.adminActionIcon}>
                 <Ionicons name="calendar-outline" size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.adminActionText}>{t('admin.dashboard.subscriptions')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.adminAction} onPress={() => navigation.navigate('AdminTips' as never)}>
+            <TouchableOpacity style={styles.adminAction} onPress={() => openAdminControl('AdminTips')}>
               <View style={styles.adminActionIcon}>
                 <Ionicons name="notifications-outline" size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.adminActionText}>{t('admin.dashboard.sendTips')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.adminAction} onPress={() => navigation.navigate('AdminProducts' as never)}>
+            <TouchableOpacity
+              style={styles.adminAction}
+              onPress={() => openAdminControl('AdminProducts')}
+            >
               <View style={styles.adminActionIcon}>
                 <Ionicons name="cart-outline" size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.adminActionText}>{t('admin.dashboard.products')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.adminAction} onPress={() => navigation.navigate('PendingReports' as never)}>
+            <TouchableOpacity
+              style={styles.adminAction}
+              onPress={() => openAdminControl('PendingReports')}
+            >
               <View style={styles.adminActionIcon}>
                 <Ionicons name="document-text-outline" size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.adminActionText}>{t('admin.dashboard.reports')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.adminAction} onPress={() => navigation.navigate('AdminCategories' as never)}>
+            <TouchableOpacity
+              style={styles.adminAction}
+              onPress={() => openAdminControl('AdminCategories')}
+            >
               <View style={styles.adminActionIcon}>
                 <Ionicons name="pricetag-outline" size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.adminActionText}>{t('admin.dashboard.category')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.adminAction} onPress={() => navigation.navigate('AdminExclusiveOffers' as never)}>
+            <TouchableOpacity
+              style={styles.adminAction}
+              onPress={() => openAdminControl('AdminExclusiveOffers')}
+            >
               <View style={styles.adminActionIcon}>
                 <Ionicons name="pricetags-outline" size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.adminActionText}>{t('admin.dashboard.exclusiveOffers')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.adminAction} onPress={() => navigation.navigate('AdminCoupons' as never)}>
+            <TouchableOpacity
+              style={styles.adminAction}
+              onPress={() => openAdminControl('AdminCoupons')}
+            >
               <View style={styles.adminActionIcon}>
                 <Ionicons name="ticket-outline" size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.adminActionText}>{t('admin.dashboard.coupons', 'Coupons')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.adminAction} onPress={() => navigation.navigate('AdminServices' as never)}>
+            <TouchableOpacity
+              style={styles.adminAction}
+              onPress={() => openAdminControl('AdminLoyalty')}
+            >
+              <View style={styles.adminActionIcon}>
+                <Ionicons name="diamond-outline" size={24} color={COLORS.primary} />
+              </View>
+              <Text style={styles.adminActionText}>
+                {t('admin.dashboard.loyalty', { defaultValue: 'Loyalty' })}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.adminAction}
+              onPress={() => openAdminControl('AdminScheduling')}
+            >
+              <View style={[styles.adminActionIcon, styles.adminActionIconSchedule]}>
+                <Ionicons name="calendar" size={24} color={COLORS.primary} />
+              </View>
+              <Text style={styles.adminActionText}>
+                {t('admin.dashboard.jobScheduling', { defaultValue: 'Job Scheduling' })}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.adminAction}
+              onPress={() => openAdminControl('AdminServices')}
+            >
               <View style={styles.adminActionIcon}>
                 <Ionicons name="construct-outline" size={24} color={COLORS.primary} />
               </View>
@@ -1026,13 +1176,27 @@ const AdminDashboardScreen: React.FC = () => {
 
             <TouchableOpacity
               style={styles.adminAction}
-              onPress={() => navigation.navigate('AdminVendorManagement' as never)}
+              onPress={() => openAdminControl('AdminVendorManagement')}
             >
               <View style={styles.adminActionIcon}>
                 <Ionicons name="storefront-outline" size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.adminActionText}>
                 {t('admin.dashboard.vendorManagement', { defaultValue: 'Vendor Management' })}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.adminAction}
+              onPress={() => openAdminControl('AdminVendorTypesEmirates')}
+            >
+              <View style={styles.adminActionIcon}>
+                <Ionicons name="leaf-outline" size={24} color={COLORS.primary} />
+              </View>
+              <Text style={styles.adminActionText}>
+                {t('admin.dashboard.vendorTypesEmirates', {
+                  defaultValue: 'Vendor Types & Emirates',
+                })}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1440,6 +1604,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.sm,
+  },
+  adminActionIconSchedule: {
+    backgroundColor: COLORS.primary + '1F',
+    borderWidth: 1,
+    borderColor: COLORS.primary + '33',
   },
   adminActionText: {
     fontSize: FONT_SIZES.sm,

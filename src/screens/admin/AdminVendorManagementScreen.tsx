@@ -85,18 +85,18 @@ const AdminVendorManagementScreen: React.FC = () => {
     `${currency} ${Math.round(overview?.total_revenue ?? 0)}`;
 
   const renderVendor = ({ item }: { item: AdminManagedVendor }) => (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.9}
-      onPress={() =>
-        navigation.navigate('AdminVendorProducts', {
-          vendorId: item.vendor_id || item.id,
-          vendorName: item.business_name,
-        })
-      }
-    >
+    <View style={styles.card}>
       <View style={styles.cardAccent} />
-      <View style={styles.cardBody}>
+      <TouchableOpacity
+        style={styles.cardBody}
+        activeOpacity={0.9}
+        onPress={() =>
+          navigation.navigate('AdminVendorProducts', {
+            vendorId: item.vendor_id || item.id,
+            vendorName: item.business_name,
+          })
+        }
+      >
         <View style={styles.cardTop}>
           {item.logo_url ? (
             <Image source={{ uri: item.logo_url }} style={styles.logo} contentFit="cover" />
@@ -141,8 +141,23 @@ const AdminVendorManagementScreen: React.FC = () => {
               </View>
             ) : null}
           </View>
-          <View style={styles.chevronWrap}>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+          <View style={styles.cardActions}>
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() =>
+                navigation.navigate('AdminVendorForm', {
+                  mode: 'edit',
+                  vendorId: item.vendor_id || item.id,
+                  vendor: item,
+                })
+              }
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+            </TouchableOpacity>
+            <View style={styles.chevronWrap}>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+            </View>
           </View>
         </View>
 
@@ -183,17 +198,27 @@ const AdminVendorManagementScreen: React.FC = () => {
             </View>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </View>
   );
 
   const listHeader = (
     <>
       <View style={styles.hero}>
         <View style={styles.heroDecor} />
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.85}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.heroTopRow}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.85}>
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => navigation.navigate('AdminVendorForm', { mode: 'add' })}
+            activeOpacity={0.85}
+            accessibilityLabel={t('adminVendorManagement.addVendor', { defaultValue: 'Add vendor' })}
+          >
+            <Ionicons name="add" size={26} color="#fff" />
+          </TouchableOpacity>
+        </View>
         <View style={styles.heroBadge}>
           <Ionicons name="storefront-outline" size={14} color="#fff" />
           <Text style={styles.heroBadgeText}>
@@ -270,6 +295,26 @@ const AdminVendorManagementScreen: React.FC = () => {
       <Text style={styles.sectionLabel}>
         {t('adminVendorManagement.vendors', { defaultValue: 'Vendors' })}
       </Text>
+      <TouchableOpacity
+        style={styles.addVendorBanner}
+        onPress={() => navigation.navigate('AdminVendorForm', { mode: 'add' })}
+        activeOpacity={0.88}
+      >
+        <View style={styles.addVendorIcon}>
+          <Ionicons name="add" size={20} color={COLORS.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.addVendorTitle}>
+            {t('adminVendorManagement.addVendor', { defaultValue: 'Add vendor' })}
+          </Text>
+          <Text style={styles.addVendorHint}>
+            {t('adminVendorManagement.addVendorHint', {
+              defaultValue: 'Create a vendor with registration details',
+            })}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+      </TouchableOpacity>
     </>
   );
 
@@ -365,7 +410,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: SPACING.md,
+  },
+  addBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
   heroBadge: {
     flexDirection: 'row',
@@ -461,6 +521,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.sm,
   },
+  addVendorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.primary + '10',
+    borderWidth: 1,
+    borderColor: COLORS.primary + '35',
+    borderStyle: 'dashed',
+  },
+  addVendorIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addVendorTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
+  addVendorHint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
   card: {
     flexDirection: 'row',
     marginHorizontal: SPACING.lg,
@@ -518,6 +609,19 @@ const styles = StyleSheet.create({
   },
   statusBadgeTextSuspended: {
     color: COLORS.error,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  editBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.primary + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chevronWrap: {
     width: 32,

@@ -34,8 +34,16 @@ export interface AppleSignInRequest {
 }
 
 async function clearAuthStorage(): Promise<void> {
-  await AsyncStorage.multiRemove(['auth_token', 'auth_role', 'auth_slug', 'user']);
+  await AsyncStorage.multiRemove([
+    'auth_token',
+    'auth_role',
+    'auth_slug',
+    'user',
+    'client_prompt_phone',
+  ]);
 }
+
+const PHONE_PROMPT_KEY = 'client_prompt_phone';
 
 const mapLaravelUserToAppUser = (laravelUser: LoginResponseUser): User => {
   const phone = laravelUser.phone != null ? String(laravelUser.phone) : '';
@@ -240,6 +248,39 @@ export const authService = {
       return null;
     } catch (error) {
       console.error('Error getting stored user:', error);
+      return null;
+    }
+  },
+
+  /** Mark client to show the post–social-login phone prompt on the dashboard. */
+  setPhonePromptPending: async (pending: boolean): Promise<void> => {
+    if (pending) {
+      await AsyncStorage.setItem(PHONE_PROMPT_KEY, '1');
+    } else {
+      await AsyncStorage.removeItem(PHONE_PROMPT_KEY);
+    }
+  },
+
+  isPhonePromptPending: async (): Promise<boolean> => {
+    try {
+      return (await AsyncStorage.getItem(PHONE_PROMPT_KEY)) === '1';
+    } catch {
+      return false;
+    }
+  },
+
+  /** Persist phone on the locally stored client user (after PUT /user/phone). */
+  updateStoredUserPhone: async (phone: string): Promise<User | null> => {
+    try {
+      const userJson = await AsyncStorage.getItem('user');
+      if (!userJson) return null;
+      const user = JSON.parse(userJson) as User;
+      const next = { ...user, phone: phone.trim() };
+      await AsyncStorage.setItem('user', JSON.stringify(next));
+      await AsyncStorage.removeItem(PHONE_PROMPT_KEY);
+      return next;
+    } catch (error) {
+      console.error('Error updating stored user phone:', error);
       return null;
     }
   },

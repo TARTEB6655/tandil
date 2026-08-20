@@ -23,6 +23,21 @@ import {
   parseClientVisitReport,
 } from '../../services/clientVisitReportService';
 
+/** Map API recommendation labels to i18n keys (fallback to original text). */
+function translateRecommendationLabel(item: string, t: (key: string, opts?: any) => string): string {
+  const normalized = item.trim().toLowerCase().replace(/[\s_-]+/g, '');
+  const map: Record<string, string> = {
+    needsfertilizer: 'supervisorReport.needsFertilizer',
+    needsvitamins: 'supervisorReport.needsVitamins',
+    needswatering: 'supervisorReport.needsWatering',
+    needsnewsoil: 'supervisorReport.needsNewSoil',
+    needspruning: 'supervisorReport.needsPruning',
+  };
+  const key = map[normalized];
+  if (!key) return item;
+  return t(key, { defaultValue: item });
+}
+
 function buildPreviewReport(orderId?: string | number): ClientVisitReport {
   return {
     id: 'preview',
@@ -288,14 +303,18 @@ const ClientVisitReportScreen: React.FC = () => {
           <View style={styles.summaryPill}>
             <Ionicons name="calendar-outline" size={16} color={COLORS.primary} />
             <View style={styles.summaryPillTextWrap}>
-              <Text style={styles.summaryPillLabel}>Visit Date</Text>
+              <Text style={styles.summaryPillLabel}>
+                {t('clientVisitReport.visitDate', { defaultValue: 'Visit Date' })}
+              </Text>
               <Text style={styles.summaryPillValue}>{visitDate}</Text>
             </View>
           </View>
           <View style={styles.summaryPill}>
             <Ionicons name="time-outline" size={16} color={COLORS.primary} />
             <View style={styles.summaryPillTextWrap}>
-              <Text style={styles.summaryPillLabel}>Visit Time</Text>
+              <Text style={styles.summaryPillLabel}>
+                {t('clientVisitReport.visitTime', { defaultValue: 'Visit Time' })}
+              </Text>
               <Text style={styles.summaryPillValue}>{visitTime}</Text>
             </View>
           </View>
@@ -306,7 +325,11 @@ const ClientVisitReportScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>
               {t('supervisorReport.fieldWorker', { defaultValue: 'Field Worker' })}
             </Text>
-            <Text style={styles.sectionCaption}>The technician who completed this service visit.</Text>
+            <Text style={styles.sectionCaption}>
+              {t('clientVisitReport.fieldWorkerCaption', {
+                defaultValue: 'The technician who completed this service visit.',
+              })}
+            </Text>
             <View style={styles.card}>
               <View style={styles.techRow}>
                 <View style={styles.avatar}>
@@ -332,7 +355,11 @@ const ClientVisitReportScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>
             {t('supervisorReport.visitInformation', { defaultValue: 'Visit Information' })}
           </Text>
-          <Text style={styles.sectionCaption}>A quick summary of where and when the work was completed.</Text>
+          <Text style={styles.sectionCaption}>
+            {t('clientVisitReport.visitInfoCaption', {
+              defaultValue: 'A quick summary of where and when the work was completed.',
+            })}
+          </Text>
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
               <View style={styles.cardHeaderIcon}>
@@ -361,13 +388,19 @@ const ClientVisitReportScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>
             {t('supervisorReport.fieldNotes', { defaultValue: 'Field Notes' })}
           </Text>
-          <Text style={styles.sectionCaption}>Notes shared by the field team about the completed work.</Text>
+          <Text style={styles.sectionCaption}>
+            {t('clientVisitReport.fieldNotesCaption', {
+              defaultValue: 'Notes shared by the field team about the completed work.',
+            })}
+          </Text>
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
               <View style={styles.cardHeaderIcon}>
                 <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
               </View>
-              <Text style={styles.cardHeaderTitle}>Technician Notes</Text>
+              <Text style={styles.cardHeaderTitle}>
+                {t('clientVisitReport.technicianNotes', { defaultValue: 'Technician Notes' })}
+              </Text>
             </View>
             <View style={styles.divider} />
             <Text style={styles.notesText}>
@@ -381,7 +414,11 @@ const ClientVisitReportScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>
             {t('supervisorReport.fieldPhotos', { defaultValue: 'Field Photos' })}
           </Text>
-          <Text style={styles.sectionCaption}>Before and after photos from the service visit.</Text>
+          <Text style={styles.sectionCaption}>
+            {t('clientVisitReport.fieldPhotosCaption', {
+              defaultValue: 'Before and after photos from the service visit.',
+            })}
+          </Text>
           <View style={styles.card}>
             {report.before_photos.length > 0 ? (
               <>
@@ -427,13 +464,19 @@ const ClientVisitReportScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>
             {t('supervisorReport.supervisorNotes', { defaultValue: 'Supervisor Notes' })}
           </Text>
-          <Text style={styles.sectionCaption}>Final review shared with you by the supervisor.</Text>
+          <Text style={styles.sectionCaption}>
+            {t('clientVisitReport.supervisorNotesCaption', {
+              defaultValue: 'Final review shared with you by the supervisor.',
+            })}
+          </Text>
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
               <View style={styles.cardHeaderIcon}>
                 <Ionicons name="shield-checkmark-outline" size={18} color={COLORS.primary} />
               </View>
-              <Text style={styles.cardHeaderTitle}>Supervisor Review</Text>
+              <Text style={styles.cardHeaderTitle}>
+                {t('clientVisitReport.supervisorReview', { defaultValue: 'Supervisor Review' })}
+              </Text>
             </View>
             <View style={styles.divider} />
             <Text style={styles.notesText}>
@@ -451,7 +494,11 @@ const ClientVisitReportScreen: React.FC = () => {
               defaultValue: 'Recommendations',
             })}
           </Text>
-          <Text style={styles.sectionCaption}>Suggested next steps based on the site visit.</Text>
+          <Text style={styles.sectionCaption}>
+            {t('clientVisitReport.recommendationsCaption', {
+              defaultValue: 'Suggested next steps based on the site visit.',
+            })}
+          </Text>
           <View style={styles.card}>
             {report.recommendations && report.recommendations.length > 0 ? (
               <View style={styles.recommendationList}>
@@ -460,7 +507,9 @@ const ClientVisitReportScreen: React.FC = () => {
                     <View style={styles.recommendationIconWrap}>
                       <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} />
                     </View>
-                    <Text style={styles.recommendationText}>{item}</Text>
+                    <Text style={styles.recommendationText}>
+                      {translateRecommendationLabel(item, t)}
+                    </Text>
                   </View>
                 ))}
               </View>

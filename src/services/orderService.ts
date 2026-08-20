@@ -189,6 +189,10 @@ export interface TrackTimelineItem {
 
 export interface OrderTrackSummary {
   placed_at: string;
+  booking_date?: string | null;
+  booking_slot?: string | null;
+  slot_start_time?: string | null;
+  slot_end_time?: string | null;
   delivery_address: string;
   payment_method: string;
   payment_method_code?: string;

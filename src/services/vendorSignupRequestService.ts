@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient, { publicApiClient } from './api';
+import { buildFullImageUrl } from '../config/api';
 
 const STORAGE_KEY = 'vendor_signup_requests_v2';
 
@@ -7,27 +8,10 @@ export type VendorSignupStatus = 'pending' | 'approved' | 'rejected';
 
 export type VendorSignupStatusFilter = VendorSignupStatus | 'all';
 
-export type VendorType =
-  | 'Fruits'
-  | 'Vegetables'
-  | 'Poultry'
-  | 'Seafood'
-  | 'Meat'
-  | 'Honey'
-  | 'Nuts'
-  | 'Restaurant'
-  | 'Other';
+export type VendorType = string;
 
-/** API slugs for POST /vendor/auth/register */
-export type VendorTypeApi =
-  | 'fruits'
-  | 'vegetables'
-  | 'poultry'
-  | 'seafood'
-  | 'meat'
-  | 'honey'
-  | 'nuts'
-  | 'rest';
+/** Known API slugs for POST /vendor/auth/register (legacy + dynamic). */
+export type VendorTypeApi = string;
 
 export interface PickedUploadFile {
   uri: string;
@@ -48,13 +32,14 @@ export interface VendorSignupPayload {
   company_logo?: PickedUploadFile | null;
   vat_number?: string;
   emirates_id_upload?: PickedUploadFile | null;
-  vendor_type: VendorType;
+  /** One or more vendor type slugs; sent as repeated form-data key `vendor_type[]`. */
+  vendor_types: VendorType[];
   emirate: string;
   city: string;
   latitude?: number;
   longitude?: number;
   map_address?: string;
-  bank_name: string;
+  bank_name?: string;
   iban: string;
   account_holder_name: string;
   delivery_radius_km: number;
@@ -66,11 +51,14 @@ export interface VendorSignupPayload {
 
 export interface VendorSignupRequest {
   id: number | string;
+  vendor_id?: number | string;
   company_name: string;
   authorized_person_name: string;
   email: string;
   phone: string;
   vendor_type: string;
+  vendor_type_label?: string;
+  vendor_types?: string[];
   emirate: string;
   city?: string;
   address?: string;
@@ -83,11 +71,19 @@ export interface VendorSignupRequest {
   minimum_order_amount?: number;
   opens_at?: string;
   closes_at?: string;
+  operating_hours?: string;
   google_maps_location?: string;
   logo_url?: string;
   trade_license_url?: string;
   emirates_id_url?: string;
+  description?: string;
+  categories?: Array<{ id: number; name: string }>;
+  completion_percent?: number;
+  submitted_at_formatted?: string;
   status: VendorSignupStatus;
+  /** Raw account status: approved | under_review | pending */
+  account_status?: string;
+  status_label?: string;
   created_at: string;
   updated_at?: string;
 }
@@ -113,7 +109,7 @@ async function writeLocal(list: VendorSignupRequest[]): Promise<void> {
 }
 
 export function vendorTypeToApi(type: VendorType | string): VendorTypeApi {
-  const map: Record<string, VendorTypeApi> = {
+  const map: Record<string, string> = {
     Fruits: 'fruits',
     fruits: 'fruits',
     Vegetables: 'vegetables',
@@ -131,8 +127,22 @@ export function vendorTypeToApi(type: VendorType | string): VendorTypeApi {
     Restaurant: 'rest',
     Other: 'rest',
     rest: 'rest',
+    restaurant: 'rest',
+    other: 'rest',
   };
-  return map[String(type)] ?? 'rest';
+  const key = String(type).trim();
+  if (map[key]) return map[key];
+  const lower = key.toLowerCase();
+  if (map[lower]) return map[lower];
+  // Already a slug-like value (supports hyphens: fruits-1, ras-al-khaimah)
+  if (/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(lower) && lower.length > 0) return lower;
+  return (
+    key
+      .toLowerCase()
+      .replace(/&/g, 'and')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'rest'
+  );
 }
 
 export function vendorTypeLabel(type: string): string {
@@ -206,17 +216,64 @@ function extractApiMessage(body: unknown, fallback: string): string {
 function resolveFileUrl(row: Record<string, unknown>, keys: string[]): string | undefined {
   for (const key of keys) {
     const value = row[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-    if (value && typeof value === 'object' && 'url' in (value as object)) {
+    let raw: string | undefined;
+    if (typeof value === 'string' && value.trim()) raw = value.trim();
+    else if (value && typeof value === 'object' && 'url' in (value as object)) {
       const url = (value as { url?: string }).url;
-      if (url?.trim()) return url.trim();
+      if (url?.trim()) raw = url.trim();
     }
+    if (!raw) continue;
+    if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('file://')) {
+      return raw;
+    }
+    return buildFullImageUrl(raw);
   }
   return undefined;
 }
 
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    if (value == null) continue;
+    const s = String(value).trim();
+    if (s) return s;
+  }
+  return '';
+}
+
+/** Normalize vendor account status tokens from nested application-detail payloads. */
+function normalizeStatusToken(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+}
+
+/**
+ * Prefer account/vendor status over application "pending" when both exist.
+ * e.g. application still pending-shaped while vendor.status is approved.
+ */
+function pickAccountStatus(...values: unknown[]): string {
+  const tokens = values.map(normalizeStatusToken).filter(Boolean);
+  if (!tokens.length) return '';
+  if (tokens.some((s) => s === 'approved' || s === 'active')) return 'approved';
+  if (tokens.some((s) => s === 'under_review' || s === 'underreview')) return 'under_review';
+  if (tokens.some((s) => s === 'rejected' || s === 'declined' || s === 'cancelled' || s === 'canceled')) {
+    return 'rejected';
+  }
+  if (tokens.some((s) => s === 'pending')) return 'pending';
+  return tokens[0];
+}
+
 function resolveVendorStatus(r: Record<string, unknown>): VendorSignupStatus {
-  const statusRaw = String(r.status ?? r.approval_status ?? '').toLowerCase();
+  const statusRaw = pickAccountStatus(
+    r.account_status,
+    r.vendor_status,
+    asVendorRecord(r.vendor)?.status,
+    asVendorRecord(r.profile)?.status,
+    r.status,
+    r.approval_status,
+    r.display_status
+  );
   if (statusRaw === 'approved' || statusRaw === 'active') return 'approved';
   if (
     statusRaw === 'rejected' ||
@@ -226,7 +283,8 @@ function resolveVendorStatus(r: Record<string, unknown>): VendorSignupStatus {
   ) {
     return 'rejected';
   }
-  if (statusRaw === 'under_review') return 'pending';
+  // under_review stays in account_status; list UI treats it as pending bucket
+  if (statusRaw === 'under_review' || statusRaw === 'underreview') return 'pending';
 
   const statusLabel = String(r.status_label ?? '').toLowerCase();
   if (statusLabel.includes('approved')) return 'approved';
@@ -248,13 +306,36 @@ function resolveVendorStatus(r: Record<string, unknown>): VendorSignupStatus {
   if (r.is_rejected === true || r.rejected_at != null) return 'rejected';
   if (r.is_approved === true || r.approved === true || r.approved === 1) return 'approved';
   if (r.is_approved === false || r.approved === false || r.approved === 0) return 'pending';
-  if (r.is_verified === false || String(r.verification_status ?? '').toLowerCase() === 'pending') {
-    return 'pending';
-  }
   if (statusRaw === 'pending' || !statusRaw) return 'pending';
   return 'pending';
 }
 
+function parseVendorTypesFromRow(r: Record<string, unknown>): string[] {
+  const collected: string[] = [];
+  const pushVal = (value: unknown) => {
+    if (value == null || value === '') return;
+    if (Array.isArray(value)) {
+      value.forEach(pushVal);
+      return;
+    }
+    if (typeof value === 'object') {
+      const rec = value as Record<string, unknown>;
+      pushVal(rec.slug ?? rec.value ?? rec.vendor_type ?? rec.name);
+      return;
+    }
+    String(value)
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => collected.push(part));
+  };
+  pushVal(r.vendor_types);
+  pushVal(r.vendor_type);
+  pushVal(r['vendor_type[]']);
+  return Array.from(new Set(collected));
+}
+
+/** Nested vendor payloads (vendor, profile, business_details, etc.). */
 function asVendorRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -322,9 +403,27 @@ export function flattenVendorPayload(input: Record<string, unknown>): Record<str
     if (!flat.authorized_person_name) flat.authorized_person_name = user.name;
   }
 
-  flat.company_name = input.business_name ?? flat.company_name ?? flat.business_name;
-  flat.authorized_person_name =
-    input.owner_name ?? flat.authorized_person_name ?? contact?.authorized_person_name;
+  flat.company_name = firstNonEmptyString(
+    input.company_name,
+    input.business_name,
+    flat.company_name,
+    flat.business_name,
+    businessDetails?.company_name,
+    businessDetails?.business_name,
+    businessDetails?.name,
+    profile?.company_name,
+    profile?.business_name,
+    vendor?.company_name,
+    vendor?.business_name
+  );
+  flat.authorized_person_name = firstNonEmptyString(
+    input.authorized_person_name,
+    input.owner_name,
+    flat.authorized_person_name,
+    contact?.authorized_person_name,
+    user?.name,
+    vendor?.owner_name
+  );
 
   if (businessDetails?.tax_vat_number != null) {
     flat.vat_number = businessDetails.tax_vat_number;
@@ -353,9 +452,27 @@ export function flattenVendorPayload(input: Record<string, unknown>): Record<str
 
   flat.id = input.vendor_id ?? input.id ?? profile?.vendor_id ?? vendor?.id;
   flat.vendor_id = input.vendor_id ?? flat.id;
-  flat.status = input.status ?? vendor?.status ?? profile?.status;
+  // Prefer vendor/profile account status over top-level application status (often still "pending").
+  const accountStatus = pickAccountStatus(
+    input.account_status,
+    input.vendor_status,
+    vendor?.status,
+    profile?.status,
+    application?.status,
+    input.status,
+    flat.status
+  );
+  flat.account_status = accountStatus;
+  flat.status = accountStatus || input.status || vendor?.status || profile?.status;
   flat.display_status = input.display_status ?? flat.display_status;
-  flat.status_label = input.status_label ?? flat.status_label;
+  flat.status_label =
+    firstNonEmptyString(
+      input.status_label,
+      vendor?.status_label,
+      profile?.status_label,
+      flat.status_label,
+      accountStatus
+    ) || undefined;
   flat.created_at = input.submitted_at ?? input.created_at ?? flat.created_at;
   if (input.submitted_at_formatted != null) {
     flat.submitted_at_formatted = input.submitted_at_formatted;
@@ -377,30 +494,31 @@ function normalizeApiRow(r: Record<string, unknown>): VendorSignupRequest {
   return {
     id: (r.id ?? r.vendor_id ?? r.request_id) as number | string,
     vendor_id: (r.vendor_id ?? r.id ?? r.request_id) as number | string | undefined,
-    company_name: String(
-      r.company_name ?? r.business_name ?? r.shop_name ?? ''
+    company_name: firstNonEmptyString(
+      r.company_name,
+      r.business_name,
+      r.shop_name,
+      asVendorRecord(r.business)?.name,
+      asVendorRecord(r.business)?.company_name,
+      asVendorRecord(r.business_details)?.company_name,
+      asVendorRecord(r.business_details)?.business_name
     ),
-    authorized_person_name: String(
-      r.authorized_person_name ??
-        r.owner_name ??
-        r.contact_name ??
-        r.contact_person ??
-        r.name ??
-        user?.name ??
-        ''
+    authorized_person_name: firstNonEmptyString(
+      r.authorized_person_name,
+      r.owner_name,
+      r.contact_name,
+      r.contact_person,
+      user?.name,
+      r.name
     ),
-    email: String(r.email ?? user?.email ?? ''),
-    phone:
-      r.phone != null && String(r.phone).trim()
-        ? String(r.phone)
-        : user?.phone != null
-          ? String(user.phone)
-          : '',
-    vendor_type: String(
+    email: firstNonEmptyString(r.email, user?.email),
+    phone: firstNonEmptyString(r.phone, user?.phone),
+    vendor_type: parseVendorTypesFromRow(r).join(', ') || String(
       r.vendor_type ?? r.vendor_category ?? r.category ?? r.business_type ?? ''
     ),
     vendor_type_label:
       r.vendor_type_label != null ? String(r.vendor_type_label) : undefined,
+    vendor_types: parseVendorTypesFromRow(r),
     emirate: r.emirate != null ? String(r.emirate) : '',
     city: r.city != null ? String(r.city) : undefined,
     address: r.address != null ? String(r.address) : undefined,
@@ -464,6 +582,18 @@ function normalizeApiRow(r: Record<string, unknown>): VendorSignupRequest {
       'emirates_id_document_url',
     ]),
     status,
+    account_status: firstNonEmptyString(
+      r.account_status,
+      pickAccountStatus(
+        r.account_status,
+        r.vendor_status,
+        asVendorRecord(r.vendor)?.status,
+        asVendorRecord(r.profile)?.status,
+        r.status,
+        r.approval_status,
+        r.display_status
+      )
+    ) || status,
     status_label: r.status_label != null ? String(r.status_label) : undefined,
     description: r.description != null ? String(r.description) : undefined,
     categories: Array.isArray(r.categories)
@@ -567,13 +697,24 @@ function buildFormData(params: VendorSignupPayload): FormData {
   form.append('address', params.address.trim());
   form.append('password', params.password);
   form.append('password_confirmation', params.password_confirmation);
-  form.append('vendor_type', vendorTypeToApi(params.vendor_type));
+  const vendorTypes = Array.from(
+    new Set(
+      (params.vendor_types || [])
+        .map((type) => vendorTypeToApi(type))
+        .filter(Boolean)
+    )
+  );
+  vendorTypes.forEach((type) => {
+    form.append('vendor_type[]', type);
+  });
   form.append('emirate', params.emirate.trim());
   if (params.city?.trim()) {
     form.append('city', params.city.trim());
   }
   form.append('google_maps_location', buildGoogleMapsLocation(params));
-  form.append('bank_name', params.bank_name.trim());
+  if (params.bank_name?.trim()) {
+    form.append('bank_name', params.bank_name.trim());
+  }
   form.append('iban', params.iban.trim());
   form.append('account_holder_name', params.account_holder_name.trim());
   form.append('delivery_radius', String(params.delivery_radius_km));
@@ -600,13 +741,13 @@ function payloadToStoredRequest(params: VendorSignupPayload, id: number | string
     authorized_person_name: params.authorized_person_name.trim(),
     email: params.email.trim(),
     phone: params.phone.trim(),
-    vendor_type: vendorTypeToApi(params.vendor_type),
+    vendor_type: (params.vendor_types || []).map((type) => vendorTypeToApi(type)).join(', '),
     emirate: params.emirate.trim(),
     city: params.city.trim(),
     address: params.address.trim(),
     trade_license_number: params.trade_license_number.trim(),
     vat_number: params.vat_number?.trim(),
-    bank_name: params.bank_name.trim(),
+    bank_name: params.bank_name?.trim() || undefined,
     iban: params.iban.trim(),
     account_holder_name: params.account_holder_name.trim(),
     delivery_radius_km: params.delivery_radius_km,
@@ -647,6 +788,9 @@ export const vendorSignupRequestService = {
     }
     if (!params.company_logo?.uri) {
       throw new Error('Company logo file is required.');
+    }
+    if (!params.vendor_types?.length) {
+      throw new Error('Select at least one vendor type.');
     }
     if (!buildGoogleMapsLocation(params)) {
       throw new Error('Google Maps location is required.');

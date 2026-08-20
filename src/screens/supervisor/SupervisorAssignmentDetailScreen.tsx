@@ -15,6 +15,7 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { getSupervisorAssignmentDetail, SupervisorAssignmentDetail } from '../../services/supervisorService';
+import { formatTimeOptionLabel } from '../../utils/schedulingTimeOptions';
 
 const statusColor: Record<string, string> = {
   pending: COLORS.warning,
@@ -22,6 +23,50 @@ const statusColor: Record<string, string> = {
   in_progress: COLORS.info,
   cancelled: COLORS.textSecondary,
 };
+
+function formatAssignmentDate(raw?: string | null): string {
+  const iso = String(raw ?? '').trim();
+  const ymd = iso.match(/^(\d{4}-\d{2}-\d{2})/);
+  const key = ymd ? ymd[1] : iso.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return iso || '—';
+  const d = new Date(key + 'T12:00:00');
+  if (Number.isNaN(d.getTime())) return key;
+  return d.toLocaleDateString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatSlotClock(raw: string): string {
+  const match = raw.trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return raw.trim();
+  return formatTimeOptionLabel(`${match[1].padStart(2, '0')}:${match[2]}`);
+}
+
+function formatAssignmentTimeSlot(assignment: SupervisorAssignmentDetail): string | null {
+  const start = String(assignment.slot_start_time ?? '').trim();
+  const end = String(assignment.slot_end_time ?? '').trim();
+  if (start && end) return `${formatSlotClock(start)} – ${formatSlotClock(end)}`;
+  if (start) return formatSlotClock(start);
+
+  const timeSlot = assignment.time_slot;
+  if (timeSlot && typeof timeSlot === 'object') {
+    const objStart = String(timeSlot.start_time ?? timeSlot.start ?? '').trim();
+    const objEnd = String(timeSlot.end_time ?? timeSlot.end ?? '').trim();
+    if (objStart && objEnd) return `${formatSlotClock(objStart)} – ${formatSlotClock(objEnd)}`;
+    if (objStart) return formatSlotClock(objStart);
+  }
+  const raw = String(
+    (typeof timeSlot === 'string' ? timeSlot : '') ||
+      assignment.booking_slot ||
+      assignment.scheduled_time ||
+      ''
+  ).trim();
+  if (!raw) return null;
+  if (/^\d{1,2}:\d{2}/.test(raw)) return formatSlotClock(raw);
+  return raw;
+}
 
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
@@ -244,13 +289,26 @@ const SupervisorAssignmentDetailScreen: React.FC = () => {
             <Ionicons name="information-circle-outline" size={20} color={COLORS.primary} />
             <Text style={styles.cardTitle}>{t('taskDetailScreen.overview')}</Text>
           </View>
-          {assignment.job_time ? (
-            <View style={styles.row}>
-              <Ionicons name="time-outline" size={18} color={COLORS.textSecondary} />
-              <Text style={styles.rowLabel}>{t('taskDetailScreen.scheduled')}</Text>
-              <Text style={styles.rowValue}>{assignment.job_time}</Text>
-            </View>
-          ) : null}
+          <View style={styles.row}>
+            <Ionicons name="calendar-outline" size={18} color={COLORS.textSecondary} />
+            <Text style={styles.rowLabel}>
+              {t('booking.bookingDate', { defaultValue: 'Booking date' })}
+            </Text>
+            <Text style={styles.rowValue}>
+              {formatAssignmentDate(
+                assignment.booking_date || assignment.date || assignment.scheduled_date
+              )}
+            </Text>
+          </View>
+          <View style={styles.row}>
+            <Ionicons name="time-outline" size={18} color={COLORS.textSecondary} />
+            <Text style={styles.rowLabel}>
+              {t('booking.timeSlot', { defaultValue: 'Time slot' })}
+            </Text>
+            <Text style={styles.rowValue}>
+              {formatAssignmentTimeSlot(assignment) || t('taskDetailScreen.timeSlotNotSet')}
+            </Text>
+          </View>
           {assignment.location ? (
             <View style={styles.row}>
               <Ionicons name="location-outline" size={18} color={COLORS.textSecondary} />

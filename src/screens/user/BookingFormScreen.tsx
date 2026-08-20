@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,12 @@ import { useTranslation } from 'react-i18next';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { useAppStore } from '../../store';
-// No external calendar lib; we'll render simple date chips
+import type { AvailableSlot } from '../../types/scheduling';
+import {
+  formatDisplayDate,
+  getAvailableSlotsForDate,
+  getBookableDates,
+} from '../../services/schedulingMockService';
 
 const BookingFormScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -23,8 +28,10 @@ const BookingFormScreen: React.FC = () => {
   const { service } = route.params;
   const { user, addOrder } = useAppStore();
   const { t } = useTranslation();
-  
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  const [bookableDates, setBookableDates] = useState<string[]>([]);
+  const [selectedDateIso, setSelectedDateIso] = useState<string | null>(null);
+  const [slots, setSlots] = useState<AvailableSlot[]>([]);
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [address, setAddress] = useState(user?.address?.street || '');
   const [city, setCity] = useState(user?.address?.city || '');
@@ -33,29 +40,33 @@ const BookingFormScreen: React.FC = () => {
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('card');
 
-  const timeSlots = [
-    '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-    '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM',
-    '05:00 PM', '06:00 PM', '07:00 PM', '08:00 PM'
-  ];
-
-  const nextDays = useMemo(() => {
-    const days: { key: string; date: Date; label: string }[] = [];
-    const today = new Date();
-    for (let i = 0; i < 30; i++) {
-      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
-      const key = d.toISOString();
-      const label = `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d
-        .getDate()
-        .toString()
-        .padStart(2, '0')}`;
-      days.push({ key, date: d, label });
-    }
-    return days;
+  useEffect(() => {
+    void (async () => {
+      const dates = await getBookableDates(21);
+      setBookableDates(dates);
+      if (dates[0]) setSelectedDateIso(dates[0]);
+    })();
   }, []);
 
+  useEffect(() => {
+    if (!selectedDateIso) {
+      setSlots([]);
+      setSelectedTime('');
+      return;
+    }
+    void (async () => {
+      const list = await getAvailableSlotsForDate(selectedDateIso);
+      setSlots(list);
+      setSelectedTime('');
+    })();
+  }, [selectedDateIso]);
+
+  const availableSlots = useMemo(
+    () => slots.filter((s) => s.status === 'available'),
+    [slots]
+  );
+
   const formatTimeLabel = (time: string) => {
-    // Parse simple 12-hour time like '09:00 AM'
     const match = time.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
     if (!match) return time;
     let hours = parseInt(match[1], 10);
@@ -68,7 +79,6 @@ const BookingFormScreen: React.FC = () => {
     }
     const d = new Date();
     d.setHours(hours, minutes, 0, 0);
-    // Use current i18n language
     const { default: i18next } = require('i18next');
     const lang = i18next?.language || 'en';
     const resolved = lang === 'ar' ? 'ar-EG' : lang === 'ur' ? 'ur-PK' : 'en-US';
@@ -86,11 +96,21 @@ const BookingFormScreen: React.FC = () => {
   ];
 
   const handleConfirmBooking = () => {
-    if (!selectedDate || !selectedTime || !address || !city || !state || !zipCode) {
+    if (!selectedDateIso || !selectedTime || !address || !city || !state || !zipCode) {
       Alert.alert(t('booking.missingTitle'), t('booking.missingBody'));
       return;
     }
 
+    const slot = slots.find((s) => s.label === selectedTime);
+    if (!slot || slot.status !== 'available') {
+      Alert.alert(
+        t('booking.missingTitle', 'Missing info'),
+        'That time slot is no longer available. Please choose another.'
+      );
+      return;
+    }
+
+    const scheduledDate = new Date(selectedDateIso + 'T12:00:00');
     const newOrder = {
       id: `order_${Date.now()}`,
       userId: user?.id || 'user_001',
@@ -98,7 +118,7 @@ const BookingFormScreen: React.FC = () => {
       status: 'pending' as const,
       totalAmount: service.price,
       createdAt: new Date(),
-      scheduledDate: selectedDate,
+      scheduledDate,
       address: {
         id: 'address_001',
         street: address,
@@ -120,58 +140,81 @@ const BookingFormScreen: React.FC = () => {
     };
 
     addOrder(newOrder);
-    Alert.alert(
-      t('booking.confirmed'),
-      t('booking.success'),
-      [
-        {
-          text: t('booking.viewOrder'),
-          onPress: () => navigation.navigate('OrderTracking', { orderId: newOrder.id }),
-        },
-        {
-          text: t('booking.continue'),
-          onPress: () => navigation.navigate('Main' as never, { screen: 'Home' } as never),
-        },
-      ]
-    );
+    Alert.alert(t('booking.confirmed'), t('booking.success'), [
+      {
+        text: t('booking.viewOrder'),
+        onPress: () => navigation.navigate('OrderTracking', { orderId: newOrder.id }),
+      },
+      {
+        text: t('booking.continue'),
+        onPress: () => navigation.navigate('Main' as never, { screen: 'Home' } as never),
+      },
+    ]);
   };
 
-  const renderTimeSlot = (time: string) => (
-    <TouchableOpacity
-      key={time}
-      style={[
-        styles.timeSlot,
-        selectedTime === time && styles.timeSlotActive
-      ]}
-      onPress={() => setSelectedTime(time)}
-    >
-      <Text style={[
-        styles.timeSlotText,
-        selectedTime === time && styles.timeSlotTextActive
-      ]}>
-        {formatTimeLabel(time)}
-      </Text>
-    </TouchableOpacity>
-  );
+  const renderSlot = (slot: AvailableSlot) => {
+    const disabled = slot.status !== 'available';
+    const selected = selectedTime === slot.label;
+    return (
+      <TouchableOpacity
+        key={slot.id}
+        style={[
+          styles.timeSlot,
+          selected && styles.timeSlotActive,
+          disabled && styles.timeSlotDisabled,
+        ]}
+        onPress={() => {
+          if (disabled) return;
+          setSelectedTime(slot.label);
+        }}
+        disabled={disabled}
+      >
+        <Text
+          style={[
+            styles.timeSlotText,
+            selected && styles.timeSlotTextActive,
+            disabled && styles.timeSlotTextDisabled,
+          ]}
+        >
+          {formatTimeLabel(slot.label)}
+        </Text>
+        <Text
+          style={[
+            styles.slotMeta,
+            selected && styles.slotMetaActive,
+            disabled && styles.timeSlotTextDisabled,
+          ]}
+        >
+          {slot.status === 'blocked'
+            ? 'Blocked'
+            : slot.status === 'full'
+              ? 'Full'
+              : `${slot.remaining} left`}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   const renderPaymentMethod = (method: any) => (
     <TouchableOpacity
       key={method.id}
       style={[
         styles.paymentMethod,
-        selectedPaymentMethod === method.id && styles.paymentMethodActive
+        selectedPaymentMethod === method.id && styles.paymentMethodActive,
       ]}
       onPress={() => setSelectedPaymentMethod(method.id)}
     >
-      <Ionicons 
-        name={method.icon as any} 
-        size={24} 
-        color={selectedPaymentMethod === method.id ? COLORS.background : COLORS.primary} 
+      <Ionicons
+        name={method.icon as any}
+        size={24}
+        color={selectedPaymentMethod === method.id ? COLORS.background : COLORS.primary}
       />
-      <Text style={[
-        styles.paymentMethodText,
-        selectedPaymentMethod === method.id && styles.paymentMethodTextActive
-      ]}>
+      <Text
+        style={[
+          styles.paymentMethodText,
+          selectedPaymentMethod === method.id && styles.paymentMethodTextActive,
+        ]}
+      >
         {method.label}
       </Text>
     </TouchableOpacity>
@@ -179,13 +222,9 @@ const BookingFormScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <Header 
-        title={t('booking.title')} 
-        showBack={true}
-      />
+      <Header title={t('booking.title')} showBack={true} />
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Service Summary */}
         <View style={styles.serviceCard}>
           <View style={styles.serviceInfo}>
             <Text style={styles.serviceName}>{service.name}</Text>
@@ -194,62 +233,72 @@ const BookingFormScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Date and Time Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('booking.dateTime')}</Text>
-          
+          <Text style={styles.availabilityHint}>
+            Only working days and open slots are shown. Full or blocked times cannot be selected.
+          </Text>
+
           <View style={styles.dateContainer}>
             <Text style={styles.dateLabel}>{t('booking.date')}</Text>
-            <TouchableOpacity style={styles.dateButton} activeOpacity={0.9}>
+            <View style={styles.dateButton}>
               <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
               <Text style={styles.dateButtonText}>
-                {selectedDate ? selectedDate.toLocaleDateString() : t('booking.selectDate')}
+                {selectedDateIso
+                  ? formatDisplayDate(selectedDateIso)
+                  : t('booking.selectDate')}
               </Text>
-            </TouchableOpacity>
+            </View>
             <View style={styles.dateChipsRow}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
-                  {nextDays.map((d) => (
-                    <TouchableOpacity
-                      key={d.key}
-                      style={[
-                        styles.timeSlot,
-                        selectedDate && d.date.toDateString() === selectedDate.toDateString() && styles.timeSlotActive,
-                      ]}
-                      onPress={() => setSelectedDate(d.date)}
-                    >
-                      <Text
-                        style={[
-                          styles.timeSlotText,
-                          selectedDate && d.date.toDateString() === selectedDate.toDateString() && styles.timeSlotTextActive,
-                        ]}
+                  {bookableDates.map((iso) => {
+                    const d = new Date(iso + 'T12:00:00');
+                    const label = `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d
+                      .getDate()
+                      .toString()
+                      .padStart(2, '0')}`;
+                    const active = selectedDateIso === iso;
+                    return (
+                      <TouchableOpacity
+                        key={iso}
+                        style={[styles.timeSlot, active && styles.timeSlotActive]}
+                        onPress={() => setSelectedDateIso(iso)}
                       >
-                        {d.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <Text
+                          style={[styles.timeSlotText, active && styles.timeSlotTextActive]}
+                        >
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </ScrollView>
             </View>
           </View>
 
           <Text style={styles.timeLabel}>{t('booking.time')}</Text>
-          <View style={styles.timeSlots}>
-            {timeSlots.map(renderTimeSlot)}
-          </View>
+          {slots.length === 0 ? (
+            <Text style={styles.noSlots}>No slots for this day.</Text>
+          ) : (
+            <View style={styles.timeSlots}>{slots.map(renderSlot)}</View>
+          )}
+          {slots.length > 0 && availableSlots.length === 0 ? (
+            <Text style={styles.noSlots}>All slots are full or blocked for this day.</Text>
+          ) : null}
         </View>
 
-        {/* Address Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('booking.addressSection')}</Text>
-          
+
           <Input
             label={t('booking.streetAddress')}
             placeholder={t('booking.streetPlaceholder')}
             value={address}
             onChangeText={setAddress}
           />
-          
+
           <View style={styles.addressRow}>
             <View style={styles.halfCol}>
               <Input
@@ -270,7 +319,7 @@ const BookingFormScreen: React.FC = () => {
               />
             </View>
           </View>
-          
+
           <Input
             label={t('booking.zip')}
             placeholder={t('booking.zipPlaceholder')}
@@ -280,7 +329,6 @@ const BookingFormScreen: React.FC = () => {
           />
         </View>
 
-        {/* Special Instructions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('booking.special')}</Text>
           <Input
@@ -446,6 +494,34 @@ const styles = StyleSheet.create({
   },
   timeSlotTextActive: {
     color: COLORS.background,
+  },
+  timeSlotDisabled: {
+    opacity: 0.45,
+    backgroundColor: COLORS.surfaceLight,
+  },
+  timeSlotTextDisabled: {
+    color: COLORS.textSecondary,
+  },
+  slotMeta: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  slotMetaActive: {
+    color: 'rgba(255,255,255,0.85)',
+  },
+  availabilityHint: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.md,
+    marginTop: -SPACING.sm,
+    lineHeight: 20,
+  },
+  noSlots: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.sm,
   },
   addressRow: {
     flexDirection: 'row',

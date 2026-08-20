@@ -7,6 +7,17 @@ import { authService } from '../../services/authService';
 import { useAppStore } from '../../store';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 
+function goToRoleSelection(navigation: any) {
+  let rootNavigator = navigation;
+  while (rootNavigator.getParent?.()) {
+    rootNavigator = rootNavigator.getParent();
+  }
+  rootNavigator.reset?.({
+    index: 0,
+    routes: [{ name: 'RoleSelection' }],
+  });
+}
+
 const TechnicianLoginScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
@@ -78,7 +89,7 @@ const TechnicianLoginScreen: React.FC = () => {
         setError(null);
       }}
       onSubmit={handleLogin}
-      onBack={() => navigation.navigate('RoleSelection')}
+      onBack={() => goToRoleSelection(navigation)}
       isLoading={isLoading}
       error={error}
       emailLabel={t('auth.emailLabel')}

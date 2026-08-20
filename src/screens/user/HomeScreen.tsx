@@ -25,6 +25,7 @@ import { useAppStore } from '../../store';
 import { mockServices, mockOrders } from '../../data/mockData';
 import Header from '../../components/common/Header';
 import BeforeAfter from '../../components/common/BeforeAfter';
+import VideoBanner from '../../components/common/VideoBanner';
 import { useTranslation } from 'react-i18next';
 import { getBanners, getBannerImageUrl, Banner } from '../../services/bannerService';
 import {
@@ -32,13 +33,35 @@ import {
   getMaintenancePhotoImageUrl,
   MaintenancePhoto,
 } from '../../services/maintenancePhotosService';
+import {
+  getActiveVideoBanner,
+  getCachedVideoBanner,
+  getMemoryVideoBanner,
+  getVideoBannerVideoUrl,
+  preloadHomeVideo,
+  ClientVideoBanner,
+} from '../../services/videoBannerService';
 import { shopService, ShopProductCategory, ShopProduct } from '../../services/shopService';
 import { publicServiceService, PublicService } from '../../services/publicServiceService';
 import { getExclusiveOffers, PublicExclusiveOffer } from '../../services/exclusiveOffersService';
 import { buildFullImageUrl } from '../../config/api';
 import { WeatherData } from '../../services/weatherService';
 import { getClientNotifications } from '../../services/clientNotificationService';
-import { getClientLoyaltyDashboard } from '../../services/loyaltyService';
+import {
+  getClientLoyaltyCampaigns,
+  getClientLoyaltyDashboard,
+  LoyaltyCampaign,
+} from '../../services/loyaltyService';
+import {
+  getClientMemberships,
+  pickPrimaryMembership,
+  membershipToClientMembership,
+  isMembershipActive,
+  formatMembershipPlan,
+  formatMembershipDate,
+  daysUntilExpiry,
+  type ClientMembership,
+} from '../../services/clientMembershipService';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { useIsAuthenticated } from '../../store';
 import {
@@ -70,6 +93,9 @@ const HomeScreen: React.FC = () => {
   const [exclusiveOffersLoading, setExclusiveOffersLoading] = useState(true);
   const [maintenancePhotos, setMaintenancePhotos] = useState<MaintenancePhoto[]>([]);
   const [maintenancePhotosLoading, setMaintenancePhotosLoading] = useState(true);
+  const [videoBanner, setVideoBanner] = useState<ClientVideoBanner | null>(() =>
+    getMemoryVideoBanner()
+  );
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [locationPermissionStatus, setLocationPermissionStatus] =
@@ -84,6 +110,8 @@ const HomeScreen: React.FC = () => {
   const weatherPromptedRef = useRef(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [loyaltyPoints, setLoyaltyPoints] = useState(user?.loyaltyPoints ?? 0);
+  const [loyaltyBoostLabel, setLoyaltyBoostLabel] = useState<string | null>(null);
+  const [homeMembership, setHomeMembership] = useState<ClientMembership | null>(null);
   const { count: cartItemCount } = useCartBadgeCount();
 
   useFocusEffect(
@@ -95,6 +123,37 @@ const HomeScreen: React.FC = () => {
         getClientLoyaltyDashboard()
           .then((dashboard) => setLoyaltyPoints(dashboard.points))
           .catch(() => setLoyaltyPoints(user?.loyaltyPoints ?? 0));
+        getClientLoyaltyCampaigns()
+          .then((result) => {
+            const list = Array.isArray(result?.campaigns) ? result.campaigns : [];
+            const topBoost = result?.summary?.topBoost;
+            if (topBoost) {
+              setLoyaltyBoostLabel(topBoost);
+              return;
+            }
+            const topCampaign = list.reduce<LoyaltyCampaign | null>(
+              (best, campaign) =>
+                !best || campaign.multiplier > best.multiplier ? campaign : best,
+              null
+            );
+            setLoyaltyBoostLabel(
+              topCampaign && topCampaign.multiplier > 1
+                ? topCampaign.boostLabel || `${topCampaign.multiplier}×`
+                : null
+            );
+          })
+          .catch(() => setLoyaltyBoostLabel(null));
+        getClientMemberships()
+          .then(({ list, screen }) => {
+            const fromActive = membershipToClientMembership(
+              screen.active_membership?.current_membership ?? null
+            );
+            setHomeMembership(fromActive || pickPrimaryMembership(list));
+          })
+          .catch(() => setHomeMembership(null));
+      } else {
+        setLoyaltyBoostLabel(null);
+        setHomeMembership(null);
       }
     }, [isAuthenticated, user?.loyaltyPoints])
   );
@@ -241,11 +300,43 @@ const HomeScreen: React.FC = () => {
     };
   }, []);
 
+  // Video banner: paint from cache immediately, refresh in background, preload MP4 ASAP
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const cached = await getCachedVideoBanner();
+      if (cancelled) return;
+      if (cached) {
+        setVideoBanner(cached);
+        const cachedUrl = getVideoBannerVideoUrl(cached);
+        if (cachedUrl) preloadHomeVideo(cachedUrl);
+      }
+
+      const fresh = await getActiveVideoBanner();
+      if (cancelled) return;
+      setVideoBanner(fresh);
+      const freshUrl = fresh ? getVideoBannerVideoUrl(fresh) : null;
+      if (freshUrl) preloadHomeVideo(freshUrl);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       getMaintenancePhotos(20).then((list) => {
         if (!cancelled) setMaintenancePhotos(list);
+      });
+      // Soft refresh banner without blocking UI (cache already shown)
+      getActiveVideoBanner().then((banner) => {
+        if (cancelled) return;
+        setVideoBanner(banner);
+        const url = banner ? getVideoBannerVideoUrl(banner) : null;
+        if (url) preloadHomeVideo(url);
       });
       return () => {
         cancelled = true;
@@ -397,7 +488,7 @@ const HomeScreen: React.FC = () => {
   ) => (
     <View style={styles.weatherPromptRow}>
       <View style={styles.weatherIconCircle}>
-        <Ionicons name={icon} size={26} color="#fff" />
+        <Ionicons name={icon} size={20} color="#fff" />
       </View>
       <View style={styles.weatherPromptTextCol}>
         <Text style={styles.weatherPromptTitle}>{title}</Text>
@@ -628,6 +719,7 @@ const HomeScreen: React.FC = () => {
 
   const goPrev = () => scrollToSlide(currentSlide - 1);
   const goNext = () => scrollToSlide(currentSlide + 1);
+  const videoBannerVideoUrl = videoBanner ? getVideoBannerVideoUrl(videoBanner) : null;
 
   const getOfferImageUrl = (offer: PublicExclusiveOffer): string | null => {
     const raw = offer.image_url ?? (offer as any).image ?? (offer as any).image_path;
@@ -717,7 +809,7 @@ const HomeScreen: React.FC = () => {
           <>
             <View style={styles.weatherRow}>
               <View style={styles.weatherIconCircle}>
-                <Ionicons name={getWeatherIcon(weather.condition) as any} size={40} color="#fff" />
+                <Ionicons name={getWeatherIcon(weather.condition) as any} size={22} color="#fff" />
               </View>
               <View style={styles.weatherMain}>
                 <View style={styles.weatherTempRow}>
@@ -730,8 +822,8 @@ const HomeScreen: React.FC = () => {
               </View>
             </View>
             <View style={styles.weatherLocationRow}>
-              <Ionicons name="location" size={14} color="rgba(255,255,255,0.9)" />
-              <Text style={styles.weatherLocationText} numberOfLines={2}>
+              <Ionicons name="location" size={12} color="rgba(255,255,255,0.9)" />
+              <Text style={styles.weatherLocationText} numberOfLines={1}>
                 {weather.locationName?.trim() && weather.locationName !== 'Current location'
                   ? weather.locationName
                   : weather.coordinates
@@ -748,6 +840,21 @@ const HomeScreen: React.FC = () => {
           )
         )}
       </TouchableOpacity>
+
+      {/* Featured Video Banner – after weather; only when admin has an active banner */}
+      {videoBanner && videoBannerVideoUrl ? (
+        <VideoBanner
+          title={videoBanner.title}
+          videoUrl={videoBannerVideoUrl}
+          badgeText={videoBanner.badge_text || undefined}
+          ctaText={videoBanner.button_text || undefined}
+          onPressCta={
+            videoBanner.button_text
+              ? () => navigation.navigate('Main' as never, { screen: 'Services' } as never)
+              : undefined
+          }
+        />
+      ) : null}
 
       {/* Promotional Slider */}
       <View style={styles.sliderContainer}>
@@ -844,6 +951,14 @@ const HomeScreen: React.FC = () => {
               <Text style={styles.loyaltyPoints}>
                 {loyaltyPoints} {t('common.points')}
               </Text>
+              {loyaltyBoostLabel ? (
+                <Text style={styles.loyaltyBoost}>
+                  {t('home.loyaltyBoostLive', {
+                    defaultValue: '{{boost}} live',
+                    boost: loyaltyBoostLabel,
+                  })}
+                </Text>
+              ) : null}
             </View>
           </View>
           <TouchableOpacity
@@ -856,6 +971,68 @@ const HomeScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Membership */}
+      <TouchableOpacity
+        style={styles.membershipCard}
+        onPress={() => navigation.navigate('Memberships')}
+        activeOpacity={0.9}
+      >
+        <View style={styles.membershipDecor} />
+        <View style={styles.membershipContent}>
+          <View style={styles.membershipLeft}>
+            <View style={styles.membershipIconWrap}>
+              <Ionicons name="ribbon-outline" size={22} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.membershipTitle}>
+                {t('home.membership', { defaultValue: 'Membership' })}
+              </Text>
+              {homeMembership && isMembershipActive(homeMembership) ? (
+                <>
+                  <Text style={styles.membershipPlan}>
+                    {formatMembershipPlan(homeMembership.plan, homeMembership.plan_name)}
+                  </Text>
+                  <Text style={styles.membershipMeta}>
+                    {(() => {
+                      const days = daysUntilExpiry(homeMembership);
+                      if (days == null) {
+                        return t('home.membershipUntil', {
+                          defaultValue: 'Until {{date}}',
+                          date: formatMembershipDate(homeMembership.end_date),
+                        });
+                      }
+                      if (days <= 0) {
+                        return t('home.membershipExpiresToday', {
+                          defaultValue: 'Expires today',
+                        });
+                      }
+                      return t('home.membershipExpiresIn', {
+                        defaultValue: 'Expires in {{count}} days',
+                        count: days,
+                      });
+                    })()}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.membershipMeta}>
+                  {t('home.membershipCta', {
+                    defaultValue: 'View plans · renew or upgrade',
+                  })}
+                </Text>
+              )}
+            </View>
+          </View>
+          <View style={styles.membershipButton}>
+            <Text style={styles.membershipButtonText}>
+              {homeMembership && isMembershipActive(homeMembership)
+                ? t('home.manageMembership', { defaultValue: 'Manage' })
+                : t('home.joinMembership', { defaultValue: 'Join' })}
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
+          </View>
+        </View>
+      </TouchableOpacity>
 
       {/* Maintenance Photos – GET /api/maintenance-photos?per_page=20 */}
       {(() => {
@@ -1323,6 +1500,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginTop: 2,
   },
+  loyaltyBoost: {
+    marginTop: 3,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: 'rgba(255,255,255,0.9)',
+  },
   loyaltyButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1336,6 +1519,74 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.primary,
+  },
+  membershipCard: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+    backgroundColor: '#1B4332',
+    borderRadius: BORDER_RADIUS.xl,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  membershipDecor: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    top: -30,
+    right: -20,
+  },
+  membershipContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.lg,
+    gap: SPACING.md,
+  },
+  membershipLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    flex: 1,
+  },
+  membershipIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  membershipTitle: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.medium,
+  },
+  membershipPlan: {
+    color: '#fff',
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
+    marginTop: 2,
+  },
+  membershipMeta: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: FONT_SIZES.xs,
+    marginTop: 2,
+  },
+  membershipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: BORDER_RADIUS.lg,
+  },
+  membershipButtonText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   section: {
     marginBottom: SPACING.xl,
@@ -1712,41 +1963,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Weather widget – premium dark card
+  // Weather widget – compact card
   weatherCard: {
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.sm,
-    marginBottom: SPACING.md,
-    padding: SPACING.lg,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
     backgroundColor: COLORS.primary,
-    borderRadius: 22,
+    borderRadius: 16,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: COLORS.primaryDark,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.28,
-        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
       },
-      android: { elevation: 7 },
+      android: { elevation: 4 },
     }),
   },
   weatherDecorLarge: {
     position: 'absolute',
-    top: -48,
-    right: -36,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    top: -36,
+    right: -28,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
   weatherDecorSmall: {
     position: 'absolute',
-    bottom: -28,
-    left: -20,
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    bottom: -22,
+    left: -16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
   weatherContent: {
@@ -1754,32 +2006,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.sm,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.xs,
   },
   weatherPromptRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.md,
-    minHeight: 72,
+    gap: SPACING.sm,
+    minHeight: 44,
   },
   weatherPromptTextCol: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
   weatherPromptTitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semiBold as any,
     color: '#fff',
   },
   weatherPromptSubtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     color: 'rgba(255,255,255,0.82)',
-    lineHeight: 18,
+    lineHeight: 16,
   },
   weatherIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1787,8 +2039,8 @@ const styles = StyleSheet.create({
   weatherRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.lg,
-    marginBottom: SPACING.md,
+    gap: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   weatherMain: {
     flex: 1,
@@ -1798,29 +2050,29 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   weatherTemp: {
-    fontSize: 44,
+    fontSize: 28,
     fontWeight: '700',
     color: '#fff',
-    letterSpacing: -1,
+    letterSpacing: -0.5,
   },
   weatherTempUnit: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '600',
     color: '#fff',
     marginLeft: 2,
-    marginBottom: 6,
+    marginBottom: 3,
   },
   weatherConditionPill: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(255,255,255,0.22)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: BORDER_RADIUS.round,
-    marginTop: 6,
+    marginTop: 2,
   },
   weatherConditionText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semiBold as any,
+    fontSize: 11,
+    fontWeight: FONT_WEIGHTS.medium as any,
     color: '#fff',
   },
   weatherCardSubtext: {
@@ -1839,12 +2091,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
-    paddingTop: SPACING.sm,
-    borderTopWidth: 1,
+    paddingTop: SPACING.xs,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.2)',
   },
   weatherLocationText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: 11,
     color: 'rgba(255,255,255,0.85)',
     flex: 1,
   },

@@ -440,6 +440,56 @@ function mapCustomizationToApi(customization?: ProductCustomizationConfig | null
   };
 }
 
+/** Multipart body for create/update video banner (Postman form-data keys). */
+function buildVideoBannerFormData(params: {
+  title: string;
+  badge_text?: string;
+  button_text?: string;
+  is_active?: boolean | number | string;
+  /** Omit on update to keep existing video. */
+  video?: { uri: string; type?: string; name?: string };
+}): FormData {
+  const formData = new FormData();
+  formData.append('title', params.title.trim());
+  formData.append('badge_text', params.badge_text != null ? String(params.badge_text).trim() : '');
+  formData.append('button_text', params.button_text != null ? String(params.button_text).trim() : '');
+
+  const activeRaw =
+    params.is_active == null
+      ? '1'
+      : typeof params.is_active === 'boolean'
+        ? params.is_active
+          ? '1'
+          : '0'
+        : String(params.is_active);
+  formData.append(
+    'is_active',
+    activeRaw === '1' || activeRaw.toLowerCase() === 'true' ? '1' : '0'
+  );
+
+  if (params.video?.uri) {
+    const uri = params.video.uri;
+    const lower = `${params.video.name || ''} ${uri}`.toLowerCase();
+    let type = params.video.type;
+    let name = params.video.name;
+    if (!type) {
+      if (lower.includes('.mov') || lower.includes('quicktime')) type = 'video/quicktime';
+      else if (lower.includes('.webm')) type = 'video/webm';
+      else if (lower.includes('.ogg') || lower.includes('.ogv')) type = 'video/ogg';
+      else type = 'video/mp4';
+    }
+    if (!name) {
+      if (type === 'video/quicktime') name = 'video-banner.mov';
+      else if (type === 'video/webm') name = 'video-banner.webm';
+      else if (type === 'video/ogg') name = 'video-banner.ogg';
+      else name = 'video-banner.mp4';
+    }
+    formData.append('video', { uri, type, name } as any);
+  }
+
+  return formData;
+}
+
 export const adminService = {
   getUsers: async (params?: { 
     page?: number; 
@@ -2059,6 +2109,159 @@ export const adminService = {
     return response.data;
   },
 
+  // ——— Video banners (single home featured video) ———
+  // Postman: POST /api/admin/video-banners (create)
+  //          GET  /api/admin/video-banners/{{video_banner_id}} (get one)
+  // Fields: video*, title, badge_text, button_text, is_active ("1"|"0")
+  // (no poster / button_link)
+
+  /** GET /api/admin/video-banners – list (used to discover current banner id). */
+  listVideoBanners: async (): Promise<{
+    success?: boolean;
+    message?: string;
+    data: AdminVideoBanner[];
+  }> => {
+    const response = await apiClient.get('/admin/video-banners', { timeout: 15000 });
+    const body = response?.data ?? response;
+    const raw = body?.data ?? body?.video_banners ?? body?.video_banner ?? null;
+    if (Array.isArray(raw)) {
+      return { success: body?.success ?? true, message: body?.message, data: raw as AdminVideoBanner[] };
+    }
+    if (raw && typeof raw === 'object' && (raw as AdminVideoBanner).id != null) {
+      return {
+        success: body?.success ?? true,
+        message: body?.message,
+        data: [raw as AdminVideoBanner],
+      };
+    }
+    return { success: body?.success ?? true, message: body?.message, data: [] };
+  },
+
+  /**
+   * GET /api/admin/video-banners/{{video_banner_id}}
+   * Matches Postman: "3. Get Video Banner (Admin)"
+   */
+  getVideoBannerById: async (
+    id: number
+  ): Promise<{
+    success?: boolean;
+    message?: string;
+    data: AdminVideoBanner | null;
+  }> => {
+    const response = await apiClient.get(`/admin/video-banners/${id}`, { timeout: 15000 });
+    const body = response?.data ?? response;
+    const raw = body?.data ?? body?.video_banner ?? body;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return { success: body?.success, message: body?.message, data: null };
+    }
+    if ((raw as AdminVideoBanner).id == null) {
+      return { success: body?.success ?? true, message: body?.message, data: null };
+    }
+    return {
+      success: body?.success ?? true,
+      message: body?.message,
+      data: raw as AdminVideoBanner,
+    };
+  },
+
+  /**
+   * Resolve the current video banner for the admin form:
+   * list → then GET /admin/video-banners/:id (Postman get endpoint).
+   */
+  getVideoBanner: async (): Promise<{
+    success?: boolean;
+    message?: string;
+    data: AdminVideoBanner | null;
+  }> => {
+    const listed = await adminService.listVideoBanners();
+    const first = listed.data?.[0];
+    if (!first?.id) {
+      return { success: listed.success, message: listed.message, data: null };
+    }
+    try {
+      return await adminService.getVideoBannerById(first.id);
+    } catch {
+      // Fall back to list payload if get-by-id fails
+      return { success: listed.success ?? true, message: listed.message, data: first };
+    }
+  },
+
+  createVideoBanner: async (params: {
+    title: string;
+    badge_text?: string;
+    button_text?: string;
+    is_active?: boolean | number | string;
+    video?: { uri: string; type?: string; name?: string };
+  }): Promise<{ success?: boolean; status?: boolean; message?: string; data?: AdminVideoBanner }> => {
+    const formData = buildVideoBannerFormData(params);
+    const response = await apiClient.post('/admin/video-banners', formData, { timeout: 300000 });
+    return response.data;
+  },
+
+  /**
+   * POST /api/admin/video-banners/{{video_banner_id}}
+   * Matches Postman: "4. Update Video Banner" (multipart form-data).
+   * Fields: title, badge_text, button_text, is_active ("1"|"0"),
+   *         video? (file, optional replace).
+   */
+  updateVideoBanner: async (
+    id: number,
+    params: {
+      title: string;
+      badge_text?: string;
+      button_text?: string;
+      is_active?: boolean | number | string;
+      /** Optional — only send when replacing the video file. */
+      video?: { uri: string; type?: string; name?: string };
+    }
+  ): Promise<{ success?: boolean; status?: boolean; message?: string; data?: AdminVideoBanner }> => {
+    const formData = buildVideoBannerFormData(params);
+    const response = await apiClient.post(`/admin/video-banners/${id}`, formData, {
+      timeout: 300000,
+      headers: { Accept: 'application/json' },
+    });
+    const body = response?.data ?? response;
+    const raw = body?.data ?? body?.video_banner ?? body;
+    const data =
+      raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as AdminVideoBanner).id != null
+        ? (raw as AdminVideoBanner)
+        : undefined;
+    return {
+      success: body?.success ?? body?.status ?? true,
+      status: body?.status,
+      message: body?.message,
+      data,
+    };
+  },
+
+  toggleVideoBannerStatus: async (
+    id: number
+  ): Promise<{ success?: boolean; message?: string; data?: AdminVideoBanner }> => {
+    const response = await apiClient.post(`/admin/video-banners/${id}/toggle-status`, null, {
+      timeout: 15000,
+    });
+    return response.data;
+  },
+
+  /**
+   * DELETE /api/admin/video-banners/{{video_banner_id}}
+   * Matches Postman: "6. Delete Video Banner"
+   */
+  deleteVideoBanner: async (
+    id: number
+  ): Promise<{ success?: boolean; status?: boolean; message?: string }> => {
+    const response = await apiClient.delete(`/admin/video-banners/${id}`, {
+      timeout: 15000,
+      headers: { Accept: 'application/json' },
+    });
+    const body = response?.data ?? response;
+    return {
+      success: body?.success ?? body?.status ?? true,
+      status: body?.status,
+      message: body?.message,
+    };
+  },
+
   /** GET /admin/maintenance-photos?per_page=20 – list before/after pairs (paginated). */
   getMaintenancePhotos: async (params?: {
     per_page?: number;
@@ -2236,6 +2439,22 @@ export interface AdminBanner {
   action_value?: string | null;
   priority?: number;
   is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** Single home video banner (admin CRUD + client dashboard). */
+export interface AdminVideoBanner {
+  id: number;
+  title: string;
+  badge_text?: string | null;
+  button_text?: string | null;
+  button_link?: string | null;
+  video?: string | null;
+  video_url?: string | null;
+  poster?: string | null;
+  poster_url?: string | null;
+  is_active?: boolean | number | string;
   created_at?: string;
   updated_at?: string;
 }

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,9 +11,12 @@ import {
   Image,
   Modal,
   ActivityIndicator,
+  FlatList,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
@@ -21,37 +24,37 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
+import { VENDOR_BANK_OPTIONS } from '../../constants/uaeBanks';
+import { VENDOR_DELIVERY_RADIUS_OPTIONS } from '../../constants/vendorDeliveryRadius';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import MapPickerModal from '../../components/MapPickerModal';
 import type { AddressFromLocation } from '../../utils/addressFromLocation';
 import {
   vendorSignupRequestService,
-  VendorType,
   PickedUploadFile,
 } from '../../services/vendorSignupRequestService';
+import {
+  adminVendorMetaService,
+  DEFAULT_EMIRATE_OPTIONS,
+  DEFAULT_VENDOR_TYPE_OPTIONS,
+} from '../../services/adminVendorMetaService';
+import type { VendorSignupOption } from '../../types/adminVendorMeta';
 
-const VENDOR_TYPES: VendorType[] = [
-  'Fruits',
-  'Vegetables',
-  'Poultry',
-  'Seafood',
-  'Meat',
-  'Honey',
-  'Nuts',
-  'Restaurant',
-  'Other',
-];
+function formatTimeHHMM(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
 
-const UAE_EMIRATES = [
-  'Abu Dhabi',
-  'Dubai',
-  'Sharjah',
-  'Ajman',
-  'Umm Al Quwain',
-  'Ras Al Khaimah',
-  'Fujairah',
-];
+function parseHHMMToDate(value: string, fallbackHour: number, fallbackMinute = 0): Date {
+  const d = new Date();
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (match) {
+    d.setHours(Number(match[1]), Number(match[2]), 0, 0);
+  } else {
+    d.setHours(fallbackHour, fallbackMinute, 0, 0);
+  }
+  return d;
+}
 
 /** Fallback file input HTML (only used inside a Modal when DocumentPicker is unavailable). */
 const FILE_PICKER_FALLBACK_HTML = `<!DOCTYPE html>
@@ -400,23 +403,93 @@ const VendorSignupScreen: React.FC = () => {
   const [companyLogo, setCompanyLogo] = useState<PickedUploadFile | null>(null);
   const [vatNumber, setVatNumber] = useState('');
   const [emiratesIdUpload, setEmiratesIdUpload] = useState<PickedUploadFile | null>(null);
-  const [vendorType, setVendorType] = useState<VendorType>('Fruits');
-  const [emirate, setEmirate] = useState(UAE_EMIRATES[0]);
+  const [vendorTypeOptions, setVendorTypeOptions] = useState<VendorSignupOption[]>(
+    DEFAULT_VENDOR_TYPE_OPTIONS
+  );
+  const [emirateOptions, setEmirateOptions] = useState<VendorSignupOption[]>(
+    DEFAULT_EMIRATE_OPTIONS
+  );
+  /** Selected option slugs (multi-select). */
+  const [vendorTypes, setVendorTypes] = useState<string[]>([DEFAULT_VENDOR_TYPE_OPTIONS[0].slug]);
+  const [emirate, setEmirate] = useState(DEFAULT_EMIRATE_OPTIONS[0].slug);
+  const [optionsLoading, setOptionsLoading] = useState(true);
   const [city, setCity] = useState('');
   const [mapAddress, setMapAddress] = useState('');
   const [latitude, setLatitude] = useState<number | undefined>();
   const [longitude, setLongitude] = useState<number | undefined>();
   const [bankName, setBankName] = useState('');
+  const [bankPickerVisible, setBankPickerVisible] = useState(false);
+  const [bankSearch, setBankSearch] = useState('');
   const [iban, setIban] = useState('');
   const [accountHolderName, setAccountHolderName] = useState('');
-  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState('');
+  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState<number | null>(null);
   const [operatingHoursOpen, setOperatingHoursOpen] = useState('');
   const [operatingHoursClose, setOperatingHoursClose] = useState('');
+  const [timePickerMode, setTimePickerMode] = useState<'open' | 'close' | null>(null);
   const [minimumOrderAmount, setMinimumOrderAmount] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [mapVisible, setMapVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setOptionsLoading(true);
+      try {
+        // Public: GET /vendor/auth/registration-options (no token)
+        const opts = await adminVendorMetaService.getRegistrationOptions();
+        if (cancelled) return;
+        if (opts.vendor_types.length) {
+          setVendorTypeOptions(opts.vendor_types);
+          setVendorTypes((prev) => {
+            const valid = prev.filter((slug) =>
+              opts.vendor_types.some((o) => o.slug === slug)
+            );
+            if (valid.length) return valid;
+            return opts.vendor_types[0] ? [opts.vendor_types[0].slug] : [];
+          });
+        }
+        if (opts.emirates.length) {
+          setEmirateOptions(opts.emirates);
+          setEmirate((prev) =>
+            opts.emirates.some((o) => o.slug === prev) ? prev : opts.emirates[0].slug
+          );
+        }
+      } finally {
+        if (!cancelled) setOptionsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggleVendorType = useCallback((slug: string) => {
+    setVendorTypes((prev) =>
+      prev.includes(slug) ? prev.filter((item) => item !== slug) : [...prev, slug]
+    );
+  }, []);
+  const selectedEmirate = useMemo(
+    () => emirateOptions.find((o) => o.slug === emirate) ?? emirateOptions[0],
+    [emirateOptions, emirate]
+  );
+
+  const filteredBanks = useMemo(() => {
+    const q = bankSearch.trim().toLowerCase();
+    if (!q) return VENDOR_BANK_OPTIONS;
+    return VENDOR_BANK_OPTIONS.filter((name) => name.toLowerCase().includes(q));
+  }, [bankSearch]);
+
+  const openBankPicker = useCallback(() => {
+    setBankSearch('');
+    setBankPickerVisible(true);
+  }, []);
+
+  const closeBankPicker = useCallback(() => {
+    setBankPickerVisible(false);
+    setBankSearch('');
+  }, []);
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) {
@@ -465,15 +538,21 @@ const VendorSignupScreen: React.FC = () => {
       !password.trim() ||
       !confirmPassword.trim() ||
       !emiratesIdUpload ||
-      !bankName.trim() ||
       !iban.trim() ||
       !accountHolderName.trim() ||
-      !deliveryRadiusKm.trim() ||
+      deliveryRadiusKm == null ||
       !operatingHoursOpen.trim() ||
       !operatingHoursClose.trim() ||
       !minimumOrderAmount.trim()
     ) {
       Alert.alert(t('common.error'), t('vendorSignup.fillAllFields'));
+      return false;
+    }
+    if (!vendorTypes.length) {
+      Alert.alert(
+        t('common.error'),
+        t('vendorSignup.vendorTypeRequired', 'Select at least one vendor type.')
+      );
       return false;
     }
     if (latitude == null || longitude == null) {
@@ -496,9 +575,11 @@ const VendorSignupScreen: React.FC = () => {
       Alert.alert(t('common.error'), t('vendorSignup.passwordMismatch'));
       return false;
     }
-    const radius = parseFloat(deliveryRadiusKm);
     const minOrder = parseFloat(minimumOrderAmount);
-    if (Number.isNaN(radius) || radius <= 0) {
+    if (
+      deliveryRadiusKm == null ||
+      !VENDOR_DELIVERY_RADIUS_OPTIONS.some((o) => o.value === deliveryRadiusKm)
+    ) {
       Alert.alert(t('common.error'), t('vendorSignup.invalidRadius'));
       return false;
     }
@@ -527,8 +608,8 @@ const VendorSignupScreen: React.FC = () => {
         company_logo: companyLogo,
         vat_number: vatNumber.trim() || undefined,
         emirates_id_upload: emiratesIdUpload,
-        vendor_type: vendorType,
-        emirate,
+        vendor_types: vendorTypes,
+        emirate: selectedEmirate?.name || emirate,
         city: city.trim(),
         latitude,
         longitude,
@@ -536,7 +617,7 @@ const VendorSignupScreen: React.FC = () => {
         bank_name: bankName.trim(),
         iban: iban.trim(),
         account_holder_name: accountHolderName.trim(),
-        delivery_radius_km: parseFloat(deliveryRadiusKm),
+        delivery_radius_km: deliveryRadiusKm!,
         operating_hours_open: operatingHoursOpen.trim(),
         operating_hours_close: operatingHoursClose.trim(),
         minimum_order_amount: parseFloat(minimumOrderAmount),
@@ -702,32 +783,54 @@ const VendorSignupScreen: React.FC = () => {
           <SectionCard>
           <SectionTitle icon="leaf-outline" title={t('vendorSignup.sectionBusiness')} />
           <Text style={styles.label}>{t('vendorSignup.vendorType')} *</Text>
-          <View style={styles.chipWrap}>
-            {VENDOR_TYPES.map((type) => (
-              <TouchableOpacity
-                key={type}
-                style={[styles.chip, vendorType === type && styles.chipActive]}
-                onPress={() => setVendorType(type)}
-              >
-                <Text style={[styles.chipText, vendorType === type && styles.chipTextActive]}>
-                  {t(`vendorSignup.vendorTypes.${type}`, { defaultValue: type })}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <Text style={[styles.optionalHint, { marginBottom: SPACING.sm }]}>
+            {t('vendorSignup.vendorTypeHint', 'You can select more than one vendor type.')}
+          </Text>
+          {optionsLoading ? (
+            <ActivityIndicator color={COLORS.primary} style={{ marginVertical: SPACING.sm }} />
+          ) : (
+            <View style={styles.chipWrap}>
+              {vendorTypeOptions.map((option) => {
+                const selected = vendorTypes.includes(option.slug);
+                return (
+                  <TouchableOpacity
+                    key={`vt-${option.id ?? 'x'}-${option.slug}-${option.name}`}
+                    style={[styles.chip, selected && styles.chipActive]}
+                    onPress={() => toggleVendorType(option.slug)}
+                  >
+                    {selected ? (
+                      <Ionicons name="checkmark" size={14} color={COLORS.background} />
+                    ) : null}
+                    <Text style={[styles.chipText, selected && styles.chipTextActive]}>
+                      {t(`vendorSignup.vendorTypes.${option.name}`, {
+                        defaultValue: option.name,
+                      })}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
 
           <Text style={styles.label}>{t('vendorSignup.emirate')} *</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-            {UAE_EMIRATES.map((em) => (
-              <TouchableOpacity
-                key={em}
-                style={[styles.chip, emirate === em && styles.chipActive]}
-                onPress={() => setEmirate(em)}
-              >
-                <Text style={[styles.chipText, emirate === em && styles.chipTextActive]}>{em}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {optionsLoading ? null : (
+            <View style={styles.chipWrap}>
+              {emirateOptions.map((option) => {
+                const selected = emirate === option.slug;
+                return (
+                  <TouchableOpacity
+                    key={`em-${option.id ?? 'x'}-${option.slug}-${option.name}`}
+                    style={[styles.chip, selected && styles.chipActive]}
+                    onPress={() => setEmirate(option.slug)}
+                  >
+                    <Text style={[styles.chipText, selected && styles.chipTextActive]}>
+                      {option.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
           <Input
             label={t('vendorSignup.city')}
             value={city}
@@ -754,12 +857,45 @@ const VendorSignupScreen: React.FC = () => {
 
           <SectionCard>
           <SectionTitle icon="card-outline" title={t('vendorSignup.sectionBank')} />
-          <Input
-            label={t('vendorSignup.bankName')}
-            value={bankName}
-            onChangeText={setBankName}
-            placeholder={t('vendorSignup.bankNamePlaceholder')}
-          />
+          <Text style={styles.label}>
+            {t('vendorSignup.bankName')}{' '}
+            <Text style={styles.optionalHint}>
+              ({t('vendorSignup.optional', { defaultValue: 'optional' })})
+            </Text>
+          </Text>
+          <TouchableOpacity
+            style={styles.bankSelectBtn}
+            onPress={openBankPicker}
+            activeOpacity={0.85}
+          >
+            <View style={styles.bankSelectLeft}>
+              <View style={styles.bankSelectIcon}>
+                <Ionicons name="business-outline" size={18} color={COLORS.primary} />
+              </View>
+              <Text
+                style={[styles.bankSelectText, !bankName && styles.bankSelectPlaceholder]}
+                numberOfLines={2}
+              >
+                {bankName ||
+                  t('vendorSignup.bankNameSelectPlaceholder', {
+                    defaultValue: 'Select bank (optional)',
+                  })}
+              </Text>
+            </View>
+            <Ionicons name="chevron-down" size={18} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+          {bankName ? (
+            <TouchableOpacity
+              style={styles.clearBankBtn}
+              onPress={() => setBankName('')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close-circle" size={16} color={COLORS.textSecondary} />
+              <Text style={styles.clearBankText}>
+                {t('vendorSignup.clearBank', { defaultValue: 'Clear bank' })}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
           <Input
             label={t('vendorSignup.iban')}
             value={iban}
@@ -777,31 +913,101 @@ const VendorSignupScreen: React.FC = () => {
 
           <SectionCard>
           <SectionTitle icon="time-outline" title={t('vendorSignup.sectionOperations')} />
-          <Input
-            label={t('vendorSignup.deliveryRadius')}
-            value={deliveryRadiusKm}
-            onChangeText={setDeliveryRadiusKm}
-            keyboardType="numeric"
-            placeholder={t('vendorSignup.deliveryRadiusPlaceholder')}
-          />
+          <Text style={styles.label}>
+            {t('vendorSignup.deliveryRadius')} <Text style={styles.required}>*</Text>
+          </Text>
+          <View style={styles.chipWrap}>
+            {VENDOR_DELIVERY_RADIUS_OPTIONS.map((option) => {
+              const selected = deliveryRadiusKm === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.chip, selected && styles.chipActive]}
+                  onPress={() => setDeliveryRadiusKm(option.value)}
+                >
+                  <Text style={[styles.chipText, selected && styles.chipTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
           <View style={styles.hoursRow}>
             <View style={styles.hoursCol}>
-              <Input
-                label={t('vendorSignup.operatingHoursOpen')}
-                value={operatingHoursOpen}
-                onChangeText={setOperatingHoursOpen}
-                placeholder="08:00"
-              />
+              <Text style={styles.label}>
+                {t('vendorSignup.operatingHoursOpen')} <Text style={styles.required}>*</Text>
+              </Text>
+              <TouchableOpacity
+                style={styles.timeSelectBtn}
+                onPress={() => setTimePickerMode('open')}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.timeSelectText,
+                    !operatingHoursOpen && styles.timeSelectPlaceholder,
+                  ]}
+                >
+                  {operatingHoursOpen ||
+                    t('vendorSignup.selectTime', { defaultValue: 'Select time' })}
+                </Text>
+                <Ionicons name="time-outline" size={18} color={COLORS.primary} />
+              </TouchableOpacity>
             </View>
             <View style={styles.hoursCol}>
-              <Input
-                label={t('vendorSignup.operatingHoursClose')}
-                value={operatingHoursClose}
-                onChangeText={setOperatingHoursClose}
-                placeholder="22:00"
-              />
+              <Text style={styles.label}>
+                {t('vendorSignup.operatingHoursClose')} <Text style={styles.required}>*</Text>
+              </Text>
+              <TouchableOpacity
+                style={styles.timeSelectBtn}
+                onPress={() => setTimePickerMode('close')}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.timeSelectText,
+                    !operatingHoursClose && styles.timeSelectPlaceholder,
+                  ]}
+                >
+                  {operatingHoursClose ||
+                    t('vendorSignup.selectTime', { defaultValue: 'Select time' })}
+                </Text>
+                <Ionicons name="time-outline" size={18} color={COLORS.primary} />
+              </TouchableOpacity>
             </View>
           </View>
+          {timePickerMode !== null && (
+            <View style={styles.timePickerWrap}>
+              <DateTimePicker
+                value={
+                  timePickerMode === 'open'
+                    ? parseHHMMToDate(operatingHoursOpen, 8, 0)
+                    : parseHHMMToDate(operatingHoursClose, 22, 0)
+                }
+                mode="time"
+                is24Hour
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(event, selectedDate) => {
+                  if (Platform.OS === 'android') {
+                    setTimePickerMode(null);
+                    if (event.type === 'dismissed') return;
+                  }
+                  if (!selectedDate) return;
+                  const formatted = formatTimeHHMM(selectedDate);
+                  if (timePickerMode === 'open') setOperatingHoursOpen(formatted);
+                  else setOperatingHoursClose(formatted);
+                }}
+              />
+              {Platform.OS === 'ios' ? (
+                <TouchableOpacity
+                  style={styles.timePickerDone}
+                  onPress={() => setTimePickerMode(null)}
+                >
+                  <Text style={styles.timePickerDoneText}>{t('common.done', { defaultValue: 'Done' })}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          )}
           <Input
             label={t('vendorSignup.minimumOrderAmount')}
             value={minimumOrderAmount}
@@ -827,6 +1033,82 @@ const VendorSignupScreen: React.FC = () => {
           </SectionCard>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={bankPickerVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeBankPicker}
+      >
+        <SafeAreaView style={styles.bankModalSafe} edges={['top', 'bottom']}>
+          <View style={styles.bankModalHeader}>
+            <TouchableOpacity onPress={closeBankPicker} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close" size={24} color={COLORS.text} />
+            </TouchableOpacity>
+            <Text style={styles.bankModalTitle}>
+              {t('vendorSignup.selectBank', { defaultValue: 'Select bank' })}
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setBankName('');
+                closeBankPicker();
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.bankModalClear}>
+                {t('vendorSignup.clear', { defaultValue: 'Clear' })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.bankSearchWrap}>
+            <Ionicons name="search-outline" size={18} color={COLORS.textSecondary} />
+            <TextInput
+              style={styles.bankSearchInput}
+              value={bankSearch}
+              onChangeText={setBankSearch}
+              placeholder={t('vendorSignup.searchBank', { defaultValue: 'Search banks…' })}
+              placeholderTextColor={COLORS.textSecondary}
+              autoCorrect={false}
+              autoCapitalize="none"
+              clearButtonMode="while-editing"
+            />
+          </View>
+          <FlatList
+            data={filteredBanks}
+            keyExtractor={(item) => item}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.bankListContent}
+            ListEmptyComponent={
+              <Text style={styles.bankEmpty}>
+                {t('vendorSignup.noBanksFound', { defaultValue: 'No banks match your search.' })}
+              </Text>
+            }
+            renderItem={({ item }) => {
+              const selected = bankName === item;
+              return (
+                <TouchableOpacity
+                  style={[styles.bankOption, selected && styles.bankOptionSelected]}
+                  onPress={() => {
+                    setBankName(item);
+                    closeBankPicker();
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={[styles.bankOptionText, selected && styles.bankOptionTextSelected]}
+                    numberOfLines={2}
+                  >
+                    {item}
+                  </Text>
+                  {selected ? (
+                    <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} />
+                  ) : null}
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </SafeAreaView>
+      </Modal>
 
       <MapPickerModal
         visible={mapVisible}
@@ -938,6 +1220,9 @@ const styles = StyleSheet.create({
   chipRow: { marginBottom: SPACING.xs },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginBottom: SPACING.xs },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: BORDER_RADIUS.round,
@@ -1083,6 +1368,48 @@ const styles = StyleSheet.create({
   mapCoords: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, marginTop: 2 },
   hoursRow: { flexDirection: 'row', gap: SPACING.md },
   hoursCol: { flex: 1 },
+  timeSelectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.surfaceLight,
+    marginBottom: SPACING.xs,
+  },
+  timeSelectText: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.medium,
+    color: COLORS.text,
+  },
+  timeSelectPlaceholder: {
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHTS.regular,
+  },
+  timePickerWrap: {
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.sm,
+    overflow: 'hidden',
+  },
+  timePickerDone: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+  },
+  timePickerDoneText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
   termsRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1092,6 +1419,134 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
   },
   termsText: { flex: 1, fontSize: FONT_SIZES.sm, color: COLORS.text, lineHeight: 20 },
+  optionalHint: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.regular,
+    color: COLORS.textSecondary,
+  },
+  bankSelectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.surfaceLight,
+    marginBottom: SPACING.xs,
+  },
+  bankSelectLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  bankSelectIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primary + '14',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bankSelectText: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    fontWeight: FONT_WEIGHTS.medium,
+  },
+  bankSelectPlaceholder: {
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHTS.regular,
+  },
+  clearBankBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginBottom: SPACING.sm,
+  },
+  clearBankText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+  },
+  bankModalSafe: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  bankModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  bankModalTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+  },
+  bankModalClear: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.medium,
+  },
+  bankSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginHorizontal: SPACING.lg,
+    marginVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: Platform.OS === 'ios' ? SPACING.sm : 0,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.surfaceLight,
+  },
+  bankSearchInput: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    paddingVertical: SPACING.sm,
+  },
+  bankListContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xxl,
+  },
+  bankEmpty: {
+    textAlign: 'center',
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    marginTop: SPACING.xl,
+  },
+  bankOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  bankOptionSelected: {
+    backgroundColor: COLORS.primary + '10',
+    borderRadius: BORDER_RADIUS.md,
+    borderBottomWidth: 0,
+  },
+  bankOptionText: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+  },
+  bankOptionTextSelected: {
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
 });
 
 export default VendorSignupScreen;

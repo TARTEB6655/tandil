@@ -41,7 +41,7 @@ module.exports = {
     ...expo,
     ios: {
       ...expo.ios,
-      buildNumber: '31',
+      buildNumber: '32',
       usesAppleSignIn: true,
       entitlements: {
         ...(expo.ios?.entitlements || {}),
@@ -95,6 +95,7 @@ module.exports = {
       'expo-web-browser',
       'expo-apple-authentication',
       'expo-font',
+      'expo-video',
     ],
   },
 };

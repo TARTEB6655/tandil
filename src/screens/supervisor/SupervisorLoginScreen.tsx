@@ -11,7 +11,10 @@ function goToRoleSelection(navigation: any) {
   while (rootNavigator.getParent()) {
     rootNavigator = rootNavigator.getParent();
   }
-  rootNavigator.navigate('RoleSelection');
+  rootNavigator.reset({
+    index: 0,
+    routes: [{ name: 'RoleSelection' }],
+  });
 }
 
 const SupervisorLoginScreen: React.FC = () => {
