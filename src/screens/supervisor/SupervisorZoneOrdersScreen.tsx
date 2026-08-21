@@ -14,16 +14,16 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { BORDER_RADIUS, COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING } from '../../constants';
 import {
-  acceptSupervisorZoneOrderJob,
-  getSupervisorZoneOrderJobs,
-  rejectSupervisorZoneOrderJob,
-  SupervisorZoneOrderJob,
+  claimSupervisorAssignment,
+  getSupervisorNewAssignments,
+  rejectSupervisorNewAssignment,
+  SupervisorAssignment,
 } from '../../services/supervisorService';
 
 const SupervisorZoneOrdersScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
-  const [jobs, setJobs] = useState<SupervisorZoneOrderJob[]>([]);
+  const [jobs, setJobs] = useState<SupervisorAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
@@ -32,8 +32,8 @@ const SupervisorZoneOrdersScreen: React.FC = () => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     try {
-      const list = await getSupervisorZoneOrderJobs();
-      setJobs(list ?? []);
+      const result = await getSupervisorNewAssignments({ per_page: 20 });
+      setJobs(result.list ?? []);
     } catch {
       setJobs([]);
     } finally {
@@ -52,8 +52,8 @@ const SupervisorZoneOrdersScreen: React.FC = () => {
     try {
       setActionLoadingId(jobId);
       const result = action === 'accept'
-        ? await acceptSupervisorZoneOrderJob(jobId)
-        : await rejectSupervisorZoneOrderJob(jobId);
+        ? await claimSupervisorAssignment(jobId)
+        : await rejectSupervisorNewAssignment(jobId);
       if (!result.success) {
         Alert.alert(t('common.error', { defaultValue: 'Error' }), result.message || t('common.somethingWentWrong', { defaultValue: 'Something went wrong.' }));
         return;
@@ -61,49 +61,66 @@ const SupervisorZoneOrdersScreen: React.FC = () => {
       setJobs((prev) => prev.filter((job) => job.id !== jobId));
       Alert.alert(
         action === 'accept'
-          ? t('supervisorDashboard.jobAccepted', { defaultValue: 'Job accepted' })
-          : t('supervisorDashboard.jobRejected', { defaultValue: 'Job rejected' }),
+          ? t('supervisorDashboard.jobAccepted')
+          : t('supervisorDashboard.jobRejected'),
         result.message || (
           action === 'accept'
-            ? t('supervisorDashboard.jobAcceptedMessage', { defaultValue: 'This order has been accepted successfully.' })
-            : t('supervisorDashboard.jobRejectedMessage', { defaultValue: 'This order has been rejected successfully.' })
+            ? t('supervisorDashboard.jobAcceptedMessage')
+            : t('supervisorDashboard.jobRejectedMessage')
         )
       );
-    } catch {
-      Alert.alert(t('common.error', { defaultValue: 'Error' }), t('common.somethingWentWrong', { defaultValue: 'Something went wrong.' }));
+    } catch (err: any) {
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        err?.response?.data?.message || err?.message || t('common.somethingWentWrong', { defaultValue: 'Something went wrong.' })
+      );
     } finally {
       setActionLoadingId(null);
     }
   };
 
-  const renderItem = ({ item }: { item: SupervisorZoneOrderJob }) => {
-    const duration = item.duration_display || (item.duration_minutes != null ? `${Math.max(1, Math.round(item.duration_minutes / 60))} hrs` : '—');
-    const city = item.city || item.location || '—';
-    const address = item.address || '—';
+  const renderItem = ({ item }: { item: SupervisorAssignment }) => {
+    const duration = item.duration_minutes != null
+      ? (item.duration_minutes < 60
+        ? `${item.duration_minutes}m`
+        : `${Math.floor(item.duration_minutes / 60)}h${item.duration_minutes % 60 ? ` ${item.duration_minutes % 60}m` : ''}`)
+      : '—';
+    const city = item.location || '—';
     const clientName = item.client_name || '—';
     const taskPrice = item.price_display || item.price || '—';
     const loadingThis = actionLoadingId === item.id;
+    const slot = typeof item.time_slot === 'string' ? item.time_slot : item.job_time;
+    const showClaim = item.can_claim !== false;
+    const showReject = item.can_reject !== false;
 
     return (
-      <View style={styles.card}>
-        <Text style={styles.title}>{item.title || item.service_name || t('supervisorDashboard.orderJob', { defaultValue: 'Order Job' })}</Text>
-        <Text style={styles.description}>{item.description || '—'}</Text>
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.85}
+        onPress={() =>
+          navigation.navigate('SupervisorNewJobDetail' as never, { jobId: item.id, job: item } as never)
+        }
+      >
+        <Text style={styles.title}>{item.title || item.service_name || t('supervisorDashboard.orderJob')}</Text>
+        {item.service_name ? <Text style={styles.description}>{item.service_name}</Text> : null}
 
         <View style={styles.detailRow}>
           <Ionicons name="timer-outline" size={16} color={COLORS.textSecondary} />
-          <Text style={styles.detailText}>{t('supervisorDashboard.durationLabel', { defaultValue: 'Duration: ' })}{duration}</Text>
+          <Text style={styles.detailText}>{t('supervisorDashboard.durationLabel')}{duration}</Text>
         </View>
+        {slot ? (
+          <View style={styles.detailRow}>
+            <Ionicons name="time-outline" size={16} color={COLORS.textSecondary} />
+            <Text style={styles.detailText}>{slot}</Text>
+          </View>
+        ) : null}
         <View style={styles.detailRow}>
           <Ionicons name="navigate-outline" size={16} color={COLORS.textSecondary} />
-          <Text style={styles.detailText}>{t('supervisorDashboard.locationLabel', { defaultValue: 'Location: ' })}{city}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
-          <Text style={styles.detailText}>{t('supervisorDashboard.addressLabel', { defaultValue: 'Address: ' })}{address}</Text>
+          <Text style={styles.detailText}>{t('supervisorDashboard.locationLabel')}{city}</Text>
         </View>
         <View style={styles.detailRow}>
           <Ionicons name="person-outline" size={16} color={COLORS.textSecondary} />
-          <Text style={styles.detailText}>{t('supervisorDashboard.clientLabel', { defaultValue: 'Client: ' })}{clientName}</Text>
+          <Text style={styles.detailText}>{t('supervisorDashboard.clientLabel')}{clientName}</Text>
         </View>
         <View style={styles.detailRow}>
           <Ionicons name="mail-outline" size={16} color={COLORS.textSecondary} />
@@ -115,40 +132,47 @@ const SupervisorZoneOrdersScreen: React.FC = () => {
         </View>
         <View style={styles.detailRow}>
           <Ionicons name="cash-outline" size={16} color={COLORS.textSecondary} />
-          <Text style={styles.detailText}>{t('supervisorDashboard.priceLabel', { defaultValue: 'Task Price: ' })}{taskPrice}</Text>
+          <Text style={styles.detailText}>{t('supervisorDashboard.priceLabel')}{taskPrice}</Text>
         </View>
 
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.rejectButton]}
-            disabled={loadingThis}
-            onPress={() => handleZoneJobAction(item.id, 'reject')}
-          >
-            <Text style={styles.actionText}>{t('supervisorDashboard.reject', { defaultValue: 'Reject' })}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.acceptButton]}
-            disabled={loadingThis}
-            onPress={() => handleZoneJobAction(item.id, 'accept')}
-          >
-            {loadingThis ? (
-              <ActivityIndicator size="small" color={COLORS.background} />
-            ) : (
-              <Text style={styles.actionText}>{t('supervisorDashboard.accept', { defaultValue: 'Accept' })}</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+        {(showClaim || showReject) ? (
+          <View style={styles.actions}>
+            {showReject ? (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.rejectButton]}
+                disabled={loadingThis}
+                onPress={() => handleZoneJobAction(item.id, 'reject')}
+              >
+                <Text style={styles.actionText}>{t('supervisorDashboard.reject')}</Text>
+              </TouchableOpacity>
+            ) : null}
+            {showClaim ? (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.acceptButton]}
+                disabled={loadingThis}
+                onPress={() => handleZoneJobAction(item.id, 'accept')}
+              >
+                {loadingThis ? (
+                  <ActivityIndicator size="small" color={COLORS.background} />
+                ) : (
+                  <Text style={styles.actionText}>{t('supervisorDashboard.accept')}</Text>
+                )}
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+      </TouchableOpacity>
     );
   };
 
+  // Full list screen for GET /supervisor/assignments/new
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('supervisorDashboard.zoneIncomingOrders', { defaultValue: 'Zone Incoming Orders' })}</Text>
+        <Text style={styles.headerTitle}>{t('supervisorDashboard.newJobs')}</Text>
         <View style={styles.backButton} />
       </View>
 
@@ -171,7 +195,7 @@ const SupervisorZoneOrdersScreen: React.FC = () => {
           }
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>{t('supervisorDashboard.noZoneOrders', { defaultValue: 'No new zone orders right now.' })}</Text>
+              <Text style={styles.emptyText}>{t('supervisorDashboard.noNewJobs')}</Text>
             </View>
           }
         />

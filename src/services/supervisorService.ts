@@ -276,7 +276,7 @@ export async function updateSupervisorTeamMember(
 export interface SupervisorAssignment {
   id: number;
   technician_id: number | null;
-  supervisor_id: number;
+  supervisor_id: number | null;
   scheduled_date: string;
   completed_date: string | null;
   status: string;
@@ -297,10 +297,38 @@ export interface SupervisorAssignment {
   /** Booked time slot (HH:mm or display string); null if not set */
   time_slot?: string | { start_time?: string; end_time?: string; start?: string; end?: string } | null;
   scheduled_time?: string | null;
-  supervisor_name?: string;
+  supervisor_name?: string | null;
   notes?: string | null;
   created_at?: string;
   updated_at?: string;
+  order_id?: number | null;
+  order_item_id?: number | null;
+  accept_by?: number | null;
+  client_name?: string | null;
+  client_email?: string | null;
+  client_phone?: string | null;
+  is_unclaimed?: boolean;
+  can_claim?: boolean;
+  can_reject?: boolean;
+  order_item?: {
+    id: number;
+    quantity?: number;
+    booking_date?: string | null;
+    booking_slot?: string | null;
+    product?: {
+      id: number;
+      name?: string;
+      description?: string | null;
+      image_url?: string | null;
+    } | null;
+  } | null;
+  order?: {
+    id: number;
+    order_status?: string;
+    payment_status?: string;
+    booking_date?: string | null;
+    booking_slot?: string | null;
+  } | null;
 }
 
 /** Customer on assignment detail GET /api/supervisor/assignments/:id */
@@ -364,6 +392,95 @@ export async function getSupervisorAssignments(params?: {
   };
 }
 
+/**
+ * GET /api/supervisor/assignments/new?page=1&per_page=20
+ * Incoming unclaimed jobs for the supervisor dashboard (New Jobs).
+ */
+export async function getSupervisorNewAssignments(params?: {
+  page?: number;
+  per_page?: number;
+}): Promise<{ list: SupervisorAssignment[]; total: number; lastPage: number }> {
+  const response = await apiClient.get<SupervisorAssignmentsResponse>('/supervisor/assignments/new', {
+    params: { per_page: 20, ...params },
+    timeout: 15000,
+  });
+  const data = response.data?.data;
+  if (!response.data?.success || !data || !Array.isArray(data.data)) {
+    return { list: [], total: 0, lastPage: 1 };
+  }
+  return {
+    list: data.data,
+    total: data.total ?? data.data.length,
+    lastPage: data.last_page ?? 1,
+  };
+}
+
+/**
+ * POST /api/supervisor/assignments/:id/claim
+ * Claim / accept a new unclaimed job.
+ */
+export async function claimSupervisorAssignment(
+  assignmentId: number
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const response = await apiClient.post<{ success?: boolean; message?: string }>(
+      `/supervisor/assignments/${assignmentId}/claim`,
+      {},
+      { timeout: 15000 }
+    );
+    const payload = response.data;
+    if (payload?.success === false) {
+      return { success: false, message: payload.message };
+    }
+    return {
+      success: true,
+      message: payload?.message,
+    };
+  } catch (err: unknown) {
+    const ax = err as { response?: { data?: { message?: string; success?: boolean } }; message?: string };
+    return {
+      success: false,
+      message:
+        ax?.response?.data?.message ||
+        ax?.message ||
+        'Failed to accept job.',
+    };
+  }
+}
+
+/**
+ * POST /api/supervisor/assignments/:id/reject
+ * Reject a new unclaimed job.
+ */
+export async function rejectSupervisorNewAssignment(
+  assignmentId: number
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const response = await apiClient.post<{ success?: boolean; message?: string }>(
+      `/supervisor/assignments/${assignmentId}/reject`,
+      {},
+      { timeout: 15000 }
+    );
+    const payload = response.data;
+    if (payload?.success === false) {
+      return { success: false, message: payload.message };
+    }
+    return {
+      success: true,
+      message: payload?.message,
+    };
+  } catch (err: unknown) {
+    const ax = err as { response?: { data?: { message?: string; success?: boolean } }; message?: string };
+    return {
+      success: false,
+      message:
+        ax?.response?.data?.message ||
+        ax?.message ||
+        'Failed to reject job.',
+    };
+  }
+}
+
 export interface SupervisorAssignmentDetailResponse {
   success?: boolean;
   data?: SupervisorAssignmentDetail;
@@ -406,6 +523,147 @@ export async function assignSupervisorAssignment(
   const response = await apiClient.post<{ success?: boolean; message?: string }>(
     `/supervisor/assignments/${assignmentId}`,
     form,
+    { timeout: 15000 }
+  );
+  return {
+    success: response.data?.success === true,
+    message: response.data?.message,
+  };
+}
+
+/** Incoming zone job the supervisor can accept or reject */
+export interface SupervisorZoneOrderJob {
+  id: number;
+  title?: string | null;
+  service_name?: string | null;
+  description?: string | null;
+  duration_minutes?: number | null;
+  duration_display?: string | null;
+  city?: string | null;
+  location?: string | null;
+  address?: string | null;
+  client_name?: string | null;
+  client_email?: string | null;
+  client_phone?: string | null;
+  price?: string | number | null;
+  price_display?: string | null;
+  scheduled_date?: string | null;
+  status?: string | null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function mapSupervisorZoneOrderJob(raw: unknown): SupervisorZoneOrderJob | null {
+  const row = asRecord(raw);
+  if (!row) return null;
+  const id = Number(row.id);
+  if (!Number.isFinite(id)) return null;
+
+  const customer = asRecord(row.customer) ?? asRecord(row.client);
+  const price = row.price_display ?? row.price;
+  const clientName =
+    (typeof row.client_name === 'string' && row.client_name) ||
+    (typeof customer?.name === 'string' && customer.name) ||
+    null;
+  const clientEmail =
+    (typeof row.client_email === 'string' && row.client_email) ||
+    (typeof customer?.email === 'string' && customer.email) ||
+    null;
+  const clientPhone =
+    (typeof row.client_phone === 'string' && row.client_phone) ||
+    (typeof customer?.phone === 'string' && customer.phone) ||
+    null;
+
+  return {
+    id,
+    title: typeof row.title === 'string' ? row.title : null,
+    service_name: typeof row.service_name === 'string' ? row.service_name : null,
+    description:
+      (typeof row.description === 'string' && row.description) ||
+      (typeof row.notes_preview === 'string' && row.notes_preview) ||
+      (typeof row.notes === 'string' && row.notes) ||
+      null,
+    duration_minutes:
+      typeof row.duration_minutes === 'number'
+        ? row.duration_minutes
+        : row.duration_minutes != null
+          ? Number(row.duration_minutes)
+          : null,
+    duration_display: typeof row.duration_display === 'string' ? row.duration_display : null,
+    city: typeof row.city === 'string' ? row.city : null,
+    location: typeof row.location === 'string' ? row.location : null,
+    address: typeof row.address === 'string' ? row.address : null,
+    client_name: clientName,
+    client_email: clientEmail,
+    client_phone: clientPhone,
+    price: typeof price === 'string' || typeof price === 'number' ? price : null,
+    price_display: typeof row.price_display === 'string' ? row.price_display : null,
+    scheduled_date: typeof row.scheduled_date === 'string' ? row.scheduled_date : null,
+    status: typeof row.status === 'string' ? row.status : null,
+  };
+}
+
+function extractZoneOrderJobs(payload: unknown): SupervisorZoneOrderJob[] {
+  const root = asRecord(payload);
+  const data = root?.data;
+  const candidates: unknown[] = [];
+
+  if (Array.isArray(data)) {
+    candidates.push(...data);
+  } else {
+    const dataObj = asRecord(data);
+    if (Array.isArray(dataObj?.data)) candidates.push(...dataObj.data);
+    if (Array.isArray(dataObj?.jobs)) candidates.push(...dataObj.jobs);
+    if (Array.isArray(dataObj?.orders)) candidates.push(...dataObj.orders);
+  }
+  if (Array.isArray(root?.jobs)) candidates.push(...root.jobs);
+
+  return candidates
+    .map(mapSupervisorZoneOrderJob)
+    .filter((job): job is SupervisorZoneOrderJob => job != null);
+}
+
+/**
+ * GET /api/supervisor/zone-orders
+ * Incoming jobs for the supervisor's zone (accept / reject).
+ */
+export async function getSupervisorZoneOrderJobs(): Promise<SupervisorZoneOrderJob[]> {
+  const response = await apiClient.get<unknown>('/supervisor/zone-orders', {
+    timeout: 15000,
+  });
+  return extractZoneOrderJobs(response.data);
+}
+
+/**
+ * POST /api/supervisor/zone-orders/:id/accept
+ */
+export async function acceptSupervisorZoneOrderJob(
+  jobId: number
+): Promise<{ success: boolean; message?: string }> {
+  const response = await apiClient.post<{ success?: boolean; message?: string }>(
+    `/supervisor/zone-orders/${jobId}/accept`,
+    {},
+    { timeout: 15000 }
+  );
+  return {
+    success: response.data?.success === true,
+    message: response.data?.message,
+  };
+}
+
+/**
+ * POST /api/supervisor/zone-orders/:id/reject
+ */
+export async function rejectSupervisorZoneOrderJob(
+  jobId: number
+): Promise<{ success: boolean; message?: string }> {
+  const response = await apiClient.post<{ success?: boolean; message?: string }>(
+    `/supervisor/zone-orders/${jobId}/reject`,
+    {},
     { timeout: 15000 }
   );
   return {

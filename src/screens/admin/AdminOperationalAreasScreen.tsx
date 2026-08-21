@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
-import { adminService, AdminOperationalAreaItem, AdminOperationalAreasSummary } from '../../services/adminService';
+import { adminService, AdminOperationalAreaItem, AdminOperationalAreaSupervisor, AdminOperationalAreasSummary } from '../../services/adminService';
 import { useTranslation } from 'react-i18next';
 
 const UAE_REGION: Region = {
@@ -80,6 +80,7 @@ const AdminOperationalAreasScreen: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
   const [togglingAreaIds, setTogglingAreaIds] = useState<Record<number, boolean>>({});
+  const supervisorsByAreaIdRef = React.useRef<Map<number, AdminOperationalAreaSupervisor[]>>(new Map());
 
   const activePinnedAreas = useMemo(
     () =>
@@ -128,18 +129,45 @@ const AdminOperationalAreasScreen: React.FC = () => {
       if (append) setLoadingMore(true);
       else if (!silent) setLoading(true);
     try {
-      const res = await adminService.getOperationalAreas({
-        country: 'UAE',
-        per_page: OPERATIONAL_AREAS_PER_PAGE,
-        page,
-      });
+      const [res, areasRes] = await Promise.all([
+        adminService.getOperationalAreas({
+          country: 'UAE',
+          per_page: OPERATIONAL_AREAS_PER_PAGE,
+          page,
+        }),
+        // Areas list includes full supervisors[]; use it to enrich operational rows.
+        page === 1 && !append
+          ? adminService.getAreas().catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      if (areasRes?.data) {
+        const nextMap = new Map<number, AdminOperationalAreaSupervisor[]>();
+        areasRes.data.forEach((area) => {
+          const list = (area.supervisors ?? [])
+            .filter((s) => s && typeof s.id === 'number')
+            .map((s) => ({ id: s.id, name: String(s.name || '').trim() || `#${s.id}` }));
+          if (list.length) nextMap.set(area.id, list);
+        });
+        supervisorsByAreaIdRef.current = nextMap;
+      }
+
       const incomingRaw = res?.data?.areas ?? [];
       // Normalize server values to avoid runtime crashes in RN controls like Switch.
-      const incoming = incomingRaw.map((area) => ({
-        ...area,
-        is_active: isAreaActive((area as unknown as { is_active: unknown }).is_active),
-        supervisors: Array.isArray(area.supervisors) ? area.supervisors : [],
-      }));
+      const incoming = incomingRaw.map((area) => {
+        const fromOperational = Array.isArray(area.supervisors) ? area.supervisors : [];
+        const fromAreas = supervisorsByAreaIdRef.current.get(area.id);
+        const supervisors =
+          fromAreas && fromAreas.length > 0
+            ? fromAreas
+            : fromOperational
+                .filter((s) => s && typeof s.id === 'number')
+                .map((s) => ({ id: s.id, name: String(s.name || '').trim() || `#${s.id}` }));
+        return {
+          ...area,
+          is_active: isAreaActive((area as unknown as { is_active: unknown }).is_active),
+          supervisors,
+        };
+      });
       const incomingSummary = res?.data?.summary;
       setAreas((prev) => (append ? [...prev, ...incoming] : incoming));
       if (incomingSummary) setSummary(incomingSummary);
@@ -324,18 +352,41 @@ const AdminOperationalAreasScreen: React.FC = () => {
                 areas.map((item) => (
                   <View key={item.id} style={styles.tableRow}>
                     <View style={styles.cityZoneCell}>
-                      <Text style={styles.cellTitle}>{item.name}</Text>
-                      <Text style={styles.cellSubTitle}>{item.location}</Text>
+                      <Text style={styles.cellTitle} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      {item.location &&
+                      item.location.trim().toLowerCase() !== item.name.trim().toLowerCase() ? (
+                        <Text style={styles.cellSubTitle} numberOfLines={1}>
+                          {item.location}
+                        </Text>
+                      ) : null}
                     </View>
                     <Text style={[styles.rowCellText, styles.countryCell]}>{item.country}</Text>
                     <View style={styles.supervisorCell}>
-                      <View style={[styles.supervisorTag, item.supervisors.length > 0 && styles.supervisorTagAssigned]}>
-                        <Text style={[styles.supervisorTagText, item.supervisors.length > 0 && styles.supervisorTagTextAssigned]}>
-                          {item.supervisors.length > 0
-                            ? item.supervisors[0].name
-                            : t('admin.operationalAreas.none', { defaultValue: 'None' })}
-                        </Text>
-                      </View>
+                      {item.supervisors.length === 0 ? (
+                        <View style={styles.supervisorTag}>
+                          <Text style={styles.supervisorTagText}>
+                            {t('admin.operationalAreas.none', { defaultValue: 'None' })}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.supervisorTagsWrap}>
+                          {item.supervisors.map((supervisor) => (
+                            <View
+                              key={`${item.id}-${supervisor.id}`}
+                              style={[styles.supervisorTag, styles.supervisorTagAssigned]}
+                            >
+                              <Text
+                                style={[styles.supervisorTagText, styles.supervisorTagTextAssigned]}
+                                numberOfLines={1}
+                              >
+                                {supervisor.name}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                     </View>
                     <View style={[styles.toggleCell, styles.toggleCellWrap]}>
                       {togglingAreaIds[item.id] ? (
@@ -523,16 +574,16 @@ const styles = StyleSheet.create({
   },
   tableRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  cityZoneCell: { flex: 1.9, paddingRight: 4 },
-  countryCell: { flex: 0.9, paddingRight: 4 },
-  supervisorCell: { flex: 1.25, paddingRight: 4 },
-  toggleCell: { flex: 0.95, alignItems: 'center' },
+  cityZoneCell: { flex: 1.7, paddingRight: 4, paddingTop: 2 },
+  countryCell: { flex: 0.8, paddingRight: 4, paddingTop: 4 },
+  supervisorCell: { flex: 1.6, paddingRight: 4 },
+  toggleCell: { flex: 0.9, alignItems: 'center', paddingTop: 2 },
   rowCellText: {
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
@@ -547,24 +598,30 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 2,
   },
+  supervisorTagsWrap: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
   supervisorTag: {
     alignSelf: 'flex-start',
     borderRadius: BORDER_RADIUS.round,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
     backgroundColor: '#FFF8E6',
     maxWidth: '100%',
   },
   supervisorTagAssigned: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: COLORS.primary + '14',
   },
   supervisorTagText: {
     fontSize: FONT_SIZES.xs,
     color: '#6b7280',
-    maxWidth: 88,
+    maxWidth: 110,
   },
   supervisorTagTextAssigned: {
-    color: '#6366f1',
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   toggleCellWrap: {
     alignItems: 'center',

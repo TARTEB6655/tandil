@@ -52,7 +52,7 @@ export function getStripePublishableKey(): string {
     return fromEnv.trim();
   }
   // Last resort for release builds if Constants.extra was not embedded (avoids Stripe white screen).
-  const fromAppJson = 'pk_test_51TSVvUP3hJZSveSoC6j7aN98lUeEiBcVH1YP0rhoAYYktKMi4P2cARXftPw4zCkQUxfuT4tKnjd1TI5B9Zyb553o00r9bdyECz';
+  const fromAppJson = 'pk_live_51TObSk0dvmhfzUoqeXMFztTOzAQ366Y0ZaNvM6us9fvjswiUh80L13EtFAwgjwkH1klyZcagiYZ6MGcFYK7HrYAT00lH8Jrade';
   return fromAppJson;
 }
 

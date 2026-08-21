@@ -9,6 +9,10 @@ export interface AddCartItemRequest {
   product_id: number;
   quantity: number;
   selected_option_ids?: number[];
+  /** Preferred visit date Y-m-d, e.g. "2026-08-24" */
+  booking_date?: string;
+  /** Preferred time slot label, e.g. "10:00 AM - 12:00 PM" */
+  booking_slot?: string;
 }
 
 export interface AddCartItemResponse {
@@ -160,20 +164,26 @@ export async function getBuyNowSummary(
 
 /**
  * Add item to cart. Requires user to be logged in (customer token).
- * POST /shop/cart/add with JSON body: { product_id, quantity, selected_option_ids? }.
+ * POST /shop/cart/add with JSON body:
+ * { product_id, quantity, selected_option_ids?, booking_date?, booking_slot? }.
  */
 export async function addCartItem(
   productId: number,
   quantity: number,
-  selectedOptionIds?: number[]
+  selectedOptionIds?: number[],
+  booking?: { booking_date?: string; booking_slot?: string }
 ): Promise<AddCartItemResponse> {
   const optionIds = selectedOptionIds?.filter((id) => Number.isFinite(id) && id > 0);
+  const bookingDate = booking?.booking_date?.trim();
+  const bookingSlot = booking?.booking_slot?.trim();
   const response = await apiClient.post<AddCartItemResponse>(
     '/shop/cart/add',
     {
       product_id: productId,
       quantity,
       ...(optionIds?.length ? { selected_option_ids: optionIds } : {}),
+      ...(bookingDate ? { booking_date: bookingDate } : {}),
+      ...(bookingSlot ? { booking_slot: bookingSlot } : {}),
     } as AddCartItemRequest,
     {
       timeout: 15000,

@@ -32,11 +32,15 @@ import {
   membershipToClientMembership,
   resolveMembershipPictureUrl,
 } from '../../services/clientMembershipService';
+import { useIsAuthenticated } from '../../store';
+import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
+import { isUnauthenticatedError } from '../../utils/invalidateClientSession';
 
 const MembershipsScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const isAuthenticated = useIsAuthenticated();
 
   const [memberships, setMemberships] = useState<ClientMembership[]>([]);
   const [current, setCurrent] = useState<MembershipCurrentSummary | null>(null);
@@ -46,12 +50,26 @@ const MembershipsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
 
   const fetchScreen = useCallback(async (isRefresh = false) => {
+    if (!isAuthenticated) {
+      setNeedsLogin(true);
+      setLoading(false);
+      setRefreshing(false);
+      setError(null);
+      setMemberships([]);
+      setCurrent(null);
+      setRenewPrice(null);
+      setHistory([]);
+      return;
+    }
+
     if (!isRefresh) setLoading(true);
     else setRefreshing(true);
     try {
       setError(null);
+      setNeedsLogin(false);
       const data = await getMembershipScreen();
       const active = data.active_membership;
       const list = Array.isArray(data.memberships) ? data.memberships : [];
@@ -65,12 +83,18 @@ const MembershipsScreen: React.FC = () => {
       setHistory(active?.history ?? []);
       setCurrency(active?.currency || 'AED');
     } catch (err: unknown) {
-      const ax = err as { response?: { data?: { message?: string } }; message?: string };
-      setError(
-        ax.response?.data?.message ||
-          ax.message ||
-          t('memberships.loadFailed', { defaultValue: 'Could not load memberships.' })
-      );
+      if (isUnauthenticatedError(err)) {
+        setNeedsLogin(true);
+        setError(null);
+      } else {
+        const ax = err as { response?: { data?: { message?: string } }; message?: string };
+        setNeedsLogin(false);
+        setError(
+          ax.response?.data?.message ||
+            ax.message ||
+            t('memberships.loadFailed', { defaultValue: 'Could not load memberships.' })
+        );
+      }
       setMemberships([]);
       setCurrent(null);
       setRenewPrice(null);
@@ -79,7 +103,7 @@ const MembershipsScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [t]);
+  }, [t, isAuthenticated]);
 
   useFocusEffect(
     useCallback(() => {
@@ -203,6 +227,26 @@ const MembershipsScreen: React.FC = () => {
       >
         {loading ? (
           <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: SPACING.xl }} />
+        ) : needsLogin || !isAuthenticated ? (
+          <View style={styles.errorBox}>
+            <Ionicons name="log-in-outline" size={36} color={COLORS.primary} />
+            <Text style={styles.errorTitle}>
+              {t('memberships.loginRequiredTitle', { defaultValue: 'Log in required' })}
+            </Text>
+            <Text style={styles.errorBody}>
+              {t('memberships.loginRequiredBody', {
+                defaultValue: 'Please log in to view and manage your membership.',
+              })}
+            </Text>
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={() => navigateToClientAuth(navigation)}
+            >
+              <Text style={styles.retryBtnText}>
+                {t('auth.login', { defaultValue: 'Log in' })}
+              </Text>
+            </TouchableOpacity>
+          </View>
         ) : error && memberships.length === 0 && !current ? (
           <View style={styles.errorBox}>
             <Ionicons name="alert-circle-outline" size={36} color={COLORS.error} />

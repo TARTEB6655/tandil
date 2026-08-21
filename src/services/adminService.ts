@@ -154,6 +154,20 @@ export interface AdminOperationalAreaSupervisor {
   name: string;
 }
 
+/** GET /admin/areas item (zones assign supervisor) */
+export interface AdminAreaItem {
+  id: number;
+  location: string | null;
+  supervisor_id: number | null;
+  supervisor_ids?: number[];
+  supervisors?: Array<{ id: number; name: string }>;
+  is_active?: boolean;
+  priority?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  service_radius_km?: number | null;
+}
+
 export interface AdminOperationalAreaItem {
   id: number;
   name: string;
@@ -1209,7 +1223,7 @@ export const adminService = {
   getAreas: async (params?: { all?: number; search?: string }): Promise<{
     success: boolean;
     message?: string;
-    data: Array<{ id: number; location: string | null; supervisor_id: number | null }>;
+    data: AdminAreaItem[];
     total?: number;
   }> => {
     const response = await apiClient.get('/admin/areas', {
@@ -1223,7 +1237,7 @@ export const adminService = {
   getArea: async (areaId: number): Promise<{
     success: boolean;
     message?: string;
-    data: { id: number; location: string | null; supervisor_id: number | null };
+    data: AdminAreaItem;
   }> => {
     const response = await apiClient.get(`/admin/areas/${areaId}`, { timeout: 15000 });
     return response.data;
@@ -1245,6 +1259,18 @@ export const adminService = {
   /** Delete area: DELETE /admin/areas/:area_id */
   deleteArea: async (areaId: number): Promise<{ success: boolean; message?: string }> => {
     const response = await apiClient.delete(`/admin/areas/${areaId}`, { timeout: 15000 });
+    return response.data;
+  },
+
+  /** Remove supervisor from area: DELETE /admin/areas/:area_id/supervisors/:supervisor_id */
+  removeAreaSupervisor: async (
+    areaId: number,
+    supervisorId: number
+  ): Promise<{ success: boolean; message?: string }> => {
+    const response = await apiClient.delete(
+      `/admin/areas/${areaId}/supervisors/${supervisorId}`,
+      { timeout: 15000 }
+    );
     return response.data;
   },
 

@@ -64,6 +64,7 @@ import {
 } from '../../services/clientMembershipService';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { useIsAuthenticated } from '../../store';
+import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import {
   type DashboardWeatherPermission,
   getCachedDashboardWeather,
@@ -159,11 +160,6 @@ const HomeScreen: React.FC = () => {
   );
 
   const recentOrders = Array.isArray(orders) ? orders.slice(0, 3) : [];
-  // Extract first order that has before/after photos in its tracking (if any)
-  const orderWithPhotos: any | undefined = Array.isArray(orders)
-    ? orders.find((o: any) => Array.isArray(o.tracking) && o.tracking.some((t: any) => t.photos && ((t.photos.before && t.photos.before.length) || (t.photos.after && t.photos.after.length))))
-    : undefined;
-  const photoStep: any | undefined = orderWithPhotos?.tracking?.find((t: any) => t.photos && ((t.photos.before && t.photos.before.length) || (t.photos.after && t.photos.after.length)));
   
   // Ensure orders are initialized
   useEffect(() => {
@@ -975,7 +971,13 @@ const HomeScreen: React.FC = () => {
       {/* Membership */}
       <TouchableOpacity
         style={styles.membershipCard}
-        onPress={() => navigation.navigate('Memberships')}
+        onPress={() => {
+          if (!isAuthenticated) {
+            navigateToClientAuth(navigation);
+            return;
+          }
+          navigation.navigate('Memberships');
+        }}
         activeOpacity={0.9}
       >
         <View style={styles.membershipDecor} />
@@ -1034,7 +1036,7 @@ const HomeScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
 
-      {/* Maintenance Photos – GET /api/maintenance-photos?per_page=20 */}
+      {/* Maintenance Photos – GET /api/maintenance-photos?per_page=20; View Order opens Orders tab */}
       {(() => {
         const pairs = maintenancePhotos
           .map((photo) => {
@@ -1055,15 +1057,13 @@ const HomeScreen: React.FC = () => {
               <Text style={[styles.sectionTitle, styles.sectionTitleInHeader]}>
                 {t('home.maintenancePhotos')}
               </Text>
-              {orderWithPhotos?.id ? (
-                <TouchableOpacity
-                  style={styles.viewAllButton}
-                  onPress={() => navigation.navigate('OrderTracking', { orderId: orderWithPhotos.id })}
-                >
-                  <Text style={styles.viewAllText}>{t('home.viewOrder')}</Text>
-                  <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
-                </TouchableOpacity>
-              ) : null}
+              <TouchableOpacity
+                style={styles.viewAllButton}
+                onPress={() => navigation.navigate('Orders' as never)}
+              >
+                <Text style={styles.viewAllText}>{t('home.viewOrder')}</Text>
+                <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
+              </TouchableOpacity>
             </View>
 
             {maintenancePhotosLoading && pairs.length === 0 ? (

@@ -26,6 +26,42 @@ export interface ShopCategoriesResponse {
   data: ShopProductCategory[];
 }
 
+export interface ShopProductBookingDate {
+  date: string;
+  day?: string;
+  day_number?: number;
+  month?: string;
+  available: boolean;
+}
+
+export interface ShopProductBookingSlot {
+  id: number | string;
+  time: string;
+  start_time?: string;
+  end_time?: string;
+  duration_minutes?: number;
+  booked_count?: number;
+  remaining?: number;
+  max_bookings?: number;
+  blocked?: boolean;
+  available: boolean;
+}
+
+/** Booking calendar from GET /shop/products/:id (`data.booking`). */
+export interface ShopProductBooking {
+  enabled: boolean;
+  product_id?: number;
+  slot_source?: string;
+  capacity_scope?: string;
+  date_selection_required?: boolean;
+  time_selection_required?: boolean;
+  max_bookings_per_slot?: number;
+  max_bookings_per_day?: number;
+  dates?: ShopProductBookingDate[];
+  selected_date?: string | null;
+  slots?: ShopProductBookingSlot[];
+}
+
 export interface ShopProduct {
   id: number;
   category_id?: number | null;
@@ -77,6 +113,8 @@ export interface ShopProduct {
       sort_order?: number;
     }>;
   }>;
+  /** From GET /shop/products/:id — preferred date & time slots. */
+  booking?: ShopProductBooking | null;
   /** From GET /shop/products/:id — show Compare vendors button when available is true. */
   compare_vendors?: {
     available?: boolean;
@@ -168,12 +206,23 @@ export const shopService = {
     }
   },
 
-  /** GET /shop/products/:product_id – public. Returns single product details. */
-  getProductById: async (productId: string | number): Promise<ShopProduct | null> => {
+  /**
+   * GET /shop/products/:product_id – public.
+   * Optional `date` (YYYY-MM-DD) refreshes `booking.slots` for that day.
+   */
+  getProductById: async (
+    productId: string | number,
+    options?: { date?: string }
+  ): Promise<ShopProduct | null> => {
     try {
-      const response = await publicApiClient.get<ShopProductDetailResponse>(`/shop/products/${productId}`, {
-        timeout: 15000,
-      });
+      const date = options?.date?.trim();
+      const response = await publicApiClient.get<ShopProductDetailResponse>(
+        `/shop/products/${productId}`,
+        {
+          timeout: 15000,
+          params: date ? { date } : undefined,
+        }
+      );
       const data = (response?.data as any)?.data ?? null;
       return data ? normalizeShopProduct(data) : null;
     } catch (_) {

@@ -8,6 +8,7 @@ import {
   FlatList,
   ActivityIndicator,
   Modal,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,9 +25,30 @@ import {
   getSupervisorTeam,
   SupervisorTeamMember,
   getSupervisorNotifications,
+  getSupervisorNewAssignments,
+  claimSupervisorAssignment,
+  rejectSupervisorNewAssignment,
+  SupervisorAssignment,
 } from '../../services/supervisorService';
 
 const DASHBOARD_REPORTS_LIMIT = 3;
+const DASHBOARD_NEW_JOBS_LIMIT = 3;
+
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+function formatTimeSlot(slot: SupervisorAssignment['time_slot']): string | null {
+  if (!slot) return null;
+  if (typeof slot === 'string') return slot;
+  const start = slot.start_time || slot.start;
+  const end = slot.end_time || slot.end;
+  if (start && end) return `${start} - ${end}`;
+  return start || end || null;
+}
 
 function formatSubmittedAt(iso: string, t: TFunction): string {
   try {
@@ -62,7 +84,10 @@ const SupervisorDashboardScreen: React.FC = () => {
   const [profileImageError, setProfileImageError] = useState(false);
   const [reports, setReports] = useState<SupervisorReportItem[]>([]);
   const [teamMembers, setTeamMembers] = useState<SupervisorTeamMember[]>([]);
+  const [newJobs, setNewJobs] = useState<SupervisorAssignment[]>([]);
+  const [newJobsTotal, setNewJobsTotal] = useState(0);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -74,12 +99,15 @@ const SupervisorDashboardScreen: React.FC = () => {
         getSupervisorReports(1, 20),
         getSupervisorTeam(),
         getSupervisorNotifications({ per_page: 20, page: 1 }).catch(() => null),
+        getSupervisorNewAssignments({ per_page: 20 }).catch(() => ({ list: [], total: 0, lastPage: 1 })),
       ])
-        .then(([summaryData, reportsResult, teamList, notifPayload]) => {
+        .then(([summaryData, reportsResult, teamList, notifPayload, newJobsResult]) => {
           if (!cancelled) {
             setSummary(summaryData ?? null);
             setReports(reportsResult.list);
             setTeamMembers(teamList ?? []);
+            setNewJobs(newJobsResult.list ?? []);
+            setNewJobsTotal(newJobsResult.total ?? newJobsResult.list?.length ?? 0);
             setUnreadNotificationsCount(
               notifPayload && typeof notifPayload === 'object' && 'unreadCount' in notifPayload
                 ? notifPayload.unreadCount
@@ -92,6 +120,8 @@ const SupervisorDashboardScreen: React.FC = () => {
             setSummary(null);
             setReports([]);
             setTeamMembers([]);
+            setNewJobs([]);
+            setNewJobsTotal(0);
             setUnreadNotificationsCount(0);
           }
         })
@@ -101,6 +131,57 @@ const SupervisorDashboardScreen: React.FC = () => {
       return () => { cancelled = true; };
     }, [])
   );
+
+  const handleNewJobAction = (job: SupervisorAssignment, action: 'accept' | 'reject') => {
+    const title = job.title || job.service_name;
+    Alert.alert(
+      action === 'accept' ? t('supervisorDashboard.accept') : t('supervisorDashboard.reject'),
+      action === 'accept'
+        ? `Accept job “${title}”?`
+        : `Reject job “${title}”?`,
+      [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: action === 'accept' ? t('supervisorDashboard.accept') : t('supervisorDashboard.reject'),
+          style: action === 'reject' ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              setActionLoadingId(job.id);
+              const result =
+                action === 'accept'
+                  ? await claimSupervisorAssignment(job.id)
+                  : await rejectSupervisorNewAssignment(job.id);
+              if (!result.success) {
+                Alert.alert(
+                  t('common.error', { defaultValue: 'Error' }),
+                  result.message || t('common.somethingWentWrong', { defaultValue: 'Something went wrong.' })
+                );
+                return;
+              }
+              setNewJobs((prev) => prev.filter((item) => item.id !== job.id));
+              setNewJobsTotal((prev) => Math.max(0, prev - 1));
+              Alert.alert(
+                action === 'accept' ? t('supervisorDashboard.jobAccepted') : t('supervisorDashboard.jobRejected'),
+                result.message ||
+                  (action === 'accept'
+                    ? t('supervisorDashboard.jobAcceptedMessage')
+                    : t('supervisorDashboard.jobRejectedMessage'))
+              );
+            } catch (err: any) {
+              Alert.alert(
+                t('common.error', { defaultValue: 'Error' }),
+                err?.response?.data?.message ||
+                  err?.message ||
+                  t('common.somethingWentWrong', { defaultValue: 'Something went wrong.' })
+              );
+            } finally {
+              setActionLoadingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const supervisor = summary
     ? {
@@ -125,6 +206,99 @@ const SupervisorDashboardScreen: React.FC = () => {
   const teamPreview = teamMembers.slice(0, 3);
   const pendingReportsPreview = reports.slice(0, DASHBOARD_REPORTS_LIMIT);
   const pendingReportsTotal = reports.length;
+  const newJobsPreview = newJobs.slice(0, DASHBOARD_NEW_JOBS_LIMIT);
+
+  const renderNewJob = ({ item }: { item: SupervisorAssignment }) => {
+    const loadingThis = actionLoadingId === item.id;
+    const slot = formatTimeSlot(item.time_slot) || item.job_time;
+    const showClaim = item.can_claim !== false;
+    const showReject = item.can_reject !== false;
+
+    return (
+      <TouchableOpacity
+        style={styles.newJobCard}
+        activeOpacity={0.85}
+        onPress={() =>
+          navigation.navigate('SupervisorNewJobDetail' as never, { jobId: item.id, job: item } as never)
+        }
+      >
+        <View style={styles.newJobHeader}>
+          <View style={styles.newJobIconWrap}>
+            <Ionicons name="briefcase-outline" size={20} color={COLORS.primary} />
+          </View>
+          <View style={styles.newJobInfo}>
+            <Text style={styles.newJobTitle} numberOfLines={1}>
+              {item.title || item.service_name}
+            </Text>
+            <Text style={styles.newJobService} numberOfLines={1}>
+              {item.service_name}
+            </Text>
+          </View>
+          <View style={styles.newJobStatusBadge}>
+            <Text style={styles.newJobStatusText}>{item.status}</Text>
+          </View>
+        </View>
+
+        {item.client_name ? (
+          <View style={styles.newJobDetailRow}>
+            <Ionicons name="person-outline" size={14} color={COLORS.textSecondary} />
+            <Text style={styles.newJobDetailText} numberOfLines={1}>{item.client_name}</Text>
+          </View>
+        ) : null}
+        {item.location ? (
+          <View style={styles.newJobDetailRow}>
+            <Ionicons name="navigate-outline" size={14} color={COLORS.textSecondary} />
+            <Text style={styles.newJobDetailText} numberOfLines={1}>{item.location}</Text>
+          </View>
+        ) : null}
+        {slot ? (
+          <View style={styles.newJobDetailRow}>
+            <Ionicons name="time-outline" size={14} color={COLORS.textSecondary} />
+            <Text style={styles.newJobDetailText} numberOfLines={1}>{slot}</Text>
+          </View>
+        ) : null}
+        <View style={styles.newJobDetailRow}>
+          <Ionicons name="timer-outline" size={14} color={COLORS.textSecondary} />
+          <Text style={styles.newJobDetailText}>{formatDuration(item.duration_minutes)}</Text>
+        </View>
+        <View style={styles.newJobDetailRow}>
+          <Ionicons name="cash-outline" size={14} color={COLORS.primary} />
+          <Text style={[styles.newJobDetailText, styles.newJobPrice]}>
+            {item.price_display || `AED ${item.price}`}
+          </Text>
+        </View>
+
+        {(showClaim || showReject) ? (
+          <View style={styles.newJobActions}>
+            {showReject ? (
+              <TouchableOpacity
+                style={[styles.newJobActionBtn, styles.newJobRejectBtn]}
+                disabled={loadingThis}
+                onPress={() => handleNewJobAction(item, 'reject')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.newJobRejectText}>{t('supervisorDashboard.reject')}</Text>
+              </TouchableOpacity>
+            ) : null}
+            {showClaim ? (
+              <TouchableOpacity
+                style={[styles.newJobActionBtn, styles.newJobAcceptBtn]}
+                disabled={loadingThis}
+                onPress={() => handleNewJobAction(item, 'accept')}
+                activeOpacity={0.8}
+              >
+                {loadingThis ? (
+                  <ActivityIndicator size="small" color={COLORS.background} />
+                ) : (
+                  <Text style={styles.newJobAcceptText}>{t('supervisorDashboard.accept')}</Text>
+                )}
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+      </TouchableOpacity>
+    );
+  };
 
   const renderTeamMember = ({ item }: { item: SupervisorTeamMember }) => {
     const isActive = (item.status || '').toLowerCase() === 'active';
@@ -298,6 +472,33 @@ const SupervisorDashboardScreen: React.FC = () => {
             <Text style={styles.statValue}>{loading && !summary ? '—' : supervisor.completedToday}</Text>
             <Text style={styles.statLabel}>{t('supervisorDashboard.completed')}</Text>
           </View>
+        </View>
+
+        {/* New Jobs – GET /supervisor/assignments/new */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t('supervisorDashboard.newJobs')}</Text>
+            <TouchableOpacity
+              style={styles.sectionCountRow}
+              onPress={() => navigation.navigate('SupervisorZoneOrders' as never)}
+            >
+              <Text style={styles.sectionCount}>{newJobsTotal}</Text>
+              <Text style={styles.viewAllText}>{t('supervisorDashboard.viewAll')}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {newJobsPreview.length === 0 ? (
+            <View style={styles.emptyNewJobs}>
+              <Text style={styles.emptyNewJobsText}>{t('supervisorDashboard.noNewJobs')}</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={newJobsPreview}
+              renderItem={renderNewJob}
+              keyExtractor={(item) => String(item.id)}
+              scrollEnabled={false}
+            />
+          )}
         </View>
 
         {/* Pending Field Reports – first 3, View All shows rest on Reports tab */}
@@ -537,6 +738,110 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.primary,
     fontWeight: FONT_WEIGHTS.medium,
+  },
+  newJobCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  newJobHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  newJobIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  newJobInfo: {
+    flex: 1,
+  },
+  newJobTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+  },
+  newJobService: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    marginTop: 2,
+  },
+  newJobStatusBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.warning + '20',
+  },
+  newJobStatusText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.medium,
+    color: COLORS.warning,
+    textTransform: 'capitalize',
+  },
+  newJobDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.xs,
+  },
+  newJobDetailText: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+  },
+  newJobPrice: {
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  newJobActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  newJobActionBtn: {
+    flex: 1,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.sm,
+  },
+  newJobRejectBtn: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.error,
+  },
+  newJobAcceptBtn: {
+    backgroundColor: COLORS.primary,
+  },
+  newJobRejectText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.error,
+  },
+  newJobAcceptText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.background,
+  },
+  emptyNewJobs: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    alignItems: 'center',
+  },
+  emptyNewJobsText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
   reportCard: {
     backgroundColor: COLORS.surface,

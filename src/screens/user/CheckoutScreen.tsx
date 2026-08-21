@@ -94,11 +94,15 @@ const CheckoutScreen: React.FC = () => {
     buyNowSummary = null,
     isBuyNow = false,
     selectedOptionIds = [],
+    scheduledDate = null,
+    scheduledTime = null,
   } = route.params || {
     cartItems: [],
     buyNowSummary: null,
     isBuyNow: false,
     selectedOptionIds: [],
+    scheduledDate: null,
+    scheduledTime: null,
   };
   
   const [currentStep, setCurrentStep] = useState<'location' | 'payment'>('location');
@@ -428,12 +432,18 @@ const CheckoutScreen: React.FC = () => {
       country: shippingAddress.country.trim(),
     };
     const couponCode = useCouponStore.getState().appliedCode?.trim().toUpperCase() ?? '';
+    const bookingDate =
+      typeof scheduledDate === 'string' ? scheduledDate.trim() : '';
+    const bookingSlot =
+      typeof scheduledTime === 'string' ? scheduledTime.trim() : '';
     let paymentIntentBody: CreatePaymentIntentBody = {
       is_buy_now: !!isBuyNow,
       coupon_code: couponCode,
       use_wallet: applyWallet,
       wallet_amount: Math.max(0, Math.round(appliedPreview * 100) / 100),
       shipping: shippingPayload,
+      ...(bookingDate ? { booking_date: bookingDate } : {}),
+      ...(bookingSlot ? { booking_slot: bookingSlot } : {}),
     };
     if (isBuyNow && first) {
       const pid = Number(first.productId);

@@ -16,7 +16,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
-import { shopService, ShopProduct, isShopProductInStock } from '../../services/shopService';
+import { shopService, ShopProduct, isShopProductInStock, resolveShopProductStock } from '../../services/shopService';
 import { addCartItem, getBuyNowSummary } from '../../services/cartService';
 import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
 import { useIsAuthenticated } from '../../store';
@@ -30,13 +30,12 @@ import {
 } from '../../utils/productSelectedOptions';
 import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import type { ProductCustomizationConfig } from '../../types/productCustomization';
-import type { AvailableSlot } from '../../types/scheduling';
 import { formatDisplayDate } from '../../services/schedulingMockService';
 import {
-  getClientScheduleWeek,
-  todayIso,
-  type ClientScheduleDay,
-} from '../../services/clientAvailableSlotsService';
+  isPastBookingSlotInDubai,
+  parseSlotLabelToMinutes,
+  splitSlotLabel,
+} from '../../utils/dubaiTime';
 
 const mapApiOptionGroupsToCustomization = mapShopApiOptionGroupsToCustomization;
 
@@ -52,6 +51,8 @@ export type ProductDetailDisplay = {
   image: string;
   badge: string;
   inStock: boolean;
+  /** Available stock units from shop API (caps quantity picker). */
+  stock?: number;
   description?: string;
   features?: string[];
   estimatedArrival?: string;
@@ -82,6 +83,7 @@ function shopProductToDisplay(p: ShopProduct | null): ProductDetailDisplay | nul
     image,
     badge: '',
     inStock: isShopProductInStock(p),
+    stock: resolveShopProductStock(p),
     description: p.description ?? undefined,
     features: [],
     estimatedArrival: p.estimated_arrival ?? undefined,
@@ -102,60 +104,74 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   const [buyNowOrderTotal, setBuyNowOrderTotal] = useState<number | null>(null);
   const [customization, setCustomization] = useState<ProductCustomizationConfig | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
-  /** Job scheduling — GET /visits/available-slots */
-  const [weekAnchorIso, setWeekAnchorIso] = useState(todayIso());
-  const [weekDays, setWeekDays] = useState<ClientScheduleDay[]>([]);
+  /** Booking from GET /shop/products/:id (`data.booking`) */
   const [selectedDateIso, setSelectedDateIso] = useState<string | null>(null);
   const [selectedSlotLabel, setSelectedSlotLabel] = useState<string>('');
   const [slotsLoading, setSlotsLoading] = useState(false);
-  const [weekError, setWeekError] = useState<string | null>(null);
   const isAuthenticated = useIsAuthenticated();
   const { count: cartItemCount, refresh: refreshCartBadge } = useCartBadgeCount();
 
-  const loadScheduleWeek = useCallback(async (anchor: string, preferDate?: string | null) => {
-    setSlotsLoading(true);
-    setWeekError(null);
-    try {
-      const days = await getClientScheduleWeek(anchor);
-      setWeekDays(days);
-      const preferred =
-        preferDate && days.some((d) => d.date === preferDate && d.selectable)
-          ? preferDate
-          : days.find((d) => d.selectable)?.date ?? null;
-      setSelectedDateIso(preferred);
-      setSelectedSlotLabel('');
-    } catch (e: unknown) {
-      setWeekDays([]);
-      setSelectedDateIso(null);
-      setSelectedSlotLabel('');
-      setWeekError(e instanceof Error ? e.message : 'Could not load available dates.');
-    } finally {
-      setSlotsLoading(false);
-    }
-  }, []);
+  const booking = apiProduct?.booking ?? null;
+  const bookingEnabled = Boolean(booking?.enabled);
+  const bookingDates = booking?.dates ?? [];
+  const bookingSlots = useMemo(() => {
+    const slots = booking?.slots ?? [];
+    return [...slots].sort((a, b) => {
+      const am = parseSlotLabelToMinutes(a.time) ?? Number.MAX_SAFE_INTEGER;
+      const bm = parseSlotLabelToMinutes(b.time) ?? Number.MAX_SAFE_INTEGER;
+      return am - bm;
+    });
+  }, [booking?.slots]);
 
-  useEffect(() => {
-    void loadScheduleWeek(weekAnchorIso);
-  }, [weekAnchorIso, loadScheduleWeek]);
-
-  const selectedDay = useMemo(
-    () => weekDays.find((d) => d.date === selectedDateIso) ?? null,
-    [weekDays, selectedDateIso]
+  const selectDate = useCallback(
+    async (date: string, available: boolean) => {
+      if (!available || !initialProduct?.id) return;
+      if (selectedDateIso === date) return;
+      setSelectedDateIso(date);
+      setSelectedSlotLabel('');
+      setSlotsLoading(true);
+      try {
+        const data = await shopService.getProductById(initialProduct.id, { date });
+        if (data) {
+          setApiProduct(data);
+          const nextSelected = data.booking?.selected_date || date;
+          setSelectedDateIso(nextSelected);
+        }
+      } finally {
+        setSlotsLoading(false);
+      }
+    },
+    [initialProduct?.id, selectedDateIso]
   );
-  const scheduleSlots: AvailableSlot[] = selectedDay?.slots ?? [];
 
-  const shiftWeek = (delta: number) => {
-    const d = new Date(weekAnchorIso + 'T12:00:00');
-    d.setDate(d.getDate() + delta * 7);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    setWeekAnchorIso(iso);
-  };
-
-  const selectDate = (day: ClientScheduleDay) => {
-    if (!day.selectable) return;
-    setSelectedDateIso(day.date);
-    setSelectedSlotLabel('');
-  };
+  const shiftWeek = useCallback(
+    async (delta: number) => {
+      if (!initialProduct?.id || !bookingDates.length) return;
+      const first = bookingDates[0]?.date;
+      if (!first) return;
+      const d = new Date(first + 'T12:00:00');
+      d.setDate(d.getDate() + delta * 7);
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      setSelectedSlotLabel('');
+      setSlotsLoading(true);
+      try {
+        const data = await shopService.getProductById(initialProduct.id, { date: iso });
+        if (data) {
+          setApiProduct(data);
+          const dates = data.booking?.dates ?? [];
+          const preferred =
+            data.booking?.selected_date ||
+            dates.find((day) => day.available)?.date ||
+            dates[0]?.date ||
+            null;
+          setSelectedDateIso(preferred);
+        }
+      } finally {
+        setSlotsLoading(false);
+      }
+    },
+    [bookingDates, initialProduct?.id]
+  );
 
   useEffect(() => {
     const id = initialProduct?.id;
@@ -168,12 +184,28 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     shopService
       .getProductById(id)
       .then((data) => {
-        if (!cancelled) setApiProduct(data);
+        if (cancelled) return;
+        setApiProduct(data);
+        const b = data?.booking;
+        if (b?.enabled) {
+          const preferred =
+            b.selected_date ||
+            b.dates?.find((day) => day.available)?.date ||
+            b.dates?.[0]?.date ||
+            null;
+          setSelectedDateIso(preferred);
+          setSelectedSlotLabel('');
+        } else {
+          setSelectedDateIso(null);
+          setSelectedSlotLabel('');
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [initialProduct?.id]);
 
   const product = useMemo(() => {
@@ -187,9 +219,43 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     return initialProduct;
   }, [apiProduct, initialProduct]);
 
+  const maxQuantity = useMemo(() => {
+    const stockSource = apiProduct ?? null;
+    if (stockSource) {
+      const trackOff =
+        stockSource.track_quantity === false ||
+        stockSource.track_quantity === 0 ||
+        stockSource.track_quantity === '0';
+      const allowBackorder =
+        stockSource.allow_backorder === true ||
+        stockSource.allow_backorder === 1 ||
+        stockSource.allow_backorder === '1';
+      if (trackOff || allowBackorder) {
+        const stock = resolveShopProductStock(stockSource);
+        return Math.max(stock > 0 ? stock : 9999, 1);
+      }
+      return Math.max(1, resolveShopProductStock(stockSource));
+    }
+    const routeStock = Number(product?.stock);
+    if (Number.isFinite(routeStock) && routeStock > 0) return routeStock;
+    return product?.inStock ? 9999 : 1;
+  }, [apiProduct, product?.stock, product?.inStock]);
+
+  useEffect(() => {
+    setQuantity((q) => Math.min(Math.max(1, q), maxQuantity));
+  }, [maxQuantity]);
+
   useEffect(() => {
     getShopSettings().then(setShopSettings).catch(() => setShopSettings(null));
   }, []);
+
+  // Clear selection if today's chosen slot has already passed (Asia/Dubai).
+  useEffect(() => {
+    if (!selectedDateIso || !selectedSlotLabel) return;
+    if (isPastBookingSlotInDubai(selectedDateIso, selectedSlotLabel)) {
+      setSelectedSlotLabel('');
+    }
+  }, [selectedDateIso, selectedSlotLabel, bookingSlots]);
 
   useEffect(() => {
     const cfg = mapApiOptionGroupsToCustomization(apiProduct?.option_groups);
@@ -294,7 +360,9 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   };
 
   const ensureScheduleSelected = (): boolean => {
-    if (!selectedDateIso || !selectedSlotLabel || !selectedDay?.selectable) {
+    if (!bookingEnabled) return true;
+    const selectedDate = bookingDates.find((d) => d.date === selectedDateIso);
+    if (!selectedDateIso || !selectedSlotLabel || !selectedDate?.available) {
       Alert.alert(
         t('product.scheduleRequiredTitle', { defaultValue: 'Select date & time' }),
         t('product.scheduleRequiredBody', {
@@ -303,8 +371,8 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
       );
       return false;
     }
-    const slot = scheduleSlots.find((s) => s.label === selectedSlotLabel);
-    if (!slot || slot.status !== 'available') {
+    const slot = bookingSlots.find((s) => s.time === selectedSlotLabel);
+    if (!slot || !slot.available || slot.blocked || isPastBookingSlotInDubai(selectedDateIso, selectedSlotLabel)) {
       Alert.alert(
         t('product.scheduleRequiredTitle', { defaultValue: 'Select date & time' }),
         t('product.slotUnavailable', {
@@ -373,7 +441,11 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
       await addCartItem(
         productId,
         quantity,
-        mustSendOptions || selectedOptionIds.length > 0 ? selectedOptionIds : undefined
+        mustSendOptions || selectedOptionIds.length > 0 ? selectedOptionIds : undefined,
+        {
+          booking_date: selectedDateIso || undefined,
+          booking_slot: selectedSlotLabel || undefined,
+        }
       );
       refreshCartBadge(true);
       Alert.alert(
@@ -524,7 +596,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   };
 
   const increaseQuantity = () => {
-    if (quantity < 10) {
+    if (quantity < maxQuantity) {
       setQuantity(quantity + 1);
     }
   };
@@ -678,12 +750,12 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
               <TouchableOpacity
                 style={styles.quantityButton}
                 onPress={increaseQuantity}
-                disabled={quantity >= 10}
+                disabled={quantity >= maxQuantity}
               >
                 <Ionicons 
                   name="add" 
                   size={20} 
-                  color={quantity >= 10 ? COLORS.border : COLORS.text} 
+                  color={quantity >= maxQuantity ? COLORS.border : COLORS.text} 
                 />
               </TouchableOpacity>
             </View>
@@ -729,7 +801,8 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
             </View>
           ) : null}
 
-          {/* Job scheduling — GET /visits/available-slots */}
+          {/* Preferred date & time — from product detail `booking` */}
+          {bookingEnabled ? (
           <View style={styles.scheduleSection}>
             <Text style={styles.sectionTitle}>
               {t('product.scheduleTitle', { defaultValue: 'Preferred date & time' })}
@@ -745,25 +818,24 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
             </View>
 
             <View style={styles.scheduleWeekHeader}>
-              <TouchableOpacity onPress={() => shiftWeek(-1)} style={styles.scheduleWeekNav} hitSlop={10}>
+              <TouchableOpacity onPress={() => void shiftWeek(-1)} style={styles.scheduleWeekNav} hitSlop={10}>
                 <Ionicons name="chevron-back" size={18} color={COLORS.primary} />
               </TouchableOpacity>
               <Text style={styles.scheduleLabel}>
                 {t('product.scheduleDate', { defaultValue: 'Date' })}
               </Text>
-              <TouchableOpacity onPress={() => shiftWeek(1)} style={styles.scheduleWeekNav} hitSlop={10}>
+              <TouchableOpacity onPress={() => void shiftWeek(1)} style={styles.scheduleWeekNav} hitSlop={10}>
                 <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
               </TouchableOpacity>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scheduleChipsScroll}>
               <View style={styles.scheduleChipsRow}>
-                {weekDays.map((day) => {
-                  const d = new Date(day.date + 'T12:00:00');
-                  const weekday = d.toLocaleDateString('en-US', { weekday: 'short' });
-                  const dayNum = String(d.getDate());
-                  const month = d.toLocaleDateString('en-US', { month: 'short' });
+                {bookingDates.map((day) => {
+                  const weekday = day.day || new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+                  const dayNum = day.day_number != null ? String(day.day_number) : String(new Date(day.date + 'T12:00:00').getDate());
+                  const month = day.month || new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short' });
                   const active = selectedDateIso === day.date;
-                  const unavailable = !day.selectable;
+                  const unavailable = !day.available;
                   return (
                     <TouchableOpacity
                       key={day.date}
@@ -772,9 +844,9 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
                         active && styles.scheduleDateChipActive,
                         unavailable && styles.scheduleDateChipUnavailable,
                       ]}
-                      onPress={() => selectDate(day)}
+                      onPress={() => void selectDate(day.date, day.available)}
                       activeOpacity={unavailable ? 1 : 0.85}
-                      disabled={unavailable}
+                      disabled={unavailable || slotsLoading}
                     >
                       <Text
                         style={[
@@ -808,60 +880,104 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
                 })}
               </View>
             </ScrollView>
-            {weekError ? <Text style={styles.scheduleEmpty}>{weekError}</Text> : null}
 
-            <Text style={[styles.scheduleLabel, { marginTop: SPACING.md }]}>
-              {t('product.scheduleTime', { defaultValue: 'Time slot' })}
-            </Text>
+            <View style={styles.scheduleTimeHeader}>
+              <Text style={styles.scheduleLabel}>
+                {t('product.scheduleTime', { defaultValue: 'Time slot' })}
+              </Text>
+              {selectedSlotLabel ? (
+                <View style={styles.scheduleSelectedPill}>
+                  <Ionicons name="checkmark-circle" size={14} color={COLORS.primary} />
+                  <Text style={styles.scheduleSelectedPillText}>{selectedSlotLabel}</Text>
+                </View>
+              ) : null}
+            </View>
             {slotsLoading ? (
               <ActivityIndicator color={COLORS.primary} style={{ marginVertical: SPACING.sm }} />
-            ) : !selectedDay ? (
+            ) : !selectedDateIso ? (
               <Text style={styles.scheduleEmpty}>
                 {t('product.noSlots', { defaultValue: 'No slots for this day.' })}
               </Text>
-            ) : !selectedDay.selectable ? (
+            ) : bookingDates.find((d) => d.date === selectedDateIso)?.available === false ? (
               <Text style={styles.scheduleEmpty}>
                 {t('product.dateUnavailable', {
                   defaultValue: 'This date is not available for booking.',
                 })}
               </Text>
-            ) : scheduleSlots.length === 0 ? (
+            ) : bookingSlots.length === 0 ? (
               <Text style={styles.scheduleEmpty}>
                 {t('product.noSlots', { defaultValue: 'No slots for this day.' })}
               </Text>
             ) : (
               <View style={styles.scheduleSlotsWrap}>
-                {scheduleSlots.map((slot) => {
-                  const available = slot.status === 'available';
-                  const selected = selectedSlotLabel === slot.label;
+                {bookingSlots.map((slot) => {
+                  const past = isPastBookingSlotInDubai(selectedDateIso, slot.time);
+                  const available = Boolean(slot.available) && !slot.blocked && !past;
+                  const selected = selectedSlotLabel === slot.time && available;
+                  const { clock, period } = splitSlotLabel(slot.time);
                   return (
                     <TouchableOpacity
-                      key={slot.id}
+                      key={String(slot.id)}
                       style={[
                         styles.scheduleChip,
-                        available ? styles.scheduleChipAvailable : styles.scheduleChipUnavailable,
+                        past
+                          ? styles.scheduleChipPast
+                          : available
+                            ? styles.scheduleChipAvailable
+                            : styles.scheduleChipUnavailable,
                         selected && styles.scheduleChipActive,
                       ]}
                       disabled={!available}
-                      onPress={() => setSelectedSlotLabel(slot.label)}
+                      onPress={() => setSelectedSlotLabel(slot.time)}
+                      activeOpacity={0.85}
                     >
-                      <Text
-                        style={[
-                          styles.scheduleChipText,
-                          available
-                            ? styles.scheduleChipTextAvailable
-                            : styles.scheduleUnavailableText,
-                          selected && styles.scheduleChipTextActive,
-                        ]}
-                      >
-                        {slot.label}
-                      </Text>
+                      <View style={styles.scheduleChipInner}>
+                        <Text
+                          style={[
+                            styles.scheduleChipClock,
+                            past
+                              ? styles.scheduleChipTextPast
+                              : available
+                                ? styles.scheduleChipTextAvailable
+                                : styles.scheduleUnavailableText,
+                            selected && styles.scheduleChipTextActive,
+                          ]}
+                        >
+                          {clock}
+                        </Text>
+                        {period ? (
+                          <Text
+                            style={[
+                              styles.scheduleChipPeriod,
+                              past
+                                ? styles.scheduleChipTextPast
+                                : available
+                                  ? styles.scheduleChipPeriodAvailable
+                                  : styles.scheduleUnavailableText,
+                              selected && styles.scheduleChipPeriodActive,
+                            ]}
+                          >
+                            {period}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {selected ? (
+                        <View style={styles.scheduleChipCheck}>
+                          <Ionicons name="checkmark" size={12} color={COLORS.background} />
+                        </View>
+                      ) : null}
+                      {past ? (
+                        <Text style={styles.scheduleChipPastTag}>
+                          {t('product.slotPassed', { defaultValue: 'Passed' })}
+                        </Text>
+                      ) : null}
                     </TouchableOpacity>
                   );
                 })}
               </View>
             )}
           </View>
+          ) : null}
 
           {customization?.groups?.length ? (
             <View style={styles.customizationSection}>
@@ -1364,7 +1480,29 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
+    marginBottom: 0,
+  },
+  scheduleTimeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: SPACING.md,
     marginBottom: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  scheduleSelectedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primary + '14',
+    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+  },
+  scheduleSelectedPillText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
   },
   scheduleChipsScroll: {
     marginBottom: SPACING.xs,
@@ -1436,33 +1574,77 @@ const styles = StyleSheet.create({
   scheduleSlotsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.sm,
+    justifyContent: 'space-between',
+    rowGap: SPACING.sm,
   },
   scheduleChip: {
+    width: '48.5%',
+    minHeight: 64,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm + 2,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1.5,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
     borderColor: COLORS.border,
-    minWidth: 88,
     alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    shadowColor: '#1c4b27',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  scheduleChipInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scheduleChipAvailable: {
-    backgroundColor: COLORS.primary + '14',
-    borderColor: COLORS.primary,
+    backgroundColor: COLORS.surfaceLight,
+    borderColor: COLORS.primary + '55',
   },
   scheduleChipActive: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 3,
   },
   scheduleChipUnavailable: {
+    backgroundColor: '#F3F4F6',
+    borderColor: COLORS.border,
+    opacity: 0.85,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  scheduleChipPast: {
     backgroundColor: '#FEF2F2',
-    borderColor: COLORS.error,
-    opacity: 1,
+    borderColor: '#FECACA',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   scheduleChipDisabled: {
     opacity: 0.45,
+  },
+  scheduleChipClock: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+    letterSpacing: 0.2,
+  },
+  scheduleChipPeriod: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.textSecondary,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  scheduleChipPeriodAvailable: {
+    color: COLORS.primaryLight,
+  },
+  scheduleChipPeriodActive: {
+    color: 'rgba(255,255,255,0.85)',
   },
   scheduleChipText: {
     fontSize: FONT_SIZES.sm,
@@ -1475,11 +1657,34 @@ const styles = StyleSheet.create({
   scheduleChipTextActive: {
     color: COLORS.background,
   },
+  scheduleChipTextPast: {
+    color: COLORS.error,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
   scheduleChipTextDisabled: {
     color: COLORS.textSecondary,
   },
-  scheduleUnavailableText: {
+  scheduleChipCheck: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scheduleChipPastTag: {
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.error,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  scheduleUnavailableText: {
+    color: COLORS.textSecondary,
     fontWeight: FONT_WEIGHTS.semiBold,
   },
   scheduleEmpty: {

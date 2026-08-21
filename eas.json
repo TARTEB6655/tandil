@@ -9,7 +9,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com",
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51TSVvUP3hJZSveSoC6j7aN98lUeEiBcVH1YP0rhoAYYktKMi4P2cARXftPw4zCkQUxfuT4tKnjd1TI5B9Zyb553o00r9bdyECz",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_51TObSk0dvmhfzUoqeXMFztTOzAQ366Y0ZaNvM6us9fvjswiUh80L13EtFAwgjwkH1klyZcagiYZ6MGcFYK7HrYAT00lH8Jrade",
         "EXPO_PUBLIC_ENABLE_APPLE_PAY": "true",
         "EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER": "merchant.com.tandilapp.uae"
       },
@@ -21,7 +21,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com",
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51TSVvUP3hJZSveSoC6j7aN98lUeEiBcVH1YP0rhoAYYktKMi4P2cARXftPw4zCkQUxfuT4tKnjd1TI5B9Zyb553o00r9bdyECz",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_51TObSk0dvmhfzUoqeXMFztTOzAQ366Y0ZaNvM6us9fvjswiUh80L13EtFAwgjwkH1klyZcagiYZ6MGcFYK7HrYAT00lH8Jrade",
         "EXPO_PUBLIC_ENABLE_APPLE_PAY": "true",
         "EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER": "merchant.com.tandilapp.uae"
       },
@@ -33,7 +33,7 @@
     "production": {
       "env": {
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "805072500013-5unlc40tcam3lidd9vb4hkhmausbnoep.apps.googleusercontent.com",
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51TSVvUP3hJZSveSoC6j7aN98lUeEiBcVH1YP0rhoAYYktKMi4P2cARXftPw4zCkQUxfuT4tKnjd1TI5B9Zyb553o00r9bdyECz",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_live_51TObSk0dvmhfzUoqeXMFztTOzAQ366Y0ZaNvM6us9fvjswiUh80L13EtFAwgjwkH1klyZcagiYZ6MGcFYK7HrYAT00lH8Jrade",
         "EXPO_PUBLIC_ENABLE_APPLE_PAY": "true",
         "EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER": "merchant.com.tandilapp.uae"
       },
