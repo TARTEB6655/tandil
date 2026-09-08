@@ -19,11 +19,15 @@ import { TrackingTimeline } from '../../components/common/TrackingTimeline';
 import {
   cancelClientOrder,
   getCancelledOrderTrack,
+  getClientOrderDetails,
   getOrderTrack,
   isOrderAlreadyRated,
   isOrderRatedLocally,
   maintenancePhotoUrl,
+  resolveDeliveryOtpFromTrack,
+  type ClientOrderDetails,
   type OrderTrackData,
+  type ShopOrderLineItem,
 } from '../../services/orderService';
 import { buildFullImageUrl } from '../../config/api';
 import {
@@ -89,6 +93,7 @@ const OrderTrackingScreen: React.FC = () => {
   const { orderId, useCancelledTrack } = route.params || {};
   const { t, i18n } = useTranslation();
   const [track, setTrack] = useState<OrderTrackData | null>(null);
+  const [orderDetail, setOrderDetail] = useState<ClientOrderDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -105,15 +110,58 @@ const OrderTrackingScreen: React.FC = () => {
     setError(null);
     try {
       const loader = useCancelledTrack ? getCancelledOrderTrack : getOrderTrack;
-      const [{ data, message }, ratedLocally] = await Promise.all([
+      const [trackResult, detailResult, ratedLocally] = await Promise.all([
         loader(orderId),
+        useCancelledTrack
+          ? Promise.resolve({
+              data: null as ClientOrderDetails | null,
+              order_summary: null as null,
+              fulfillment_type: null as null,
+              uses_delivery_otp: null as null,
+              delivery_otp: null as null,
+            })
+          : getClientOrderDetails(orderId).catch(() => ({
+              data: null as ClientOrderDetails | null,
+              order_summary: null as null,
+              fulfillment_type: null as null,
+              uses_delivery_otp: null as null,
+              delivery_otp: null as null,
+            })),
         isOrderRatedLocally(orderId),
       ]);
+      const { data, message } = trackResult;
+      const detail = detailResult.data;
+      setOrderDetail(detail);
+
       if (data) {
-        setTrack(data);
-        setAlreadyRated(ratedLocally || isOrderAlreadyRated(data));
-        const embedded = extractReportFromOrderTrack(data);
-        const serviceReport = (data as any)?.service_report;
+        // Enrich track with detail items / OTP fields when track payload is thin.
+        const enriched: OrderTrackData = {
+          ...data,
+          fulfillment_type:
+            data.fulfillment_type ?? detail?.fulfillment_type ?? detailResult.fulfillment_type,
+          uses_delivery_otp:
+            data.uses_delivery_otp ?? detail?.uses_delivery_otp ?? detailResult.uses_delivery_otp,
+          delivery_otp: data.delivery_otp ?? detail?.delivery_otp ?? detailResult.delivery_otp,
+          vendor_mappings: data.vendor_mappings ?? detail?.vendor_mappings,
+          order: {
+            ...data.order,
+            ...(detail
+              ? {
+                  items: detail.items?.length ? detail.items : data.order?.items,
+                  vendor_mappings: detail.vendor_mappings ?? data.order?.vendor_mappings,
+                  fulfillment_type: detail.fulfillment_type ?? data.order?.fulfillment_type,
+                  uses_delivery_otp: detail.uses_delivery_otp ?? data.order?.uses_delivery_otp,
+                  delivery_otp: detail.delivery_otp ?? data.order?.delivery_otp,
+                  order_status: detail.order_status ?? data.order?.order_status,
+                }
+              : {}),
+          },
+          order_summary: data.order_summary ?? detailResult.order_summary ?? data.order_summary,
+        };
+        setTrack(enriched);
+        setAlreadyRated(ratedLocally || isOrderAlreadyRated(enriched));
+        const embedded = extractReportFromOrderTrack(enriched);
+        const serviceReport = (enriched as any)?.service_report;
         const status = String(serviceReport?.status ?? '').toLowerCase();
 
         // Requirement: show Service Report card ONLY when track API says sent_to_client.
@@ -143,6 +191,48 @@ const OrderTrackingScreen: React.FC = () => {
             });
           }
         }
+      } else if (detail) {
+        // Detail-only fallback if track fails but GET /orders/:id works.
+        const summary = detailResult.order_summary;
+        const fallback: OrderTrackData = {
+          order_id: detail.id,
+          order_number: detail.order_number || `order_${detail.id}`,
+          order_number_short: String(detail.id),
+          order: detail,
+          order_summary: summary || {
+            placed_at: detail.created_at,
+            booking_date: detail.booking_date,
+            booking_slot: detail.booking_slot,
+            delivery_address: [
+              detail.shipping_address?.street_address,
+              detail.shipping_address?.city,
+              detail.shipping_address?.state,
+              detail.shipping_address?.zip_code,
+              detail.shipping_address?.country,
+            ]
+              .filter(Boolean)
+              .join(', '),
+            payment_method: detail.payment_method,
+            total: Number(detail.total_amount) || 0,
+            currency: 'AED',
+            estimated_arrival: detail.estimated_arrival,
+            job_duration: detail.job_duration,
+            special_instructions: detail.special_instructions,
+          },
+          current_status: detail.order_status,
+          tracking: { status: detail.order_status, timeline: [] },
+          maintenance_photos: [],
+          can_cancel: !['delivered', 'completed', 'cancelled'].includes(
+            String(detail.order_status || '').toLowerCase()
+          ),
+          fulfillment_type: detail.fulfillment_type,
+          uses_delivery_otp: detail.uses_delivery_otp,
+          delivery_otp: detail.delivery_otp,
+          vendor_mappings: detail.vendor_mappings,
+        };
+        setTrack(fallback);
+        setAlreadyRated(ratedLocally || isOrderAlreadyRated(fallback));
+        setVisitReport(null);
       } else {
         setError(message || t('orders.trackLoadFailed', 'Could not load tracking.'));
         setTrack(null);
@@ -156,6 +246,7 @@ const OrderTrackingScreen: React.FC = () => {
         t('orders.trackLoadFailed', 'Could not load tracking.');
       setError(msg);
       setTrack(null);
+      setOrderDetail(null);
       setVisitReport(null);
       setAlreadyRated(false);
     } finally {
@@ -220,6 +311,7 @@ const OrderTrackingScreen: React.FC = () => {
   const handleRateService = () => {
     try {
       const productName =
+        orderDetail?.items?.[0]?.product?.name ||
         track?.order?.items?.[0]?.product?.name ||
         undefined;
       navigation.navigate('RateReview', {
@@ -236,14 +328,19 @@ const OrderTrackingScreen: React.FC = () => {
     track?.maintenance_photos?.map(resolveTrackPhotoUrl).filter((u): u is string => u != null) ??
     [];
 
+  const lineItems: ShopOrderLineItem[] =
+    (orderDetail?.items?.length ? orderDetail.items : track?.order?.items) || [];
+
   const summary = track?.order_summary;
-  const firstItemProduct = track?.order?.items?.[0]?.product;
+  const firstItemProduct = lineItems[0]?.product ?? track?.order?.items?.[0]?.product;
   const estimatedArrival =
     summary?.estimated_arrival ||
+    orderDetail?.estimated_arrival ||
     firstItemProduct?.estimated_arrival ||
     null;
   const jobDuration =
     summary?.job_duration ||
+    orderDetail?.job_duration ||
     firstItemProduct?.job_duration ||
     null;
   const loc =
@@ -259,13 +356,33 @@ const OrderTrackingScreen: React.FC = () => {
           })}`;
         })()
       : '—';
-  const bookingDateLabel = formatBookingDate(summary?.booking_date, loc);
-  const bookingSlotLabel = formatBookingSlot(summary);
+  const bookingDateLabel = formatBookingDate(
+    summary?.booking_date ?? orderDetail?.booking_date,
+    loc
+  );
+  const bookingSlotLabel = formatBookingSlot(
+    summary ?? {
+      placed_at: orderDetail?.created_at || '',
+      booking_slot: orderDetail?.booking_slot,
+      delivery_address: '',
+      payment_method: '',
+      total: 0,
+      currency: 'AED',
+    }
+  );
 
   const statusLower = track?.tracking?.status?.toLowerCase() ?? '';
   const isDone = statusLower === 'completed' || statusLower === 'delivered';
   const canShowRateService = isDone && !alreadyRated;
+  const deliveryOtpInfo = resolveDeliveryOtpFromTrack(track, orderDetail);
   const thumb = Math.min(Dimensions.get('window').width - SPACING.lg * 2, 120);
+
+  const productImageUrl = (item: ShopOrderLineItem): string | null => {
+    const raw = item.product?.image_url || item.product?.image || null;
+    if (!raw) return null;
+    if (String(raw).startsWith('http://') || String(raw).startsWith('https://')) return String(raw);
+    return buildFullImageUrl(String(raw));
+  };
 
   if (loading && !track) {
     return (
@@ -314,6 +431,98 @@ const OrderTrackingScreen: React.FC = () => {
             <TrackingTimeline timeline={track.tracking?.timeline ?? []} />
           </View>
         </View>
+
+        {deliveryOtpInfo.visible ? (
+          <View style={styles.otpSection}>
+            <View style={styles.otpCard}>
+              <View style={styles.otpIconWrap}>
+                <Ionicons
+                  name={deliveryOtpInfo.expired && !deliveryOtpInfo.otp ? 'time' : 'shield-checkmark'}
+                  size={26}
+                  color={COLORS.primary}
+                />
+              </View>
+              <Text style={styles.otpEyebrow}>{t('orders.deliveryOtpEyebrow')}</Text>
+              <Text style={styles.otpTitle}>
+                {deliveryOtpInfo.otp
+                  ? t('orders.deliveryOtpTitle')
+                  : t('orders.deliveryOtpExpiredTitle')}
+              </Text>
+              <Text style={styles.otpHint}>{t('orders.deliveryOtpHint')}</Text>
+              {deliveryOtpInfo.otp ? (
+                <>
+                  <View style={styles.otpCodeBox}>
+                    {deliveryOtpInfo.otp.split('').map((digit, index) => (
+                      <View key={`otp-d-${index}`} style={styles.otpDigit}>
+                        <Text style={styles.otpDigitText}>{digit}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <Text style={styles.otpCodePlain} selectable>
+                    {deliveryOtpInfo.otp}
+                  </Text>
+                </>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+
+        {lineItems.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('orders.items')}</Text>
+            <View style={styles.orderCard}>
+              {lineItems.map((item) => {
+                const img = productImageUrl(item);
+                const name = item.product?.name || `Product #${item.product_id}`;
+                const qty = Number(item.quantity) || 1;
+                const price = Number(item.price || item.subtotal || 0);
+                return (
+                  <View key={`item-${item.id}`} style={styles.productRow}>
+                    {img ? (
+                      <Image source={{ uri: img }} style={styles.productThumb} />
+                    ) : (
+                      <View style={[styles.productThumb, styles.productThumbFallback]}>
+                        <Ionicons name="cube-outline" size={22} color={COLORS.primary} />
+                      </View>
+                    )}
+                    <View style={styles.productMeta}>
+                      <Text style={styles.productName} numberOfLines={2}>
+                        {name}
+                      </Text>
+                      {item.product?.sku ? (
+                        <Text style={styles.productSku}>
+                          {t('orders.sku', { sku: item.product.sku })}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.productQty}>
+                        {t('orders.qtyValue', { count: qty })}
+                      </Text>
+                      {item.area_m2 != null && Number(item.area_m2) > 0 ? (
+                        <>
+                          <Text style={styles.productQty}>
+                            {t('orders.areaValue', {
+                              defaultValue: 'Area: {{area}} m²',
+                              area: item.area_m2,
+                            })}
+                          </Text>
+                          {(item.unit_price != null || item.price_per_m2 != null) ? (
+                            <Text style={styles.productQty}>
+                              {t('orders.unitPriceValue', {
+                                defaultValue: 'Unit price: AED {{price}}/m²',
+                                price: Number(item.unit_price ?? item.price_per_m2).toFixed(2),
+                              })}
+                            </Text>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </View>
+                    <Text style={styles.productPrice}>AED {price.toFixed(2)}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
 
         {photoUrls.length > 0 ? (
           <View style={styles.section}>
@@ -634,6 +843,121 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     borderRadius: 16,
     padding: SPACING.md,
+  },
+  productRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    gap: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  productThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+  },
+  productThumbFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary + '14',
+  },
+  productMeta: {
+    flex: 1,
+    minWidth: 0,
+  },
+  productName: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+  },
+  productSku: {
+    marginTop: 2,
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+  },
+  productQty: {
+    marginTop: 2,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+  },
+  productPrice: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
+  otpSection: {
+    marginTop: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+  },
+  otpCard: {
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 20,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '33',
+    alignItems: 'center',
+  },
+  otpIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.primary + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.sm,
+  },
+  otpEyebrow: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  otpTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: SPACING.sm,
+  },
+  otpHint: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: SPACING.md,
+  },
+  otpCodeBox: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  otpDigit: {
+    minWidth: 40,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: COLORS.background,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  otpDigitText: {
+    fontSize: FONT_SIZES.xl,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.primary,
+    letterSpacing: 1,
+  },
+  otpCodePlain: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHTS.medium,
   },
   section: {
     marginBottom: SPACING.lg,

@@ -48,9 +48,26 @@ interface CartItemDisplay {
   serviceId?: number;
   brand?: string;
   quantity: number;
+  areaM2?: number;
+  unitPrice?: number;
+  pricingType?: string;
 }
 
 function mapApiItemToDisplay(item: CartApiItem): CartItemDisplay {
+  const areaRaw = item.area_m2;
+  const areaNum =
+    areaRaw == null || areaRaw === ''
+      ? undefined
+      : typeof areaRaw === 'number'
+        ? areaRaw
+        : parseFloat(String(areaRaw));
+  const unitRaw = item.unit_price ?? item.price_per_m2;
+  const unitNum =
+    unitRaw == null || unitRaw === ''
+      ? undefined
+      : typeof unitRaw === 'number'
+        ? unitRaw
+        : parseFloat(String(unitRaw));
   return {
     id: String(item.id),
     productId: String(item.product_id),
@@ -63,6 +80,9 @@ function mapApiItemToDisplay(item: CartApiItem): CartItemDisplay {
     serviceId: item.service_id ?? undefined,
     brand: item.brand ?? undefined,
     quantity: item.quantity,
+    areaM2: Number.isFinite(areaNum as number) && (areaNum as number) > 0 ? (areaNum as number) : undefined,
+    unitPrice: Number.isFinite(unitNum as number) ? (unitNum as number) : undefined,
+    pricingType: item.pricing_type ?? undefined,
   };
 }
 
@@ -207,11 +227,30 @@ const CartScreen: React.FC = () => {
   const subtotal = useApiSummary ? orderSummaryApi.subtotal : (orderSummary?.subtotal ?? cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0));
   const discount = useApiSummary ? orderSummaryApi.discount : (orderSummary?.discount ?? 0);
   const shippingBase = useApiSummary ? orderSummaryApi.shipping : (orderSummary?.shipping ?? shopSettings?.shipping_amount ?? 0);
-  const taxPercent = useApiSummary ? (orderSummaryApi.tax_percent ?? 0) : (shopSettings?.tax_percent ?? 0);
+  const taxPercent = useApiSummary
+    ? (orderSummaryApi.tax_percent ?? 0)
+    : (orderSummary?.tax_percent ?? shopSettings?.tax_percent ?? 0);
   const shipping = shippingBase;
   const taxableBase = Math.max(0, subtotal - discount);
-  const taxAmount = Math.round(taxableBase * (taxPercent / 100) * 100) / 100;
-  const total = Math.round((taxableBase + shipping + taxAmount) * 100) / 100;
+  const computedTax = Math.round(taxableBase * (taxPercent / 100) * 100) / 100;
+  const taxAmount = useApiSummary && orderSummaryApi.tax != null
+    ? Number(orderSummaryApi.tax) || 0
+    : orderSummary?.tax != null
+      ? Number(orderSummary.tax) || 0
+      : computedTax;
+  const instantOrderFee = useApiSummary
+    ? Number(orderSummaryApi.instant_order_fee ?? 0) || 0
+    : Number(orderSummary?.instant_order_fee ?? 0) || 0;
+  const instantOrderFeeLabel =
+    (useApiSummary
+      ? orderSummaryApi.instant_order_fee_label
+      : orderSummary?.instant_order_fee_label) ||
+    t('cart.instantOrderFee', { defaultValue: 'Instant order fee' });
+  const computedTotal = Math.round((taxableBase + shipping + taxAmount + instantOrderFee) * 100) / 100;
+  const apiTotal = useApiSummary
+    ? Number(orderSummaryApi.total) || 0
+    : Number(orderSummary?.total) || 0;
+  const total = apiTotal > 0 ? apiTotal : computedTotal;
   const currency = useApiSummary ? orderSummaryApi.currency : (orderSummary?.currency || shopSettings?.currency || t('orders.currency', { defaultValue: 'AED' }));
   const canProceedToCheckout = cartItems.length > 0 && meetsMinimumOrderAmount(total);
 
@@ -260,6 +299,20 @@ const CartScreen: React.FC = () => {
             <Text style={styles.itemBrand} numberOfLines={1}>
               {item.brand}
             </Text>
+          ) : null}
+
+          {item.areaM2 != null ? (
+            <View style={styles.areaMeta}>
+              <Text style={styles.areaMetaText}>
+                {t('product.areaLabel', { defaultValue: 'Area' })}: {item.areaM2} m²
+              </Text>
+              {item.unitPrice != null ? (
+                <Text style={styles.areaMetaText}>
+                  {t('product.unitPriceLabel', { defaultValue: 'Unit price' })}: {currency}{' '}
+                  {item.unitPrice.toFixed(2)}/m²
+                </Text>
+              ) : null}
+            </View>
           ) : null}
 
           <View style={styles.itemBottomRow}>
@@ -442,6 +495,14 @@ const CartScreen: React.FC = () => {
                   </Text>
                 </View>
               )}
+              {instantOrderFee > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>{instantOrderFeeLabel}</Text>
+                  <Text style={styles.summaryValue}>
+                    {currency} {instantOrderFee.toFixed(2)}
+                  </Text>
+                </View>
+              ) : null}
               <View style={styles.summaryDivider} />
               <View style={styles.summaryRow}>
                 <Text style={styles.totalLabel}>{t('cart.total')}</Text>
@@ -645,6 +706,14 @@ const styles = StyleSheet.create({
   },
   itemBrand: {
     marginTop: 4,
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+  },
+  areaMeta: {
+    marginTop: 6,
+    gap: 2,
+  },
+  areaMetaText: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
   },

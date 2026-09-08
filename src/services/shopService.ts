@@ -91,6 +91,16 @@ export interface ShopProduct {
   /** Optional service-oriented copy from admin product (shop API). */
   estimated_arrival?: string | null;
   job_duration?: string | null;
+  /** Area-based pricing (when returned by shop API / service settings). */
+  pricing_type?: 'fixed' | 'per_m2' | string | null;
+  price_per_m2?: string | number | null;
+  price_includes?: {
+    materials?: boolean | number | string | null;
+    installation?: boolean | number | string | null;
+    labor?: boolean | number | string | null;
+    transportation?: boolean | number | string | null;
+    delivery?: boolean | number | string | null;
+  } | null;
   created_at?: string;
   updated_at?: string;
   /** Optional display order within category (lower = earlier). */

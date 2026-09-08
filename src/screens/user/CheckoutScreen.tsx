@@ -341,7 +341,15 @@ const CheckoutScreen: React.FC = () => {
       : useApiSummary && orderSummaryApi.tax != null
         ? Number(orderSummaryApi.tax) || 0
         : Math.round(taxableBase * (taxPercent / 100) * 100) / 100;
-  const clientTotal = Math.round((taxableBase + shippingAmount + taxAmount) * 100) / 100;
+  const instantOrderFee = useApiSummary
+    ? Number(orderSummaryApi.instant_order_fee ?? 0) || 0
+    : 0;
+  const instantOrderFeeLabel =
+    (useApiSummary ? orderSummaryApi.instant_order_fee_label : null) ||
+    t('cart.instantOrderFee', { defaultValue: 'Instant order fee' });
+  const clientTotal = Math.round(
+    (taxableBase + shippingAmount + taxAmount + instantOrderFee) * 100
+  ) / 100;
   const apiTotal = useApiSummary ? Number(orderSummaryApi.total) || 0 : 0;
   const shouldUseClientTotal =
     couponOnPaymentStep && useApiSummary && !isBuyNow;
@@ -1321,6 +1329,15 @@ const CheckoutScreen: React.FC = () => {
               <Text style={styles.summaryValue}>{currency} {taxAmount.toFixed(2)}</Text>
             </View>
           )}
+
+          {instantOrderFee > 0 ? (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>{instantOrderFeeLabel}</Text>
+              <Text style={styles.summaryValue}>
+                {currency} {instantOrderFee.toFixed(2)}
+              </Text>
+            </View>
+          ) : null}
 
           {currentStep === 'payment' && (
             <View style={styles.walletSummaryBox}>

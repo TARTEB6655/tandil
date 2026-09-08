@@ -67,7 +67,13 @@ const VendorProductsScreen: React.FC = () => {
 
   const categories = [
     { id: 'all', name: t('vendorProducts.all'), icon: 'grid-outline' },
-    ...Array.from(new Set(products.map((p) => p.category))).map((cat) => ({
+    ...Array.from(
+      new Set(
+        products
+          .map((p) => (p.service?.trim() ? p.service : p.category))
+          .filter((label) => Boolean(label) && label !== '—')
+      )
+    ).map((cat) => ({
       id: cat,
       name: cat,
       icon: 'leaf-outline' as const,
@@ -77,7 +83,10 @@ const VendorProductsScreen: React.FC = () => {
   const filteredProducts =
     selectedCategory === 'all'
       ? products
-      : products.filter((product) => product.category === selectedCategory);
+      : products.filter((product) => {
+          const group = product.service?.trim() ? product.service : product.category;
+          return group === selectedCategory;
+        });
 
   const handleAddProduct = () => {
     navigation.navigate('AddProduct');
@@ -200,7 +209,9 @@ const VendorProductsScreen: React.FC = () => {
         <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
         <Text style={styles.productDescription} numberOfLines={2}>{item.description}</Text>
         <Text style={styles.productCategory}>
-          {t('vendorProducts.category')}: {item.category}
+          {item.service?.trim()
+            ? `${t('vendorProducts.service', { defaultValue: 'Service' })}: ${item.service}`
+            : `${t('vendorProducts.category')}: ${item.category}`}
         </Text>
         <Text style={styles.productPrice}>AED {item.price.toFixed(2)} · {t('vendorProducts.stock')}: {item.stock_quantity}</Text>
       </View>

@@ -3,7 +3,7 @@
     "name": "Tandil",
     "slug": "tandil",
     "scheme": "tandil",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -23,6 +23,7 @@
       }
     },
     "android": {
+      "package": "com.tandilapp.tandil",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#EEEADE"

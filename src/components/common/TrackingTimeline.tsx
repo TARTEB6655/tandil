@@ -22,8 +22,13 @@ export const TrackingTimeline: React.FC<TrackingTimelineProps> = ({ timeline }) 
 
   const translateTimelineLabel = (step: TrackTimelineItem): string => {
     const key = normalizeKey(step.key) || normalizeKey(step.label);
-    const statusKey = `orders.status.${key}`;
-    if (key && i18n.exists(statusKey)) return t(statusKey);
+    const candidates = [
+      `orders.status.${key}`,
+      `vendorOrders.${key}`,
+    ];
+    for (const statusKey of candidates) {
+      if (key && i18n.exists(statusKey)) return t(statusKey);
+    }
     return step.label || key || '—';
   };
 
@@ -34,11 +39,23 @@ export const TrackingTimeline: React.FC<TrackingTimelineProps> = ({ timeline }) 
     if (key && i18n.exists(msgKey)) return t(msgKey);
 
     const descNorm = step.description.trim().toLowerCase();
+    if (descNorm.includes('preparing') && i18n.exists('orders.messages.processing')) {
+      return t('orders.messages.processing');
+    }
+    if (
+      (descNorm.includes('out for delivery') || descNorm.includes('otp')) &&
+      i18n.exists('orders.messages.shipped')
+    ) {
+      return t('orders.messages.shipped');
+    }
     if (descNorm.includes('ready') && i18n.exists('orders.messages.completed')) {
       return t('orders.messages.completed');
     }
     if (descNorm.includes('delivered') && i18n.exists('orders.messages.delivered')) {
       return t('orders.messages.delivered');
+    }
+    if (descNorm.includes('confirm') && i18n.exists('orders.messages.confirmed')) {
+      return t('orders.messages.confirmed');
     }
     return step.description;
   };

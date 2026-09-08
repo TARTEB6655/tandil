@@ -1,5 +1,11 @@
 import apiClient from './api';
 import { buildFullImageUrl } from '../config/api';
+import {
+  buildVendorProductFormData,
+  parseVendorProductDetail,
+  type CreateVendorProductParams,
+  type VendorProductDetail,
+} from './vendorService';
 
 export interface AdminManagedVendor {
   id: string;
@@ -974,5 +980,132 @@ export const adminVendorManagementService = {
       is_available: _isAvailable,
       can_toggle: true,
     });
+  },
+
+  /**
+   * GET /admin/vendors/{vendor_id}/products/{vendor_product_id}
+   */
+  async getVendorProduct(vendorId: string, productId: string): Promise<VendorProductDetail> {
+    if (!vendorId?.trim() || !productId?.trim()) {
+      throw new Error('Missing vendor or product id.');
+    }
+    try {
+      const response = await apiClient.get(
+        `/admin/vendors/${encodeURIComponent(vendorId)}/products/${encodeURIComponent(productId)}`
+      );
+      const body = asRecord(response.data) ?? {};
+      if (body.success === false) {
+        throw new Error(pickString(body.message) || 'Failed to load product.');
+      }
+      const detail = parseVendorProductDetail(response.data);
+      if (!detail.name?.trim()) {
+        throw new Error('Product data is incomplete.');
+      }
+      return detail;
+    } catch (error: unknown) {
+      throwVendorMutationError(error, 'Failed to load product.');
+    }
+  },
+
+  /**
+   * POST /admin/vendors/{vendor_id}/products — multipart form-data
+   * Matches Postman: name, description, price, stock, status, is_featured,
+   * category_id (required), service_id (optional), weight_unit, sku, handle,
+   * product_type, option_groups_json, main_image / image, images[].
+   */
+  async createVendorProduct(
+    vendorId: string,
+    params: CreateVendorProductParams
+  ): Promise<{ message: string; product?: AdminManagedVendorProduct }> {
+    if (!vendorId?.trim()) {
+      throw new Error('Vendor id is required.');
+    }
+    if (params.category_id == null || Number(params.category_id) <= 0) {
+      throw new Error('Category is required.');
+    }
+
+    const formData = buildVendorProductFormData(params, {
+      mainImageAlias: true,
+      normalizeUris: true,
+    });
+
+    try {
+      const response = await apiClient.post(
+        `/admin/vendors/${encodeURIComponent(vendorId)}/products`,
+        formData,
+        {
+          timeout: 300000,
+          headers: { Accept: 'application/json' },
+          transformRequest: [(data) => data],
+        }
+      );
+      const body = asRecord(response.data) ?? {};
+      if (body.success === false) {
+        throw new Error(extractApiMessage(body, 'Failed to create product.'));
+      }
+      const data = asRecord(body.data) ?? body;
+      const productRow =
+        asRecord(data.vendor_product) ??
+        asRecord(data.product) ??
+        asRecord(data.item) ??
+        (data.vendor_product_id != null || data.id != null ? data : null);
+      return {
+        message: pickString(body.message) || 'Product created successfully.',
+        product: productRow ? mapProduct(productRow) : undefined,
+      };
+    } catch (error: unknown) {
+      throwVendorMutationError(error, 'Failed to create product.');
+    }
+  },
+
+  /**
+   * POST /admin/vendors/{vendor_id}/products/{vendor_product_id} — multipart update
+   * Matches Postman: price, stock, status, category_id, service_id, weight_unit, sku,
+   * handle, product_type, option_groups_json, main_image, images[], removed_image_ids[],
+   * keep_image_ids[], remove_main_image.
+   */
+  async updateVendorProduct(
+    vendorId: string,
+    productId: string,
+    params: CreateVendorProductParams
+  ): Promise<{ message: string; product?: AdminManagedVendorProduct }> {
+    if (!vendorId?.trim() || !productId?.trim()) {
+      throw new Error('Missing vendor or product id.');
+    }
+    if (params.category_id == null || Number(params.category_id) <= 0) {
+      throw new Error('Category is required.');
+    }
+
+    const formData = buildVendorProductFormData(params, {
+      normalizeUris: true,
+      mode: 'update',
+    });
+    try {
+      const response = await apiClient.post(
+        `/admin/vendors/${encodeURIComponent(vendorId)}/products/${encodeURIComponent(productId)}`,
+        formData,
+        {
+          timeout: 300000,
+          headers: { Accept: 'application/json' },
+          transformRequest: [(data) => data],
+        }
+      );
+      const body = asRecord(response.data) ?? {};
+      if (body.success === false) {
+        throw new Error(extractApiMessage(body, 'Failed to update product.'));
+      }
+      const data = asRecord(body.data) ?? body;
+      const productRow =
+        asRecord(data.vendor_product) ??
+        asRecord(data.product) ??
+        asRecord(data.item) ??
+        (data.vendor_product_id != null || data.id != null ? data : null);
+      return {
+        message: pickString(body.message) || 'Product updated successfully.',
+        product: productRow ? mapProduct(productRow) : undefined,
+      };
+    } catch (error: unknown) {
+      throwVendorMutationError(error, 'Failed to update product.');
+    }
   },
 };

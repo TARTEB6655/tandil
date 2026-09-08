@@ -70,7 +70,9 @@ export interface CreateVendorProductParams {
   price: number;
   stock: number;
   status: string;
-  category_id: number;
+  /** Shop product listings. Omit when creating a service listing. */
+  category_id?: number | null;
+  /** Service listings. Omit when creating a category/product listing. */
   service_id?: number | null;
   weight_unit?: string;
   sku: string;
@@ -85,6 +87,8 @@ export interface CreateVendorProductParams {
   extraImages?: { uri: string }[];
   /** Existing product image IDs to delete on update (multipart removed_image_ids[]). */
   removed_image_ids?: number[];
+  /** Update only: keep these product_images ids; others are removed (keep_image_ids[]). */
+  keep_image_ids?: number[];
   /** Set true when clearing the existing main image without uploading a replacement. */
   remove_main_image?: boolean;
 }
@@ -96,20 +100,43 @@ export interface VendorProductCreateResponse {
   data: VendorProductCreated;
 }
 
-function buildVendorProductFormData(params: CreateVendorProductParams): FormData {
+export function buildVendorProductFormData(
+  params: CreateVendorProductParams,
+  options?: { mainImageAlias?: boolean; normalizeUris?: boolean; mode?: 'create' | 'update' }
+): FormData {
+  const formData = new FormData();
+  const normalizeUri = (uri: string): string => {
+    if (!options?.normalizeUris || !uri) return uri;
+    if (uri.startsWith('file://') || uri.startsWith('content://') || uri.startsWith('http')) {
+      return uri;
+    }
+    if (uri.startsWith('/')) return `file://${uri}`;
+    return uri;
+  };
+  const appendFile = (key: string, uri: string, name: string) => {
+    formData.append(key, {
+      uri: normalizeUri(uri),
+      type: 'image/jpeg',
+      name,
+    } as unknown as Blob);
+  };
+
   const customizationPayload = mapCustomizationToApi(params.customization);
   const productType =
     customizationPayload.productType ?? params.product_type ?? 'simple';
 
-  const formData = new FormData();
   formData.append('name', params.name);
   if (params.description) formData.append('description', params.description);
   formData.append('price', String(params.price));
   formData.append('stock', String(params.stock));
   formData.append('status', params.status);
   formData.append('is_featured', String(params.is_featured ?? 0));
-  formData.append('category_id', String(params.category_id));
-  if (params.service_id != null) formData.append('service_id', String(params.service_id));
+  if (params.category_id != null && Number(params.category_id) > 0) {
+    formData.append('category_id', String(params.category_id));
+  }
+  if (params.service_id != null && Number(params.service_id) > 0) {
+    formData.append('service_id', String(params.service_id));
+  }
   if (params.weight_unit) formData.append('weight_unit', params.weight_unit);
   formData.append('sku', params.sku);
   formData.append('handle', params.handle);
@@ -128,29 +155,27 @@ function buildVendorProductFormData(params: CreateVendorProductParams): FormData
       formData.append('removed_image_ids[]', String(id));
     }
   });
-  if (params.remove_main_image) {
+  (params.keep_image_ids ?? []).forEach((id) => {
+    if (Number.isFinite(id)) {
+      formData.append('keep_image_ids[]', String(id));
+    }
+  });
+  if (options?.mode === 'update') {
+    formData.append('remove_main_image', params.remove_main_image ? '1' : '0');
+  } else if (params.remove_main_image) {
     formData.append('remove_main_image', '1');
   }
   if (params.mainImage?.uri) {
-    formData.append('main_image', {
-      uri: params.mainImage.uri,
-      type: 'image/jpeg',
-      name: 'main-image.jpg',
-    } as unknown as Blob);
+    appendFile('main_image', params.mainImage.uri, 'main-image.jpg');
+    if (options?.mainImageAlias) {
+      appendFile('image', params.mainImage.uri, 'main-image.jpg');
+    }
   }
   (params.extraImages ?? []).forEach((file, index) => {
-    formData.append('images[]', {
-      uri: file.uri,
-      type: 'image/jpeg',
-      name: `image-${index}.jpg`,
-    } as unknown as Blob);
+    appendFile(`images[]`, file.uri, `image-${index}.jpg`);
   });
   customizationPayload.optionImageFiles.forEach((file) => {
-    formData.append(`option_images[${file.key}]`, {
-      uri: file.uri,
-      type: 'image/jpeg',
-      name: `${file.key}.jpg`,
-    } as unknown as Blob);
+    appendFile(`option_images[${file.key}]`, file.uri, `${file.key}.jpg`);
   });
   return formData;
 }
@@ -268,6 +293,9 @@ export interface VendorCatalogProduct {
   name: string;
   description: string;
   category: string;
+  /** When listing is tied to a service (not a shop category). */
+  service?: string;
+  service_id?: number;
   sku?: string;
   images: string[];
   price: number;
@@ -723,12 +751,34 @@ function extractProductImages(product: Record<string, unknown>): VendorProductIm
   return items;
 }
 
+/** Resolve display name from category/service relation shapes used by the API. */
+function resolveRelationName(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (Array.isArray(value) && value.length > 0) {
+    return resolveRelationName(value[0]);
+  }
+  if (value && typeof value === 'object') {
+    const name = (value as { name?: unknown }).name;
+    if (typeof name === 'string' && name.trim()) return name.trim();
+  }
+  return undefined;
+}
+
+function resolveProductServiceName(product: Record<string, unknown>): string | undefined {
+  return (
+    resolveRelationName(product.service) ||
+    resolveRelationName(product.services) ||
+    (typeof product.service_name === 'string' && product.service_name.trim()
+      ? product.service_name.trim()
+      : undefined)
+  );
+}
+
 /** Map GET /vendor/products item → catalog row for UI. */
 function mapVendorProductListItem(row: Record<string, unknown>): VendorCatalogProduct {
   const product = (row.product ?? {}) as Record<string, unknown>;
   const inventory = (row.inventory ?? {}) as Record<string, unknown>;
   const currentPrice = (row.current_price ?? {}) as Record<string, unknown>;
-  const category = product.category as { name?: string } | string | undefined;
 
   const imageCandidates: unknown[] = [
     product.image_url,
@@ -742,6 +792,22 @@ function mapVendorProductListItem(row: Record<string, unknown>): VendorCatalogPr
     .filter((url): url is string => Boolean(url));
 
   const listingStatus = String(row.status ?? '').toLowerCase();
+  const categoryName =
+    resolveRelationName(product.category) ||
+    resolveRelationName(row.category) ||
+    (typeof product.category_name === 'string' && product.category_name.trim()
+      ? product.category_name.trim()
+      : undefined);
+  const serviceName =
+    resolveProductServiceName(product) || resolveProductServiceName(row);
+  const serviceIdRaw =
+    product.service_id ??
+    row.service_id ??
+    (product.service as { id?: number } | undefined)?.id ??
+    (row.service as { id?: number } | undefined)?.id ??
+    (Array.isArray(product.service_ids) ? product.service_ids[0] : undefined) ??
+    (Array.isArray(row.service_ids) ? row.service_ids[0] : undefined);
+  const serviceIdNum = serviceIdRaw != null ? Number(serviceIdRaw) : NaN;
 
   return {
     id: String(row.id),
@@ -749,12 +815,9 @@ function mapVendorProductListItem(row: Record<string, unknown>): VendorCatalogPr
     product_id: row.product_id != null ? String(row.product_id) : undefined,
     name: String(product.name ?? ''),
     description: String(product.description ?? ''),
-    category:
-      typeof category === 'object' && category?.name
-        ? String(category.name)
-        : typeof category === 'string'
-          ? category
-          : '—',
+    category: categoryName || '—',
+    service: serviceName,
+    service_id: Number.isFinite(serviceIdNum) && serviceIdNum > 0 ? serviceIdNum : undefined,
     sku: product.sku != null ? String(product.sku) : undefined,
     images,
     price: Number(currentPrice.price ?? product.price ?? 0),
@@ -859,13 +922,24 @@ function resolveProductCategoryId(product: Record<string, unknown>): number | un
   return undefined;
 }
 
-function mapVendorProductDetail(payload: unknown): VendorProductDetail {
+export function parseVendorProductDetail(payload: unknown): VendorProductDetail {
   const row = extractVendorProductRowFromPayload(payload);
   const base = mapVendorProductListItem(row);
   const product = (row.product ?? {}) as Record<string, unknown>;
-  const serviceIds = Array.isArray(product.service_ids)
+  const serviceIds: number[] = Array.isArray(product.service_ids)
     ? product.service_ids.map((id) => Number(id)).filter((id) => Number.isFinite(id))
     : [];
+  if (serviceIds.length === 0) {
+    const singleServiceId =
+      product.service_id != null
+        ? Number(product.service_id)
+        : (product.service as { id?: number } | undefined)?.id != null
+          ? Number((product.service as { id?: number }).id)
+          : NaN;
+    if (Number.isFinite(singleServiceId) && singleServiceId > 0) {
+      serviceIds.push(singleServiceId);
+    }
+  }
   let customization: ProductCustomizationConfig | null = null;
   try {
     customization = mapAdminApiOptionGroupsToCustomization(product.option_groups);
@@ -909,7 +983,7 @@ async function fetchVendorProductDetailFromList(id: string): Promise<VendorProdu
       (item) => item != null && String((item as Record<string, unknown>).id) === String(id)
     );
     if (!row || typeof row !== 'object') return null;
-    return mapVendorProductDetail({ success: true, data: row });
+    return parseVendorProductDetail({ success: true, data: row });
   } catch {
     return null;
   }
@@ -938,13 +1012,26 @@ function normalizeProduct(raw: Record<string, unknown>): VendorCatalogProduct {
   if (raw.product != null) {
     return mapVendorProductListItem(raw);
   }
+  const categoryName =
+    resolveRelationName(raw.category) ||
+    (typeof raw.category_name === 'string' && raw.category_name.trim()
+      ? raw.category_name.trim()
+      : undefined);
+  const serviceName = resolveProductServiceName(raw);
+  const serviceIdRaw =
+    raw.service_id ??
+    (raw.service as { id?: number } | undefined)?.id ??
+    (Array.isArray(raw.service_ids) ? raw.service_ids[0] : undefined);
+  const serviceIdNum = serviceIdRaw != null ? Number(serviceIdRaw) : NaN;
   return {
     id: String(raw.id),
     vendor_id: raw.vendor_id != null ? String(raw.vendor_id) : undefined,
     product_id: raw.product_id != null ? String(raw.product_id) : undefined,
     name: String(raw.name ?? ''),
     description: String(raw.description ?? ''),
-    category: String(raw.category ?? raw.category_name ?? '—'),
+    category: categoryName || '—',
+    service: serviceName,
+    service_id: Number.isFinite(serviceIdNum) && serviceIdNum > 0 ? serviceIdNum : undefined,
     sku: raw.sku != null ? String(raw.sku) : undefined,
     images: Array.isArray(raw.images)
       ? raw.images.map(resolveProductImageUrl).filter((url): url is string => Boolean(url))
@@ -994,7 +1081,27 @@ export const vendorService = {
         per_page: params?.per_page ?? 15,
       },
     });
-    return parseVendorProductsResponse(response.data);
+    const parsed = parseVendorProductsResponse(response.data);
+    const needsServiceLookup = parsed.items.some(
+      (item) => !item.service?.trim() && item.service_id != null && item.service_id > 0
+    );
+    if (!needsServiceLookup) {
+      return parsed;
+    }
+    try {
+      const services = await this.getProductServices();
+      const byId = new Map(services.map((s) => [s.id, s.name]));
+      return {
+        ...parsed,
+        items: parsed.items.map((item) => {
+          if (item.service?.trim() || item.service_id == null) return item;
+          const name = byId.get(item.service_id);
+          return name ? { ...item, service: name } : item;
+        }),
+      };
+    } catch {
+      return parsed;
+    }
   },
 
   async getProductById(id: string): Promise<VendorProductDetail> {
@@ -1005,7 +1112,7 @@ export const vendorService = {
 
     try {
       const response = await apiClient.get(`/vendor/products/${encodeURIComponent(vendorProductId)}`);
-      const detail = mapVendorProductDetail(response.data);
+      const detail = parseVendorProductDetail(response.data);
       if (!detail.name?.trim()) {
         throw new Error('Product data is incomplete.');
       }

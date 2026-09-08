@@ -504,6 +504,30 @@ function buildVideoBannerFormData(params: {
   return formData;
 }
 
+export type AdminServicePricingType = 'fixed' | 'per_m2';
+
+export interface AdminServicePriceIncludes {
+  materials: boolean;
+  installation: boolean;
+  labor: boolean;
+  transportation: boolean;
+  delivery: boolean;
+}
+
+export interface AdminServicePricingSettings {
+  pricing_type: AdminServicePricingType;
+  /** Fixed-price amount (GET may send null when pricing_type is per_m2). */
+  price: number | null;
+  /** Per m² amount (GET may send null when pricing_type is fixed). */
+  price_per_m2: number | null;
+  currency?: string;
+  requires_area?: boolean;
+  price_includes: AdminServicePriceIncludes;
+  price_includes_labels?: string[];
+  applies_to?: string;
+  note?: string | null;
+}
+
 export const adminService = {
   getUsers: async (params?: { 
     page?: number; 
@@ -1317,6 +1341,59 @@ export const adminService = {
   }): Promise<OrdersListResponse> => {
     const response = await apiClient.get<OrdersListResponse>('/shop/orders', { params });
     return response.data;
+  },
+
+  /**
+   * GET /shop/orders/{order_id}
+   * Admin order detail (Postman / settings → Orders row tap).
+   */
+  getShopOrderDetail: async (orderId: string | number): Promise<ShopOrderDetail> => {
+    const id = encodeURIComponent(String(orderId ?? '').trim());
+    if (!id) throw new Error('Order id is required.');
+    const response = await apiClient.get(`/shop/orders/${id}`, { timeout: 25000 });
+    const body = response.data as {
+      success?: boolean;
+      message?: string;
+      data?: ShopOrderDetail | { order?: ShopOrderDetail };
+      order?: ShopOrderDetail;
+    };
+    const raw =
+      (body?.data as { order?: ShopOrderDetail } | undefined)?.order ??
+      (body?.data as ShopOrderDetail | undefined) ??
+      body?.order ??
+      null;
+    if (!raw || typeof raw !== 'object') {
+      throw new Error(body?.message || 'Order not found.');
+    }
+    return raw as ShopOrderDetail;
+  },
+
+  /**
+   * POST /admin/orders/bulk-delete
+   * Body: { ids: number[] }
+   */
+  bulkDeleteOrders: async (
+    ids: Array<string | number>
+  ): Promise<{ success: boolean; message?: string }> => {
+    const normalized = ids
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    if (normalized.length === 0) {
+      throw new Error('No orders selected to delete.');
+    }
+    const response = await apiClient.post(
+      '/admin/orders/bulk-delete',
+      { ids: normalized },
+      { timeout: 30000 }
+    );
+    const body = response.data as { success?: boolean; message?: string };
+    if (body && body.success === false) {
+      throw new Error(body.message || 'Failed to delete orders.');
+    }
+    return {
+      success: true,
+      message: body?.message,
+    };
   },
 
   // Admin products list (uses Bearer token)
@@ -2450,6 +2527,66 @@ export const adminService = {
     const response = await apiClient.put('/admin/settings/shop', body, { timeout: 15000 });
     return response.data;
   },
+
+  /** GET /api/admin/settings/instant-order-fee */
+  getInstantOrderFee: async (): Promise<{
+    success?: boolean;
+    message?: string;
+    data?: { instant_order_fee_amount?: number | string | null };
+  }> => {
+    const response = await apiClient.get('/admin/settings/instant-order-fee', { timeout: 15000 });
+    return response.data;
+  },
+
+  /** PUT /api/admin/settings/instant-order-fee — body: { instant_order_fee_amount } */
+  updateInstantOrderFee: async (body: {
+    instant_order_fee_amount: number;
+  }): Promise<{
+    success?: boolean;
+    message?: string;
+    data?: { instant_order_fee_amount?: number | string | null };
+  }> => {
+    const response = await apiClient.put('/admin/settings/instant-order-fee', body, {
+      timeout: 15000,
+    });
+    return response.data;
+  },
+
+  /** GET /api/admin/settings/service-pricing */
+  getServicePricingSettings: async (): Promise<{
+    success?: boolean;
+    message?: string;
+    data?: AdminServicePricingSettings;
+  }> => {
+    const response = await apiClient.get('/admin/settings/service-pricing', { timeout: 15000 });
+    return response.data;
+  },
+
+  /**
+   * Update service pricing settings.
+   * POST /api/admin/settings/service-pricing (form-data)
+   * Body: pricing_type, price, price_includes[materials|installation|labor|transportation|delivery] as 0|1
+   */
+  updateServicePricingSettings: async (params: {
+    pricing_type: AdminServicePricingType;
+    price: number;
+    price_includes: AdminServicePriceIncludes;
+  }): Promise<{
+    success?: boolean;
+    message?: string;
+    data?: AdminServicePricingSettings;
+  }> => {
+    const formData = new FormData();
+    formData.append('pricing_type', params.pricing_type);
+    formData.append('price', String(params.price));
+    (Object.keys(params.price_includes) as (keyof AdminServicePriceIncludes)[]).forEach((key) => {
+      formData.append(`price_includes[${key}]`, params.price_includes[key] ? '1' : '0');
+    });
+    const response = await apiClient.post('/admin/settings/service-pricing', formData, {
+      timeout: 15000,
+    });
+    return response.data;
+  },
 };
 
 export interface AdminBanner {
@@ -2786,6 +2923,56 @@ export interface ShopOrder {
   user?: { id: number; name?: string; email?: string };
   customer?: { id: number; name?: string; email?: string };
   [key: string]: any;
+}
+
+/** GET /shop/orders/{id} — full shop order for admin detail. */
+export interface ShopOrderDetail extends ShopOrder {
+  order_status?: string;
+  payment_status?: string;
+  payment_method?: string;
+  total_amount?: number | string;
+  subtotal_amount?: number | string;
+  tax_amount?: number | string;
+  shipping_amount?: number | string;
+  wallet_amount_applied?: number | string;
+  booking_date?: string | null;
+  booking_slot?: string | null;
+  estimated_arrival?: string | null;
+  job_duration?: string | null;
+  special_instructions?: string | null;
+  fulfillment_type?: string | null;
+  items?: Array<{
+    id?: number;
+    product_id?: number;
+    quantity?: number;
+    price?: number | string;
+    subtotal?: number | string;
+    booking_date?: string | null;
+    booking_slot?: string | null;
+    product?: {
+      id?: number;
+      name?: string;
+      sku?: string | null;
+      image_url?: string | null;
+      image?: string | null;
+    } | null;
+  }>;
+  shipping_address?: {
+    full_name?: string;
+    phone_number?: string;
+    street_address?: string;
+    city?: string;
+    state?: string;
+    zip_code?: string;
+    country?: string;
+  } | null;
+  vendor_mappings?: Array<{
+    id?: number;
+    vendor_id?: number;
+    status?: string;
+    tracking_number?: string | null;
+    total_amount?: number | string;
+  }>;
 }
 
 export interface OrdersListResponse {

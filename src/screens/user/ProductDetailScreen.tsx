@@ -8,6 +8,9 @@ import {
   Dimensions,
   Alert,
   ActivityIndicator,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +22,14 @@ import { useTranslation } from 'react-i18next';
 import { shopService, ShopProduct, isShopProductInStock, resolveShopProductStock } from '../../services/shopService';
 import { addCartItem, getBuyNowSummary } from '../../services/cartService';
 import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
+import {
+  formatAreaM2,
+  getEffectiveServicePrice,
+  getServicePricingSettings,
+  parseAreaM2,
+  ServicePriceIncludes,
+  ServicePricingSettings,
+} from '../../services/servicePricingService';
 import { useIsAuthenticated } from '../../store';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { ensureMinimumOrderAmount } from '../../utils/shopOrderMinimum';
@@ -40,6 +51,21 @@ import {
 const mapApiOptionGroupsToCustomization = mapShopApiOptionGroupsToCustomization;
 
 const { width: screenWidth } = Dimensions.get('window');
+
+const INCLUSION_KEYS: (keyof ServicePriceIncludes)[] = [
+  'materials',
+  'installation',
+  'labor',
+  'transportation',
+  'delivery',
+];
+
+function parseProductUnitPrice(p: ShopProduct | null, fallback: number): number {
+  if (!p) return fallback;
+  const raw = p.price_per_m2 ?? p.price;
+  const n = typeof raw === 'string' ? parseFloat(raw) : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
 
 export type ProductDetailDisplay = {
   id: string;
@@ -108,6 +134,8 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   const [selectedDateIso, setSelectedDateIso] = useState<string | null>(null);
   const [selectedSlotLabel, setSelectedSlotLabel] = useState<string>('');
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [servicePricing, setServicePricing] = useState<ServicePricingSettings | null>(null);
+  const [areaM2Input, setAreaM2Input] = useState('');
   const isAuthenticated = useIsAuthenticated();
   const { count: cartItemCount, refresh: refreshCartBadge } = useCartBadgeCount();
 
@@ -122,6 +150,20 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
       return am - bm;
     });
   }, [booking?.slots]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getServicePricingSettings()
+      .then((settings) => {
+        if (!cancelled) setServicePricing(settings);
+      })
+      .catch(() => {
+        if (!cancelled) setServicePricing(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const selectDate = useCallback(
     async (date: string, available: boolean) => {
@@ -278,50 +320,6 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     [selectedOptions, customization]
   );
 
-  useEffect(() => {
-    if (!isAuthenticated || !product.inStock) {
-      setBuyNowOrderTotal(null);
-      return;
-    }
-    const productId = Number(product.id);
-    if (!Number.isFinite(productId)) {
-      setBuyNowOrderTotal(null);
-      return;
-    }
-    let cancelled = false;
-    getBuyNowSummary(productId, quantity, {
-      selected_option_ids: selectedOptionIds.length ? selectedOptionIds : undefined,
-    })
-      .then((res) => {
-        if (!cancelled) {
-          setBuyNowOrderTotal(
-            res?.order_summary?.total != null ? Number(res.order_summary.total) : null
-          );
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setBuyNowOrderTotal(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated, product.id, product.inStock, quantity, selectedOptionIds]);
-
-  const currency = t('orders.currency', { defaultValue: 'AED' });
-  const estimatedBuyNowTotal = useMemo(() => {
-    const subtotal = product.price * quantity;
-    const shipping = shopSettings?.shipping_amount ?? 10;
-    const taxPercent = shopSettings?.tax_percent ?? 5;
-    const tax = Math.round(subtotal * (taxPercent / 100) * 100) / 100;
-    return Math.round((subtotal + shipping + tax) * 100) / 100;
-  }, [product.price, quantity, shopSettings]);
-
-  const buyNowTotalForMinCheck =
-    buyNowOrderTotal != null && Number.isFinite(buyNowOrderTotal)
-      ? buyNowOrderTotal
-      : estimatedBuyNowTotal;
-  const buyNowButtonLabel = t('product.buyNow', { defaultValue: 'Buy Now' });
-
   const selectedOptionsExtra = useMemo(() => {
     if (!customization) return 0;
     let sum = 0;
@@ -335,10 +333,154 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     return sum;
   }, [customization, selectedOptions]);
 
+  const productPricingType = String(
+    apiProduct?.pricing_type || servicePricing?.pricing_type || 'fixed'
+  ).toLowerCase();
+  const isPerM2Pricing =
+    productPricingType === 'per_m2' || servicePricing?.requires_area === true;
+
+  const unitPricePerM2 = useMemo(() => {
+    if (servicePricing?.pricing_type === 'per_m2') {
+      return (
+        getEffectiveServicePrice(servicePricing) ??
+        parseProductUnitPrice(apiProduct, product.price)
+      );
+    }
+    return parseProductUnitPrice(apiProduct, product.price);
+  }, [servicePricing, apiProduct, product.price]);
+
+  const catalogFixedPrice = useMemo(() => {
+    if (servicePricing?.pricing_type === 'fixed' && servicePricing.price != null) {
+      return servicePricing.price;
+    }
+    return product.price;
+  }, [servicePricing, product.price]);
+
+  const priceIncludes: ServicePriceIncludes | null = useMemo(() => {
+    if (!isPerM2Pricing) return null;
+    if (servicePricing?.pricing_type === 'per_m2') return servicePricing.price_includes;
+    const raw = apiProduct?.price_includes;
+    if (!raw || typeof raw !== 'object') return null;
+    return {
+      materials: Boolean(raw.materials === true || raw.materials === 1 || raw.materials === '1'),
+      installation: Boolean(
+        raw.installation === true || raw.installation === 1 || raw.installation === '1'
+      ),
+      labor: Boolean(raw.labor === true || raw.labor === 1 || raw.labor === '1'),
+      transportation: Boolean(
+        raw.transportation === true || raw.transportation === 1 || raw.transportation === '1'
+      ),
+      delivery: Boolean(raw.delivery === true || raw.delivery === 1 || raw.delivery === '1'),
+    };
+  }, [isPerM2Pricing, servicePricing, apiProduct?.price_includes]);
+
+  const parsedAreaM2 = useMemo(() => parseAreaM2(areaM2Input), [areaM2Input]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !product.inStock) {
+      setBuyNowOrderTotal(null);
+      return;
+    }
+    const productId = Number(product.id);
+    if (!Number.isFinite(productId)) {
+      setBuyNowOrderTotal(null);
+      return;
+    }
+    if (isPerM2Pricing && parsedAreaM2 == null) {
+      setBuyNowOrderTotal(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      getBuyNowSummary(productId, quantity, {
+        selected_option_ids: selectedOptionIds.length ? selectedOptionIds : undefined,
+        ...(isPerM2Pricing && parsedAreaM2 != null ? { area_m2: parsedAreaM2 } : {}),
+      })
+        .then((res) => {
+          if (!cancelled) {
+            setBuyNowOrderTotal(
+              res?.order_summary?.total != null ? Number(res.order_summary.total) : null
+            );
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setBuyNowOrderTotal(null);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    isAuthenticated,
+    product.id,
+    product.inStock,
+    quantity,
+    selectedOptionIds,
+    isPerM2Pricing,
+    parsedAreaM2,
+  ]);
+
+  const currency = t('orders.currency', { defaultValue: 'AED' });
+  const estimatedBuyNowTotal = useMemo(() => {
+    const subtotal = isPerM2Pricing
+      ? unitPricePerM2 * (parsedAreaM2 ?? 0) * quantity
+      : catalogFixedPrice * quantity;
+    const shipping = shopSettings?.shipping_amount ?? 10;
+    const taxPercent = shopSettings?.tax_percent ?? 5;
+    const tax = Math.round(subtotal * (taxPercent / 100) * 100) / 100;
+    return Math.round((subtotal + shipping + tax) * 100) / 100;
+  }, [
+    isPerM2Pricing,
+    unitPricePerM2,
+    parsedAreaM2,
+    catalogFixedPrice,
+    quantity,
+    shopSettings,
+  ]);
+
+  const buyNowTotalForMinCheck =
+    buyNowOrderTotal != null && Number.isFinite(buyNowOrderTotal)
+      ? buyNowOrderTotal
+      : estimatedBuyNowTotal;
+  const buyNowButtonLabel = t('product.buyNow', { defaultValue: 'Buy Now' });
+
   const addToCartSubtotal = useMemo(() => {
-    const unitPrice = product.price + selectedOptionsExtra;
-    return Math.round(unitPrice * quantity * 100) / 100;
-  }, [product.price, selectedOptionsExtra, quantity]);
+    const optionsExtra = selectedOptionsExtra;
+    if (isPerM2Pricing) {
+      // After area is entered: Area × Price per m²
+      if (parsedAreaM2 != null) {
+        return Math.round((unitPricePerM2 * parsedAreaM2 + optionsExtra) * quantity * 100) / 100;
+      }
+      // Before area: show the product's actual catalog / fixed price
+      return Math.round((catalogFixedPrice + optionsExtra) * quantity * 100) / 100;
+    }
+    return Math.round((catalogFixedPrice + optionsExtra) * quantity * 100) / 100;
+  }, [
+    isPerM2Pricing,
+    parsedAreaM2,
+    unitPricePerM2,
+    selectedOptionsExtra,
+    quantity,
+    product.price,
+    catalogFixedPrice,
+  ]);
+
+  const hasAreaTotal = isPerM2Pricing && parsedAreaM2 != null;
+
+  const ensureAreaValid = (): number | null => {
+    if (!isPerM2Pricing) return null;
+    if (parsedAreaM2 == null) {
+      Alert.alert(
+        t('common.error', { defaultValue: 'Error' }),
+        t('product.areaRequired', {
+          defaultValue: 'Please enter the required area (m²).',
+        })
+      );
+      return null;
+    }
+    return parsedAreaM2;
+  };
 
   const buyNowMinCheckTotalWithOptions = buyNowTotalForMinCheck + selectedOptionsExtra * quantity;
 
@@ -404,6 +546,8 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     }
     if (!ensureScheduleSelected()) return;
     if (!ensureCustomizationValid()) return;
+    const areaValue = ensureAreaValid();
+    if (isPerM2Pricing && areaValue == null) return;
     const optionApiCheck = validateSelectedOptionsForCartApi(customization, selectedOptions);
     if (!optionApiCheck.valid) {
       Alert.alert(
@@ -445,12 +589,17 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         {
           booking_date: selectedDateIso || undefined,
           booking_slot: selectedSlotLabel || undefined,
+          ...(areaValue != null ? { area_m2: areaValue } : {}),
         }
       );
       refreshCartBadge(true);
       Alert.alert(
         t('product.addedToCart'),
-        `${product.name} (Qty: ${quantity})\n${formatDisplayDate(selectedDateIso!)} · ${selectedSlotLabel}`,
+        `${product.name} (Qty: ${quantity})${
+          areaValue != null
+            ? `\n${t('product.areaLabel', { defaultValue: 'Area' })}: ${formatAreaM2(areaValue)} m²`
+            : ''
+        }\n${formatDisplayDate(selectedDateIso!)} · ${selectedSlotLabel}`,
         [
           {
             text: t('product.continueShopping'),
@@ -490,6 +639,8 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     }
     if (!ensureScheduleSelected()) return;
     if (!ensureCustomizationValid()) return;
+    const areaValue = ensureAreaValid();
+    if (isPerM2Pricing && areaValue == null) return;
 
     if (!ensureMinimumOrderAmount(buyNowMinCheckTotalWithOptions, currency, t)) {
       return;
@@ -517,6 +668,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     try {
       const res = await getBuyNowSummary(productId, quantity, {
         selected_option_ids: selectedOptionIds.length ? selectedOptionIds : undefined,
+        ...(areaValue != null ? { area_m2: areaValue } : {}),
       });
       if (res?.item && res?.order_summary) {
         const buyNowTotal = Number(res.order_summary.total) || 0;
@@ -538,20 +690,25 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
               quantity: res.item.quantity,
               categoryId: res.item.category_id ?? undefined,
               serviceId: (res.item as { service_id?: number }).service_id ?? undefined,
+              areaM2: areaValue ?? undefined,
+              unitPrice: unitPricePerM2,
+              pricingType: isPerM2Pricing ? 'per_m2' : 'fixed',
             },
           ],
           total: res.order_summary.total,
           buyNowSummary: res.order_summary,
           isBuyNow: true,
           selectedOptionIds: selectedOptionIds.length ? selectedOptionIds : undefined,
-          // Dummy schedule — wire to checkout/order API later
+          areaM2: areaValue ?? undefined,
           scheduledDate: selectedDateIso,
           scheduledTime: selectedSlotLabel,
         });
         return;
       }
 
-      const estimatedTotal = product.price * quantity;
+      const estimatedTotal = isPerM2Pricing
+        ? unitPricePerM2 * (areaValue ?? 0) * quantity
+        : product.price * quantity;
       const fallbackCurrency = t('orders.currency', { defaultValue: 'AED' });
       if (!ensureMinimumOrderAmount(estimatedTotal, fallbackCurrency, t)) {
         return;
@@ -562,16 +719,20 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
             id: product.id,
             productId: product.id,
             name: product.name,
-            price: product.price,
+            price: isPerM2Pricing ? unitPricePerM2 * (areaValue ?? 0) : product.price,
             originalPrice: product.originalPrice > product.price ? product.originalPrice : undefined,
             image: product.image,
             color: '',
             size: '',
             quantity,
+            areaM2: areaValue ?? undefined,
+            unitPrice: isPerM2Pricing ? unitPricePerM2 : product.price,
+            pricingType: isPerM2Pricing ? 'per_m2' : 'fixed',
           },
         ],
         isBuyNow: true,
         selectedOptionIds: selectedOptionIds.length ? selectedOptionIds : undefined,
+        areaM2: areaValue ?? undefined,
         scheduledDate: selectedDateIso,
         scheduledTime: selectedSlotLabel,
       });
@@ -632,7 +793,18 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
           <ActivityIndicator size="small" color={COLORS.primary} />
         </View>
       )}
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="always"
+        keyboardDismissMode="none"
+        >
         {/* Product Image */}
         <View style={styles.imageContainer}>
           {product.image ? (
@@ -681,18 +853,138 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
           </View>
 
           <View style={styles.priceContainer}>
-            <Text style={styles.currentPrice}>{t('orders.currency', { defaultValue: 'AED' })} {product.price}</Text>
-            {product.originalPrice > product.price && (
-              <Text style={styles.originalPrice}>{t('orders.currency', { defaultValue: 'AED' })} {product.originalPrice}</Text>
+            {isPerM2Pricing ? (
+              <View style={styles.priceBlock}>
+                <Text style={styles.currentPrice}>
+                  {currency}{' '}
+                  {(hasAreaTotal ? addToCartSubtotal : product.price).toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                  })}
+                </Text>
+                <Text style={styles.unitRateText}>
+                  {hasAreaTotal
+                    ? t('product.areaBasedTotalHint', {
+                        defaultValue: 'Total for {{area}} m² × {{currency}} {{rate}}/m²',
+                        area: formatAreaM2(parsedAreaM2!),
+                        currency,
+                        rate: unitPricePerM2.toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        }),
+                      })
+                    : t('product.unitRateHint', {
+                        defaultValue: 'Unit rate: {{currency}} {{rate}} / m² — enter area to calculate total',
+                        currency,
+                        rate: unitPricePerM2.toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        }),
+                      })}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.currentPrice}>
+                {currency} {product.price}
+              </Text>
             )}
-            {product.originalPrice > product.price && (
+            {!isPerM2Pricing && product.originalPrice > product.price && (
+              <Text style={styles.originalPrice}>
+                {currency} {product.originalPrice}
+              </Text>
+            )}
+            {!isPerM2Pricing && product.originalPrice > product.price && (
               <View style={styles.discountBadge}>
-                 <Text style={styles.discountText}>
-                   {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% {t('product.off')}
-                 </Text>
+                <Text style={styles.discountText}>
+                  {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}%{' '}
+                  {t('product.off')}
+                </Text>
               </View>
             )}
           </View>
+
+          {isPerM2Pricing ? (
+            <View style={styles.areaSection}>
+              <Text style={styles.sectionTitle}>
+                {t('product.requiredArea', { defaultValue: 'Required Area (m²)' })} *
+              </Text>
+              <Text style={styles.areaHint}>
+                {t('product.areaHint', {
+                  defaultValue: 'Enter the actual area. Decimals allowed (e.g. 50, 100, 137.5).',
+                })}
+              </Text>
+              <View style={styles.areaInputRow}>
+                <TextInput
+                  style={styles.areaTextInput}
+                  value={areaM2Input}
+                  onChangeText={setAreaM2Input}
+                  placeholder={t('product.areaPlaceholder', { defaultValue: 'e.g. 100' })}
+                  placeholderTextColor={COLORS.textSecondary}
+                  keyboardType="numeric"
+                  returnKeyType="done"
+                  editable={true}
+                  autoFocus={false}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  blurOnSubmit={true}
+                  underlineColorAndroid="transparent"
+                  importantForAutofill="no"
+                  textContentType="none"
+                  autoComplete="off"
+                  contextMenuHidden={false}
+                  showSoftInputOnFocus={true}
+                />
+                <Text style={styles.areaSuffix}>m²</Text>
+              </View>
+
+              {priceIncludes && INCLUSION_KEYS.some((k) => priceIncludes[k]) ? (
+                <View style={styles.includesWrap}>
+                  <Text style={styles.includesTitle}>
+                    {t('product.priceIncludes', { defaultValue: 'Price includes' })}
+                  </Text>
+                  <View style={styles.includesChips}>
+                    {INCLUSION_KEYS.filter((k) => priceIncludes[k]).map((key) => (
+                      <View key={key} style={styles.includesChip}>
+                        <Text style={styles.includesChipText}>
+                          {t(`product.includes.${key}`, { defaultValue: key })}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={styles.areaCalcBox}>
+                <Text style={styles.areaCalcLine}>
+                  {t('product.areaCalcArea', {
+                    defaultValue: 'Area: {{area}} m²',
+                    area: parsedAreaM2 != null ? formatAreaM2(parsedAreaM2) : '—',
+                  })}
+                </Text>
+                <Text style={styles.areaCalcLine}>
+                  {t('product.areaCalcUnit', {
+                    defaultValue: 'Price per m²: {{currency}} {{price}}',
+                    currency,
+                    price: unitPricePerM2.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+                  })}
+                </Text>
+                <Text style={styles.areaCalcTotal}>
+                  {hasAreaTotal
+                    ? t('product.areaCalcTotal', {
+                        defaultValue: 'Total: {{currency}} {{total}}',
+                        currency,
+                        total: addToCartSubtotal.toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        }),
+                      })
+                    : t('product.actualPriceLabel', {
+                        defaultValue: 'Service price: {{currency}} {{price}}',
+                        currency,
+                        price: product.price.toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        }),
+                      })}
+                </Text>
+              </View>
+            </View>
+          ) : null}
 
           {apiProduct?.compare_vendors?.available === true ? (
             <TouchableOpacity
@@ -1055,44 +1347,46 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
             </View>
           ) : null}
         </View>
-      </ScrollView>
+        </ScrollView>
 
-      {/* Bottom Action Buttons */}
-      <View style={styles.bottomActions}>
-        <TouchableOpacity
-          style={[styles.addToCartButton, (!product.inStock || addingToCart) && styles.disabledButton]}
-          onPress={handleAddToCart}
-          disabled={!product.inStock || addingToCart}
-        >
-          {addingToCart ? (
-            <ActivityIndicator size="small" color={COLORS.primary} />
-          ) : (
-            <View style={styles.addToCartInner}>
-              <View style={styles.addToCartLabelRow}>
-                <Ionicons name="cart-outline" size={18} color={COLORS.primary} />
-                <Text style={styles.addToCartText} numberOfLines={1}>
-                  {t('product.addToCart')}
+        {/* Bottom Action Buttons */}
+        <View style={styles.bottomActions}>
+          <TouchableOpacity
+            style={[styles.addToCartButton, (!product.inStock || addingToCart) && styles.disabledButton]}
+            onPress={handleAddToCart}
+            disabled={!product.inStock || addingToCart}
+          >
+            {addingToCart ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <View style={styles.addToCartInner}>
+                <View style={styles.addToCartLabelRow}>
+                  <Ionicons name="cart-outline" size={18} color={COLORS.primary} />
+                  <Text style={styles.addToCartText} numberOfLines={1}>
+                    {t('product.addToCart')}
+                  </Text>
+                </View>
+                <Text style={styles.addToCartPrice} numberOfLines={1}>
+                  {currency}{' '}
+                  {addToCartSubtotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </Text>
               </View>
-              <Text style={styles.addToCartPrice} numberOfLines={1}>
-                {currency} {addToCartSubtotal.toFixed(2)}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.buyNowButton, (!product.inStock || buyingNow) && styles.disabledButton]}
-          onPress={handleBuyNow}
-          disabled={!product.inStock || buyingNow}
-        >
-          {buyingNow ? (
-            <ActivityIndicator size="small" color={COLORS.background} />
-          ) : (
-            <Text style={styles.buyNowText}>{buyNowButtonLabel}</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[styles.buyNowButton, (!product.inStock || buyingNow) && styles.disabledButton]}
+            onPress={handleBuyNow}
+            disabled={!product.inStock || buyingNow}
+          >
+            {buyingNow ? (
+              <ActivityIndicator size="small" color={COLORS.background} />
+            ) : (
+              <Text style={styles.buyNowText}>{buyNowButtonLabel}</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -1101,6 +1395,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: SPACING.xl,
   },
   imageContainer: {
     position: 'relative',
@@ -1187,14 +1487,23 @@ const styles = StyleSheet.create({
   },
   priceContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: SPACING.lg,
+  },
+  priceBlock: {
+    flex: 1,
   },
   currentPrice: {
     fontSize: FONT_SIZES.xxl,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.primary,
     marginRight: SPACING.md,
+  },
+  unitRateText: {
+    marginTop: 4,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
   },
   originalPrice: {
     fontSize: FONT_SIZES.lg,
@@ -1212,6 +1521,88 @@ const styles = StyleSheet.create({
     color: COLORS.background,
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.medium,
+  },
+  areaSection: {
+    marginBottom: SPACING.lg,
+    padding: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  areaHint: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+    lineHeight: 18,
+  },
+  areaInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  areaTextInput: {
+    flexGrow: 1,
+    flexShrink: 1,
+    width: '100%',
+    minWidth: 120,
+    height: 52,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 0,
+    fontSize: FONT_SIZES.md,
+    color: '#111827',
+    backgroundColor: '#FFFFFF',
+    marginRight: SPACING.sm,
+  },
+  areaSuffix: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+  },
+  includesWrap: {
+    marginTop: SPACING.md,
+  },
+  includesTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  includesChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  includesChip: {
+    backgroundColor: COLORS.primary + '15',
+    borderRadius: BORDER_RADIUS.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+  },
+  includesChipText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.medium,
+  },
+  areaCalcBox: {
+    marginTop: SPACING.md,
+    padding: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primary + '10',
+  },
+  areaCalcLine: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  areaCalcTotal: {
+    marginTop: SPACING.xs,
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
   },
   compareVendorsBtn: {
     flexDirection: 'row',

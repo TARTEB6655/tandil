@@ -100,7 +100,11 @@ const AdminOrdersScreen: React.FC = () => {
   };
 
   const renderOrderItem = ({ item }: { item: ShopOrder }) => (
-    <View style={styles.orderCard}>
+    <TouchableOpacity
+      style={styles.orderCard}
+      activeOpacity={0.75}
+      onPress={() => navigation.navigate('AdminOrderDetail', { orderId: item.id })}
+    >
       <View style={styles.orderRow}>
         <Text style={styles.orderId}>#{item.order_number ?? item.id}</Text>
         <View style={[styles.statusBadge, { backgroundColor: (item.status ? getStatusColor(item.status) : COLORS.textSecondary) + '20' }]}>
@@ -112,7 +116,7 @@ const AdminOrdersScreen: React.FC = () => {
         <Text style={styles.orderDate}>{formatDate(item.created_at)}</Text>
         <Text style={styles.orderTotal}>{formatTotal(item.total)}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   function getStatusColor(status: string): string {

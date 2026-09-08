@@ -73,6 +73,7 @@ function ProductRow({
   enabled,
   onToggle,
   onDelete,
+  onPress,
   t,
 }: {
   item: AdminManagedVendorProduct;
@@ -80,37 +81,50 @@ function ProductRow({
   enabled: boolean;
   onToggle: () => void;
   onDelete: () => void;
+  onPress: () => void;
   t: (key: string, options?: { defaultValue?: string }) => string;
 }) {
   return (
     <View style={styles.productCard}>
-      <ProductThumb uri={item.image_url} style={styles.productImage} />
-      <View style={styles.productMeta}>
-        <Text style={[styles.productName, !enabled && styles.mutedText]} numberOfLines={2}>
-          {item.name}
-        </Text>
-        <Text style={styles.productPrice}>
-          {item.price_formatted || `${item.currency} ${item.price.toFixed(2)}`}
-        </Text>
-        <View style={styles.productMetaRow}>
-          <View style={styles.metaChip}>
-            <Ionicons name="layers-outline" size={12} color={COLORS.textSecondary} />
-            <Text style={styles.productStock}>
-              {t('adminVendorManagement.stock', { defaultValue: 'Stock' })} {item.stock}
-            </Text>
-          </View>
-        </View>
-        {/* API display_status_label only (Draft, Disabled by Admin, Out of Stock, …) */}
-        {item.display_status_label ? (
-          <View style={styles.badgesRow}>
-            <View style={[styles.statusPill, { backgroundColor: '#D4A01718' }]}>
-              <Text style={[styles.statusPillText, { color: '#B8860B' }]}>
-                {item.display_status_label}
+      <TouchableOpacity
+        style={styles.productTapArea}
+        onPress={onPress}
+        activeOpacity={0.88}
+        accessibilityRole="button"
+        accessibilityLabel={t('adminVendorManagement.productForm.editProduct', {
+          defaultValue: 'Edit product',
+        })}
+      >
+        <ProductThumb uri={item.image_url} style={styles.productImage} />
+        <View style={styles.productMeta}>
+          <Text style={[styles.productName, !enabled && styles.mutedText]} numberOfLines={2}>
+            {item.name}
+          </Text>
+          <Text style={styles.productPrice}>
+            {item.price_formatted || `${item.currency} ${item.price.toFixed(2)}`}
+          </Text>
+          <View style={styles.productMetaRow}>
+            <View style={styles.metaChip}>
+              <Ionicons name="layers-outline" size={12} color={COLORS.textSecondary} />
+              <Text style={styles.productStock}>
+                {t('adminVendorManagement.stock', { defaultValue: 'Stock' })} {item.stock}
               </Text>
             </View>
           </View>
-        ) : null}
-      </View>
+          {item.display_status_label ? (
+            <View style={styles.badgesRow}>
+              <View style={[styles.statusPill, { backgroundColor: '#D4A01718' }]}>
+                <Text style={[styles.statusPillText, { color: '#B8860B' }]}>
+                  {item.display_status_label}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.editHint} accessibilityElementsHidden importantForAccessibility="no">
+          <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+        </View>
+      </TouchableOpacity>
       <View style={styles.actionsWrap}>
         {busy ? (
           <ActivityIndicator size="small" color={COLORS.primary} />
@@ -500,6 +514,23 @@ const AdminVendorProductsScreen: React.FC = () => {
     summary?.total_revenue_formatted ||
     `${summary?.currency || 'AED'} ${Math.round(summary?.total_revenue ?? 0)}`;
 
+  const openAddProduct = () => {
+    navigation.navigate('AdminVendorProductForm', {
+      vendorId,
+      vendorName: title,
+      mode: 'add',
+    });
+  };
+
+  const openEditProduct = (product: AdminManagedVendorProduct) => {
+    navigation.navigate('AdminVendorProductForm', {
+      vendorId,
+      vendorName: title,
+      mode: 'edit',
+      productId: product.vendor_product_id || product.id,
+    });
+  };
+
   const renderProduct = ({ item }: { item: AdminManagedVendorProduct }) => {
     const busy = togglingId === item.id || deletingId === item.id;
     const enabled = item.is_available;
@@ -510,6 +541,7 @@ const AdminVendorProductsScreen: React.FC = () => {
         enabled={enabled}
         onToggle={() => handleToggle(item)}
         onDelete={() => handleDelete(item)}
+        onPress={() => openEditProduct(item)}
         t={t}
       />
     );
@@ -701,9 +733,17 @@ const AdminVendorProductsScreen: React.FC = () => {
                 <Text style={styles.sectionTitle}>
                   {t('adminVendorManagement.productsList', { defaultValue: 'Products' })}
                 </Text>
-                <Text style={styles.sectionCount}>
-                  {summary?.total_products ?? products.length}
-                </Text>
+                <View style={styles.sectionRowRight}>
+                  <Text style={styles.sectionCount}>
+                    {summary?.total_products ?? products.length}
+                  </Text>
+                  <TouchableOpacity style={styles.addProductBtn} onPress={openAddProduct} activeOpacity={0.88}>
+                    <Ionicons name="add" size={18} color="#fff" />
+                    <Text style={styles.addProductBtnText}>
+                      {t('adminVendorManagement.productForm.addShort', { defaultValue: 'Add' })}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           }
@@ -717,6 +757,12 @@ const AdminVendorProductsScreen: React.FC = () => {
                   defaultValue: 'No products for this vendor yet.',
                 })}
               </Text>
+              <TouchableOpacity style={styles.emptyAddBtn} onPress={openAddProduct} activeOpacity={0.88}>
+                <Ionicons name="add-circle-outline" size={20} color="#fff" />
+                <Text style={styles.emptyAddBtnText}>
+                  {t('adminVendorManagement.productForm.addProductTitle', { defaultValue: 'Add product' })}
+                </Text>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -917,6 +963,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.sm,
   },
+  sectionRowRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  addProductBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  addProductBtnText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: '#fff',
+  },
+  productTapArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
+  },
+  editHint: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary + '12',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.xs,
+  },
   sectionTitle: {
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.bold,
@@ -1028,6 +1104,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: { color: COLORS.textSecondary, textAlign: 'center', paddingHorizontal: SPACING.lg },
+  emptyAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginTop: SPACING.md,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  emptyAddBtnText: {
+    color: '#fff',
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
 });
 
 export default AdminVendorProductsScreen;

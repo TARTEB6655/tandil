@@ -99,6 +99,7 @@ const sectionStyles = StyleSheet.create({
 const VendorAddProductScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
+  const [listingType, setListingType] = useState<'product' | 'service'>('product');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -126,6 +127,24 @@ const VendorAddProductScreen: React.FC = () => {
   const [pickingMain, setPickingMain] = useState(false);
   const [pickingExtra, setPickingExtra] = useState(false);
   const [customizationConfig, setCustomizationConfig] = useState<ProductCustomizationConfig>({ groups: [] });
+
+  const isProductListing = listingType === 'product';
+
+  const switchListingType = (next: 'product' | 'service') => {
+    if (next === listingType) return;
+    setListingType(next);
+    setShowCategoryDropdown(false);
+    setShowServiceDropdown(false);
+    setErrors((prev) => {
+      const { category_id: _c, service_id: _s, ...rest } = prev;
+      return rest;
+    });
+    if (next === 'product') {
+      setServiceId('');
+    } else {
+      setCategoryId('');
+    }
+  };
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -157,7 +176,7 @@ const VendorAddProductScreen: React.FC = () => {
 
   const serviceOptions = useMemo(
     () => [
-      { value: '', label: t('admin.addProduct.noService') },
+      { value: '', label: t('vendorAddProduct.selectService', { defaultValue: 'Select service' }) },
       ...services.map((s) => ({ value: String(s.id), label: s.name })),
     ],
     [services, t]
@@ -287,9 +306,15 @@ const VendorAddProductScreen: React.FC = () => {
     if (!status) newErrors.status = t('admin.addProduct.errorStatusRequired');
     if (!sku.trim()) newErrors.sku = t('admin.addProduct.errorSkuRequired');
     if (!handle.trim()) newErrors.handle = t('admin.addProduct.errorHandleRequired');
-    if (!categoryId.trim()) {
-      newErrors.category_id = t('vendorAddProduct.errorCategoryRequired', {
-        defaultValue: 'Please select a category',
+    if (isProductListing) {
+      if (!categoryId.trim()) {
+        newErrors.category_id = t('vendorAddProduct.errorCategoryRequired', {
+          defaultValue: 'Please select a category',
+        });
+      }
+    } else if (!serviceId.trim()) {
+      newErrors.service_id = t('vendorAddProduct.errorServiceRequired', {
+        defaultValue: 'Please select a service',
       });
     }
     if (Object.keys(newErrors).length > 0) {
@@ -306,17 +331,27 @@ const VendorAddProductScreen: React.FC = () => {
 
     setLoading(true);
     try {
-      const categoryIdNum = parseInt(categoryId, 10);
-      if (!Number.isFinite(categoryIdNum) || categoryIdNum <= 0) {
+      const categoryIdNum = categoryId.trim() ? parseInt(categoryId, 10) : NaN;
+      const serviceIdNum = serviceId.trim() ? parseInt(serviceId, 10) : NaN;
+
+      if (isProductListing) {
+        if (!Number.isFinite(categoryIdNum) || categoryIdNum <= 0) {
+          showValidationErrors({
+            category_id: t('vendorAddProduct.errorCategoryRequired', {
+              defaultValue: 'Please select a category',
+            }),
+          });
+          return;
+        }
+      } else if (!Number.isFinite(serviceIdNum) || serviceIdNum <= 0) {
         showValidationErrors({
-          category_id: t('vendorAddProduct.errorCategoryRequired', {
-            defaultValue: 'Please select a category',
+          service_id: t('vendorAddProduct.errorServiceRequired', {
+            defaultValue: 'Please select a service',
           }),
         });
         return;
       }
 
-      const serviceIdNum = serviceId.trim() ? parseInt(serviceId, 10) : undefined;
       const timingFields = {
         ...(estimatedArrival.trim() ? { estimated_arrival: estimatedArrival.trim() } : {}),
         ...(jobDuration.trim() ? { job_duration: jobDuration.trim() } : {}),
@@ -331,8 +366,8 @@ const VendorAddProductScreen: React.FC = () => {
         price: parseFloat(price),
         stock: parseInt(stock, 10),
         status,
-        category_id: categoryIdNum,
-        service_id: serviceIdNum ?? null,
+        category_id: isProductListing ? categoryIdNum : null,
+        service_id: isProductListing ? null : serviceIdNum,
         weight_unit: weightUnit,
         is_featured: isFeatured ? 1 : 0,
         sku: sku.trim(),
@@ -386,6 +421,7 @@ const VendorAddProductScreen: React.FC = () => {
               setPrice('');
               setStock('');
               setStatus('active');
+              setListingType('product');
               setCategoryId('');
               setServiceId('');
               setWeightUnit('kg');
@@ -515,7 +551,11 @@ const VendorAddProductScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <VendorPageHeader
-        title={t('admin.addProduct.title')}
+        title={
+          isProductListing
+            ? t('vendorAddProduct.addProductTitle', { defaultValue: 'Add Product' })
+            : t('vendorAddProduct.addServiceTitle', { defaultValue: 'Add Service' })
+        }
         subtitle={t('vendorAddProduct.subtitle', { defaultValue: 'Fill in details to list on Tandil marketplace' })}
         onBack={() => navigation.goBack()}
       />
@@ -534,10 +574,20 @@ const VendorAddProductScreen: React.FC = () => {
         >
           <VendorHeroBanner
             badge={t('vendorAddProduct.newListing', { defaultValue: 'New listing' })}
-            title={t('vendorAddProduct.heroTitle', { defaultValue: 'Create your product' })}
-            subtitle={t('vendorAddProduct.heroSubtitle', {
-              defaultValue: 'Add photos, pricing, and inventory for your store',
-            })}
+            title={
+              isProductListing
+                ? t('vendorAddProduct.heroTitle', { defaultValue: 'Create your product' })
+                : t('vendorAddProduct.heroServiceTitle', { defaultValue: 'Create your service' })
+            }
+            subtitle={
+              isProductListing
+                ? t('vendorAddProduct.heroSubtitle', {
+                    defaultValue: 'Add photos, pricing, and inventory for your store',
+                  })
+                : t('vendorAddProduct.heroServiceSubtitle', {
+                    defaultValue: 'Add photos, pricing, and details for your service',
+                  })
+            }
           />
 
           {Object.keys(errors).length > 0 ? (
@@ -558,8 +608,52 @@ const VendorAddProductScreen: React.FC = () => {
 
           <VendorCard style={styles.formCard}>
             <SectionHeader
-              icon="cube-outline"
-              title={t('admin.addProduct.productDetails')}
+              icon="layers-outline"
+              title={t('vendorAddProduct.listingTypeTitle', { defaultValue: 'What are you adding?' })}
+              subtitle={t('vendorAddProduct.listingTypeHint', {
+                defaultValue: 'Choose product or service — only one applies',
+              })}
+            />
+            <View style={styles.listingTypeRow}>
+              <TouchableOpacity
+                style={[styles.listingTypeBtn, isProductListing && styles.listingTypeBtnActive]}
+                onPress={() => switchListingType('product')}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="cube-outline"
+                  size={18}
+                  color={isProductListing ? COLORS.background : COLORS.textSecondary}
+                />
+                <Text style={[styles.listingTypeText, isProductListing && styles.listingTypeTextActive]}>
+                  {t('vendorAddProduct.addProductOption', { defaultValue: 'Add Product' })}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.listingTypeBtn, !isProductListing && styles.listingTypeBtnActive]}
+                onPress={() => switchListingType('service')}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="construct-outline"
+                  size={18}
+                  color={!isProductListing ? COLORS.background : COLORS.textSecondary}
+                />
+                <Text style={[styles.listingTypeText, !isProductListing && styles.listingTypeTextActive]}>
+                  {t('vendorAddProduct.addServiceOption', { defaultValue: 'Add Service' })}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </VendorCard>
+
+          <VendorCard style={styles.formCard}>
+            <SectionHeader
+              icon={isProductListing ? 'cube-outline' : 'construct-outline'}
+              title={
+                isProductListing
+                  ? t('admin.addProduct.productDetails')
+                  : t('vendorAddProduct.serviceDetails', { defaultValue: 'Service details' })
+              }
               subtitle={t('vendorAddProduct.detailsHint', { defaultValue: 'Basic info customers will see' })}
             />
 
@@ -633,27 +727,27 @@ const VendorAddProductScreen: React.FC = () => {
               </View>
             </View>
 
-            {renderDropdown(
-              t('vendorAddProduct.categoryLabel', { defaultValue: 'Category *' }),
-              categoryId,
-              categoryOptions,
-              showCategoryDropdown,
-              () => setShowCategoryDropdown((v) => !v),
-              (v) => { setCategoryId(v); if (errors.category_id) setErrors({ ...errors, category_id: '' }); },
-              'grid-outline',
-              errors.category_id
-            )}
-
-            {renderDropdown(
-              t('admin.addProduct.serviceLabel'),
-              serviceId,
-              serviceOptions,
-              showServiceDropdown,
-              () => setShowServiceDropdown((v) => !v),
-              (v) => { setServiceId(v); if (errors.service_id) setErrors({ ...errors, service_id: '' }); },
-              'construct-outline',
-              errors.service_id
-            )}
+            {isProductListing
+              ? renderDropdown(
+                  t('vendorAddProduct.categoryLabel', { defaultValue: 'Category *' }),
+                  categoryId,
+                  categoryOptions,
+                  showCategoryDropdown,
+                  () => setShowCategoryDropdown((v) => !v),
+                  (v) => { setCategoryId(v); if (errors.category_id) setErrors({ ...errors, category_id: '' }); },
+                  'grid-outline',
+                  errors.category_id
+                )
+              : renderDropdown(
+                  t('vendorAddProduct.serviceLabel', { defaultValue: 'Service *' }),
+                  serviceId,
+                  serviceOptions,
+                  showServiceDropdown,
+                  () => setShowServiceDropdown((v) => !v),
+                  (v) => { setServiceId(v); if (errors.service_id) setErrors({ ...errors, service_id: '' }); },
+                  'construct-outline',
+                  errors.service_id
+                )}
 
             <View style={styles.featuredCard}>
               <View style={styles.featuredLeft}>
@@ -829,7 +923,11 @@ const VendorAddProductScreen: React.FC = () => {
 
         <View style={styles.footer}>
           <Button
-            title={t('admin.addProduct.createButton', { defaultValue: 'Create Product' })}
+            title={
+              isProductListing
+                ? t('admin.addProduct.createButton', { defaultValue: 'Create Product' })
+                : t('vendorAddProduct.createServiceButton', { defaultValue: 'Create Service' })
+            }
             onPress={handleCreateProduct}
             disabled={loading}
             loading={loading}
@@ -882,6 +980,35 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     borderLeftWidth: 0,
     borderRightWidth: 0,
+  },
+  listingTypeRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  listingTypeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceLight,
+  },
+  listingTypeBtnActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary,
+  },
+  listingTypeText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.textSecondary,
+  },
+  listingTypeTextActive: {
+    color: COLORS.background,
   },
   row: {
     flexDirection: 'row',

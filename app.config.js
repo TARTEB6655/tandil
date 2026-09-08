@@ -41,7 +41,7 @@ module.exports = {
     ...expo,
     ios: {
       ...expo.ios,
-      buildNumber: '32',
+      buildNumber: '33',
       usesAppleSignIn: true,
       entitlements: {
         ...(expo.ios?.entitlements || {}),
@@ -58,6 +58,7 @@ module.exports = {
     },
     android: {
       ...expo.android,
+      versionCode: 33,
       permissions: [
         ...(expo.android?.permissions || []),
         'ACCESS_COARSE_LOCATION',

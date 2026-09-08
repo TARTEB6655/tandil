@@ -34,18 +34,37 @@ import {
 
 interface VendorOrder {
   id: string;
+  /** Parent shop order id — confirm-delivery 404 fallback. */
+  shopOrderId?: string;
   orderNumber: string;
   customerName: string;
   productName: string;
   productImage?: string;
   quantity: number;
   status: VendorOrderStatus;
+  statusLabel?: string;
   orderDate: Date;
   deliveryDate?: Date;
   totalAmount: number;
   customerAddress: string;
   customerPhone: string;
   trackingNumber?: string;
+  fulfillmentType?: string;
+  canConfirm?: boolean;
+  canShip?: boolean;
+  canMarkDelivered?: boolean;
+  canUpdateStatus?: boolean;
+  usesDeliveryOtp?: boolean;
+  canConfirmDeliveryOtp?: boolean;
+  canResendDeliveryOtp?: boolean;
+  confirmDeliveryEndpoint?: string | null;
+  resendDeliveryOtpEndpoint?: string | null;
+  primaryAction?: string | null;
+  primaryActionLabel?: string | null;
+}
+
+function isProductFulfillment(order: Pick<VendorOrder, 'fulfillmentType'>): boolean {
+  return String(order.fulfillmentType || '').toLowerCase() === 'product';
 }
 
 function mapApiOrder(item: VendorOrderListItem, productFallback: string): VendorOrder {
@@ -53,18 +72,32 @@ function mapApiOrder(item: VendorOrderListItem, productFallback: string): Vendor
   const deliveryDate = item.delivery_date ? new Date(item.delivery_date) : undefined;
   return {
     id: item.id,
+    shopOrderId: item.order_id,
     orderNumber: item.order_number,
     customerName: item.customer_name,
     productName: item.product_name || productFallback,
     productImage: item.product_image,
     quantity: item.quantity ?? item.items_count ?? 1,
     status: item.status,
+    statusLabel: item.status_label,
     orderDate: Number.isNaN(orderDate.getTime()) ? new Date() : orderDate,
     deliveryDate: deliveryDate && !Number.isNaN(deliveryDate.getTime()) ? deliveryDate : undefined,
     totalAmount: item.total_amount,
     customerAddress: item.customer_address || '—',
     customerPhone: item.customer_phone || '—',
     trackingNumber: item.tracking_number,
+    fulfillmentType: item.fulfillment_type,
+    canConfirm: item.can_confirm,
+    canShip: item.can_ship,
+    canMarkDelivered: item.can_mark_delivered,
+    canUpdateStatus: item.can_update_status,
+    usesDeliveryOtp: item.uses_delivery_otp,
+    canConfirmDeliveryOtp: item.can_confirm_delivery_otp,
+    canResendDeliveryOtp: item.can_resend_delivery_otp,
+    confirmDeliveryEndpoint: item.confirm_delivery_endpoint,
+    resendDeliveryOtpEndpoint: item.resend_delivery_otp_endpoint,
+    primaryAction: item.primary_action,
+    primaryActionLabel: item.primary_action_label,
   };
 }
 
@@ -113,9 +146,9 @@ const VendorOrdersScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [shipModalOrder, setShipModalOrder] = useState<VendorOrder | null>(null);
-  const [trackingNumber, setTrackingNumber] = useState('');
-  const [shipNote, setShipNote] = useState('');
+  // Ship updates status only (no tracking/note modal).
+  const [otpModalOrder, setOtpModalOrder] = useState<VendorOrder | null>(null);
+  const [deliveryOtp, setDeliveryOtp] = useState('');
 
   const statusLabel = useCallback(
     (status: string) => t(`vendorOrders.${status}`, { defaultValue: status }),
@@ -187,21 +220,12 @@ const VendorOrdersScreen: React.FC = () => {
     }
   };
 
-  const handleShip = async () => {
-    if (!shipModalOrder) return;
-    if (!trackingNumber.trim()) {
-      Alert.alert(t('vendorOrders.trackingRequired'), t('vendorOrders.trackingRequiredMessage'));
-      return;
-    }
-    setUpdatingId(shipModalOrder.id);
+  const handleShip = async (order: VendorOrder) => {
+    setUpdatingId(order.id);
     try {
-      await vendorOrderService.updateOrderStatus(shipModalOrder.id, {
+      await vendorOrderService.updateOrderStatus(order.id, {
         status: 'shipped',
-        note: shipNote.trim() || t('vendorOrders.noteDefault'),
-        tracking_number: trackingNumber.trim(),
       });
-      setShipModalOrder(null);
-      setTrackingNumber('');
       await loadOrders();
       Alert.alert(t('common.success'), t('vendorOrders.shipSuccess'));
     } catch (error: unknown) {
@@ -215,6 +239,16 @@ const VendorOrdersScreen: React.FC = () => {
   };
 
   const handleDeliver = (order: VendorOrder) => {
+    // Product / OTP delivery: always collect customer OTP (in-app), never mark delivered directly.
+    if (
+      isProductFulfillment(order) ||
+      order.usesDeliveryOtp ||
+      order.canConfirmDeliveryOtp
+    ) {
+      setDeliveryOtp('');
+      setOtpModalOrder(order);
+      return;
+    }
     Alert.alert(
       t('vendorOrders.markDeliveredTitle'),
       t('vendorOrders.markDeliveredMessage', { order: order.orderNumber }),
@@ -245,6 +279,66 @@ const VendorOrdersScreen: React.FC = () => {
     );
   };
 
+  const handleConfirmDeliveryOtp = async () => {
+    if (!otpModalOrder) return;
+    const code = deliveryOtp.trim().replace(/\s+/g, '');
+    if (!code) {
+      Alert.alert(
+        t('vendorOrders.deliveryOtpTitle', { defaultValue: 'Delivery OTP' }),
+        t('vendorOrders.deliveryOtpRequired', {
+          defaultValue: 'Enter the OTP shown in the customer’s Tandil app.',
+        })
+      );
+      return;
+    }
+    setUpdatingId(otpModalOrder.id);
+    try {
+      await vendorOrderService.confirmDeliveryWithOtp(otpModalOrder.id, code, {
+        shopOrderId: otpModalOrder.shopOrderId,
+      });
+      setOtpModalOrder(null);
+      setDeliveryOtp('');
+      await loadOrders();
+      Alert.alert(t('common.success'), t('vendorOrders.deliverSuccess'));
+    } catch (error: unknown) {
+      const raw = error instanceof Error ? error.message : '';
+      const isGenericHttp =
+        !raw || /^request failed with status code/i.test(raw) || /status code 422/i.test(raw);
+      Alert.alert(
+        t('common.error'),
+        isGenericHttp
+          ? t('vendorOrders.deliveryOtpInvalid', { defaultValue: 'Invalid OTP' })
+          : raw
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleResendDeliveryOtp = async () => {
+    if (!otpModalOrder) return;
+    setUpdatingId(otpModalOrder.id);
+    try {
+      const res = await vendorOrderService.resendDeliveryOtp(otpModalOrder.id, {
+        shopOrderId: otpModalOrder.shopOrderId,
+      });
+      Alert.alert(
+        t('common.success'),
+        res.message ||
+          t('vendorOrders.deliveryOtpResent', {
+            defaultValue: 'A new delivery OTP was sent to the customer’s app.',
+          })
+      );
+    } catch (error: unknown) {
+      Alert.alert(
+        t('common.error'),
+        error instanceof Error ? error.message : t('vendorOrders.deliverFailed')
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const renderOrderCard = ({ item }: { item: VendorOrder }) => {
     const busy = updatingId === item.id;
     const color = statusColor(item.status);
@@ -270,7 +364,9 @@ const VendorOrdersScreen: React.FC = () => {
             </View>
             <View style={[styles.statusBadge, { backgroundColor: color + '18' }]}>
               <Ionicons name={statusIcon(item.status) as any} size={14} color={color} />
-              <Text style={[styles.statusText, { color }]}>{statusLabel(item.status)}</Text>
+              <Text style={[styles.statusText, { color }]}>
+                {statusLabel(item.status)}
+              </Text>
             </View>
           </View>
 
@@ -312,70 +408,127 @@ const VendorOrdersScreen: React.FC = () => {
             <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
           </View>
 
-          {(item.status === 'pending' ||
-            item.status === 'confirmed' ||
-            item.status === 'processing' ||
-            item.status === 'shipped') && (
-            <View style={styles.actionsRow}>
-              {item.status === 'pending' && (
-                <TouchableOpacity
-                  style={[styles.primaryAction, { backgroundColor: COLORS.success }]}
-                  onPress={() =>
-                    Alert.alert(
-                      t('vendorOrders.confirmOrder'),
-                      t('vendorOrders.confirmOrderMessage', { order: item.orderNumber }),
-                      [
-                        { text: t('common.cancel'), style: 'cancel' },
-                        { text: t('vendorOrders.confirm'), onPress: () => handleConfirm(item) },
-                      ]
-                    )
-                  }
-                  disabled={busy}
-                >
-                  {busy ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                      <Text style={styles.primaryActionText}>{t('vendorOrders.confirm')}</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
+          {(() => {
+            const isProduct = isProductFulfillment(item);
+            const canUpdate = item.canUpdateStatus !== false && isProduct;
+            const showConfirm =
+              canUpdate &&
+              (item.canConfirm === true ||
+                item.primaryAction === 'confirm' ||
+                (item.canConfirm !== false && item.status === 'pending'));
+            const showShip =
+              canUpdate &&
+              (item.canShip === true ||
+                item.primaryAction === 'ship' ||
+                (item.canShip !== false &&
+                  (item.status === 'confirmed' || item.status === 'processing')));
+            const showDeliver =
+              canUpdate &&
+              (item.canMarkDelivered === true ||
+                item.primaryAction === 'mark_delivered' ||
+                (item.canMarkDelivered !== false && item.status === 'shipped'));
 
-              {(item.status === 'confirmed' || item.status === 'processing') && (
-                <TouchableOpacity
-                  style={[styles.primaryAction, { backgroundColor: COLORS.primary }]}
-                  onPress={() => {
-                    setShipModalOrder(item);
-                    setTrackingNumber('');
-                    setShipNote(t('vendorOrders.noteDefault'));
-                  }}
-                  disabled={busy}
-                >
-                  <Ionicons name="car" size={18} color="#fff" />
-                  <Text style={styles.primaryActionText}>{t('vendorOrders.shipOrder')}</Text>
-                </TouchableOpacity>
-              )}
+            if (!showConfirm && !showShip && !showDeliver) return null;
 
-              {item.status === 'shipped' && (
-                <TouchableOpacity
-                  style={[styles.primaryAction, { backgroundColor: COLORS.info }]}
-                  onPress={() => handleDeliver(item)}
-                  disabled={busy}
-                >
-                  {busy ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="home" size={18} color="#fff" />
-                      <Text style={styles.primaryActionText}>{t('vendorOrders.markDelivered')}</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
+            return (
+              <View style={styles.actionsRow}>
+                {showConfirm ? (
+                  <TouchableOpacity
+                    style={[styles.primaryAction, { backgroundColor: COLORS.success }]}
+                    onPress={() =>
+                      Alert.alert(
+                        t('vendorOrders.confirmOrder'),
+                        t('vendorOrders.confirmOrderMessage', { order: item.orderNumber }),
+                        [
+                          { text: t('common.cancel'), style: 'cancel' },
+                          { text: t('vendorOrders.confirm'), onPress: () => handleConfirm(item) },
+                        ]
+                      )
+                    }
+                    disabled={busy}
+                  >
+                    {busy ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                        <Text style={styles.primaryActionText}>
+                          {item.primaryActionLabel || t('vendorOrders.confirm')}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
+
+                {showShip ? (
+                  <TouchableOpacity
+                    style={[styles.primaryAction, { backgroundColor: COLORS.primary }]}
+                    onPress={() =>
+                      Alert.alert(
+                        t('vendorOrders.shipOrder'),
+                        t('vendorOrders.shipOrderMessage', {
+                          defaultValue: 'Mark {{order}} as shipped?',
+                          order: item.orderNumber,
+                        }),
+                        [
+                          { text: t('common.cancel'), style: 'cancel' },
+                          {
+                            text: t('vendorOrders.ship'),
+                            onPress: () => void handleShip(item),
+                          },
+                        ]
+                      )
+                    }
+                    disabled={busy}
+                  >
+                    {busy ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="car" size={18} color="#fff" />
+                        <Text style={styles.primaryActionText}>{t('vendorOrders.shipOrder')}</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
+
+                {showDeliver ? (
+                  <TouchableOpacity
+                    style={[styles.primaryAction, { backgroundColor: COLORS.info }]}
+                    onPress={() => handleDeliver(item)}
+                    disabled={busy}
+                  >
+                    {busy ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name={
+                            isProductFulfillment(item) ||
+                            item.usesDeliveryOtp ||
+                            item.canConfirmDeliveryOtp
+                              ? 'keypad-outline'
+                              : 'checkmark-done-circle'
+                          }
+                          size={18}
+                          color="#fff"
+                        />
+                        <Text style={styles.primaryActionText}>
+                          {isProductFulfillment(item) ||
+                          item.usesDeliveryOtp ||
+                          item.canConfirmDeliveryOtp
+                            ? t('vendorOrders.confirmWithOtp', {
+                                defaultValue: 'Confirm with OTP',
+                              })
+                            : t('vendorOrders.markDelivered')}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            );
+          })()}
         </VendorCard>
       </TouchableOpacity>
     );
@@ -501,44 +654,79 @@ const VendorOrdersScreen: React.FC = () => {
         />
       )}
 
-      <Modal visible={shipModalOrder != null} transparent animationType="slide">
+      <Modal visible={otpModalOrder != null} transparent animationType="slide">
         <KeyboardAvoidingView
           style={styles.modalOverlay}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.modalCard}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>{t('vendorOrders.shipOrder')}</Text>
-            <Text style={styles.modalSubtitle}>{shipModalOrder?.orderNumber}</Text>
+            <Text style={styles.modalTitle}>
+              {t('vendorOrders.deliveryOtpTitle', { defaultValue: 'Delivery OTP' })}
+            </Text>
+            <Text style={styles.modalSubtitle}>{otpModalOrder?.orderNumber}</Text>
+            <Text style={styles.otpModalBody}>
+              {t('vendorOrders.deliveryOtpBody', {
+                defaultValue:
+                  'Ask the customer to open Order Tracking in Tandil and read the delivery code. Enter it below to mark this order delivered.',
+              })}
+            </Text>
 
-            <Text style={styles.fieldLabel}>{t('vendorOrders.trackingNumber')}</Text>
+            <Text style={styles.fieldLabel}>
+              {t('vendorOrders.deliveryOtpLabel', { defaultValue: 'Customer OTP' })}
+            </Text>
             <TextInput
               style={styles.modalInput}
-              placeholder={t('vendorOrders.trackingPlaceholder')}
+              placeholder="••••••"
               placeholderTextColor={COLORS.textSecondary}
-              value={trackingNumber}
-              onChangeText={setTrackingNumber}
-              autoCapitalize="characters"
-            />
-
-            <Text style={styles.fieldLabel}>{t('vendorOrders.note')}</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder={t('vendorOrders.noteDefault')}
-              placeholderTextColor={COLORS.textSecondary}
-              value={shipNote}
-              onChangeText={setShipNote}
+              value={deliveryOtp}
+              onChangeText={setDeliveryOtp}
+              keyboardType="number-pad"
+              maxLength={8}
+              autoFocus
             />
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setShipModalOrder(null)}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => {
+                  setOtpModalOrder(null);
+                  setDeliveryOtp('');
+                }}
+              >
                 <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalConfirm} onPress={handleShip}>
-                <Ionicons name="car" size={18} color="#fff" />
-                <Text style={styles.modalConfirmText}>{t('vendorOrders.ship')}</Text>
+              <TouchableOpacity
+                style={styles.modalConfirm}
+                onPress={() => void handleConfirmDeliveryOtp()}
+                disabled={updatingId === otpModalOrder?.id}
+              >
+                {updatingId === otpModalOrder?.id ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-done-circle" size={18} color="#fff" />
+                    <Text style={styles.modalConfirmText}>
+                      {t('vendorOrders.confirmDelivery', { defaultValue: 'Confirm delivery' })}
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
+
+            {otpModalOrder ? (
+              <TouchableOpacity
+                style={styles.resendOtpBtn}
+                onPress={() => void handleResendDeliveryOtp()}
+                disabled={updatingId === otpModalOrder.id}
+              >
+                <Text style={styles.resendOtpText}>
+                  {t('vendorOrders.resendDeliveryOtp', {
+                    defaultValue: 'Resend OTP to customer app',
+                  })}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -883,6 +1071,22 @@ const styles = StyleSheet.create({
   },
   modalConfirmText: {
     color: '#fff',
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  otpModalBody: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+    marginBottom: SPACING.md,
+  },
+  resendOtpBtn: {
+    marginTop: SPACING.md,
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+  },
+  resendOtpText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
     fontWeight: FONT_WEIGHTS.semiBold,
   },
 });

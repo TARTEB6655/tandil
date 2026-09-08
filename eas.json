@@ -26,8 +26,7 @@
         "EXPO_PUBLIC_STRIPE_MERCHANT_IDENTIFIER": "merchant.com.tandilapp.uae"
       },
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleDebug"
+        "buildType": "apk"
       }
     },
     "production": {
@@ -44,12 +43,11 @@
         "image": "macos-sequoia-15.5-xcode-26.0"
       },
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleDebug"
+        "buildType": "apk"
       }
     }
   },
   "submit": {
     "production": {}
   }
-} 
+}

@@ -7,36 +7,34 @@ import {
   TextInput,
   FlatList,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
-import { useIsAuthenticated } from '../../store';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import { shopService, ShopProduct } from '../../services/shopService';
-import { addCartItem } from '../../services/cartService';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
-import { navigateToClientAuth } from '../../navigation/clientAuthNavigation';
 import { buildFullImageUrl } from '../../config/api';
-import { productRequiresOptionSelection } from '../../utils/productSelectedOptions';
+import {
+  getEffectiveServicePrice,
+  getServicePricingSettings,
+  ServicePricingSettings,
+} from '../../services/servicePricingService';
 
 type CategoryItem = { id: string; name: string; imageUri: string | null };
 
 const StoreScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
-  const isAuthenticated = useIsAuthenticated();
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [addedToCart, setAddedToCart] = useState<string | null>(null);
-  const [addingProductId, setAddingProductId] = useState<string | null>(null);
-  const { count: cartItemCount, refresh: refreshCartBadge } = useCartBadgeCount();
+  const [servicePricing, setServicePricing] = useState<ServicePricingSettings | null>(null);
+  const { count: cartItemCount } = useCartBadgeCount();
 
   const getProductImage = useCallback((p: ShopProduct) => {
     return p.image_url ?? (p.main_image as any)?.image_url ?? p.image ?? null;
@@ -85,6 +83,13 @@ const StoreScreen: React.FC = () => {
         if (!cancelled) setCategories([{ id: 'all', name: t('store.categories.all', { defaultValue: 'All' }), imageUri: null }]);
       }
     })();
+    getServicePricingSettings()
+      .then((settings) => {
+        if (!cancelled) setServicePricing(settings);
+      })
+      .catch(() => {
+        if (!cancelled) setServicePricing(null);
+      });
     return () => { cancelled = true; };
   }, [t]);
 
@@ -138,48 +143,10 @@ const StoreScreen: React.FC = () => {
           return name.includes(q) || desc.includes(q);
         });
 
-  const handleAddToCart = async (product: ShopProduct) => {
-    if (productRequiresOptionSelection(product)) {
-      navigation.navigate('ProductDetail', { product: toDetailProduct(product) });
-      return;
-    }
-    if (!isAuthenticated) {
-      Alert.alert(
-        t('product.loginRequired', { defaultValue: 'Login required' }),
-        t('product.loginToAddToCart', { defaultValue: 'Please log in to add items to your cart.' }),
-        [
-          { text: t('common.cancel', 'Cancel'), style: 'cancel' },
-          { text: t('auth.login', 'Log in'), onPress: () => navigateToClientAuth(navigation) }
-        ]
-      );
-      return;
-    }
-    const productId = product.id;
-    if ((product.stock ?? 0) <= 0) {
-      Alert.alert(t('category.outOfStock'), t('category.outOfStock'));
-      return;
-    }
-    setAddingProductId(String(productId));
-    try {
-      await addCartItem(productId, 1);
-      setAddedToCart(String(productId));
-      refreshCartBadge(true);
-      setTimeout(() => setAddedToCart(null), 1000);
-    } catch (err: any) {
-      const status = err.response?.status;
-      const message = err.response?.data?.message || err.message || t('product.addToCartFailed', { defaultValue: 'Failed to add to cart. Please try again.' });
-      if (status === 401) {
-        Alert.alert(
-          t('product.loginRequired', { defaultValue: 'Login required' }),
-          t('product.loginToAddToCart', { defaultValue: 'Please log in to add items to your cart.' }),
-          [{ text: t('common.ok', 'OK') }]
-        );
-      } else {
-        Alert.alert(t('common.error', 'Error'), message);
-      }
-    } finally {
-      setAddingProductId(null);
-    }
+  const handleAddToCart = (product: ShopProduct) => {
+    // Always open product detail so the user can pick date/time slot (and options if needed)
+    // before the item is added to cart — do not quick-add without a booking slot.
+    navigation.navigate('ProductDetail', { product: toDetailProduct(product) });
   };
 
   const renderCategoryItem = ({ item }: { item: CategoryItem }) => {
@@ -218,9 +185,20 @@ const StoreScreen: React.FC = () => {
   const renderProductItem = ({ item }: { item: ShopProduct }) => {
     const detail = toDetailProduct(item);
     const imageUri = getProductImage(item);
-    const priceNum = typeof item.price === 'string' ? parseFloat(item.price) || 0 : item.price;
+    const itemPricingType = String(
+      item.pricing_type || servicePricing?.pricing_type || 'fixed'
+    ).toLowerCase();
+    const isPerM2 = itemPricingType === 'per_m2' || servicePricing?.requires_area === true;
+    const priceNum = isPerM2
+      ? getEffectiveServicePrice(servicePricing) ??
+        (typeof item.price_per_m2 === 'string'
+          ? parseFloat(item.price_per_m2) || 0
+          : Number(item.price_per_m2 ?? item.price) || 0)
+      : typeof item.price === 'string'
+        ? parseFloat(item.price) || 0
+        : item.price;
     const originalNum = typeof item.compare_at_price === 'string' ? parseFloat(item.compare_at_price) || 0 : (item.compare_at_price ?? 0);
-    const showDiscount = originalNum > priceNum;
+    const showDiscount = !isPerM2 && originalNum > priceNum;
     return (
       <TouchableOpacity
         style={styles.productCard}
@@ -268,7 +246,10 @@ const StoreScreen: React.FC = () => {
           ) : null}
           <View style={styles.productFooter}>
             <View style={styles.priceContainer}>
-              <Text style={styles.productPrice}>{t('orders.currency', { defaultValue: 'AED' })} {priceNum}</Text>
+              <Text style={styles.productPrice}>
+                {t('orders.currency', { defaultValue: 'AED' })} {priceNum}
+                {isPerM2 ? ` ${t('product.perM2', { defaultValue: '/ m²' })}` : ''}
+              </Text>
               {showDiscount && <Text style={styles.originalPrice}>{t('orders.currency', { defaultValue: 'AED' })} {originalNum}</Text>}
             </View>
             <View style={styles.productRating}>
@@ -277,19 +258,10 @@ const StoreScreen: React.FC = () => {
             </View>
           </View>
           <TouchableOpacity
-            style={[
-              styles.addToCartButton,
-              addedToCart === String(item.id) && styles.addToCartButtonAdded,
-              addingProductId === String(item.id) && styles.addToCartButtonDisabled,
-            ]}
+            style={styles.addToCartButton}
             onPress={() => handleAddToCart(item)}
-            disabled={addingProductId !== null}
           >
-            {addingProductId === String(item.id) ? (
-              <ActivityIndicator size="small" color={COLORS.background} />
-            ) : (
-              <Ionicons name={addedToCart === String(item.id) ? 'checkmark' : 'add'} size={20} color={COLORS.background} />
-            )}
+            <Ionicons name="add" size={20} color={COLORS.background} />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -613,12 +585,6 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
     padding: SPACING.sm,
     alignItems: 'center',
-  },
-  addToCartButtonAdded: {
-    backgroundColor: COLORS.success,
-  },
-  addToCartButtonDisabled: {
-    opacity: 0.7,
   },
 });
 

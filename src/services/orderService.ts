@@ -16,13 +16,48 @@ export interface ShopOrderLineItem {
   quantity: number;
   price: string;
   subtotal: string;
+  booking_date?: string | null;
+  booking_slot?: string | null;
+  /** Area-based pricing (when present on order line) */
+  area_m2?: number | string | null;
+  unit_price?: number | string | null;
+  price_per_m2?: number | string | null;
+  pricing_type?: string | null;
   product?: {
     id: number;
     name: string;
+    description?: string | null;
+    image?: string | null;
     image_url?: string | null;
+    sku?: string | null;
+    type?: string | null;
     estimated_arrival?: string | null;
     job_duration?: string | null;
+    category?: { id?: number; name?: string } | null;
   } | null;
+}
+
+export interface ShopOrderVendorMapping {
+  id: number;
+  order_id?: number;
+  vendor_id?: number;
+  status?: string;
+  tracking_number?: string | null;
+  delivery_otp?: string | null;
+  delivery_otp_expires_at?: string | null;
+  delivery_otp_confirmed_at?: string | null;
+  delivery_otp_sent_at?: string | null;
+  delivery_otp_sent_to?: string | null;
+  total_amount?: string | number | null;
+}
+
+export interface DeliveryOtpInfo {
+  otp?: string | null;
+  code?: string | null;
+  expired?: boolean | null;
+  delivery_channel?: string | null;
+  expires_at?: string | null;
+  instruction?: string | null;
 }
 
 export interface ShopOrderApi {
@@ -39,7 +74,28 @@ export interface ShopOrderApi {
   refund_amount?: string | null;
   refund_reason?: string | null;
   created_at: string;
+  booking_date?: string | null;
+  booking_slot?: string | null;
+  estimated_arrival?: string | null;
+  job_duration?: string | null;
+  special_instructions?: string | null;
+  order_number?: string | null;
+  fulfillment_type?: string | null;
+  uses_delivery_otp?: boolean | null;
+  delivery_otp?: string | DeliveryOtpInfo | null;
+  otp?: string | null;
   items: ShopOrderLineItem[];
+  shipping_address?: {
+    id?: number;
+    full_name?: string;
+    phone_number?: string;
+    street_address?: string;
+    city?: string;
+    state?: string;
+    zip_code?: string;
+    country?: string;
+  } | null;
+  vendor_mappings?: ShopOrderVendorMapping[];
 }
 
 export interface OrdersListPagination {
@@ -214,6 +270,7 @@ export interface OrderTrackData {
   order: ShopOrderApi & {
     shipping_address?: unknown;
     items?: ShopOrderLineItem[];
+    vendor_mappings?: ShopOrderVendorMapping[];
   };
   order_summary: OrderTrackSummary;
   current_status: string;
@@ -234,12 +291,236 @@ export interface OrderTrackData {
   rating?: number | null;
   customer_rating?: number | null;
   review?: string | null;
+  /** product | service */
+  fulfillment_type?: string | null;
+  /** When true, delivery is confirmed via in-app OTP (no SMS). */
+  uses_delivery_otp?: boolean | null;
+  /**
+   * OTP shown to customer after vendor ships (in-app only).
+   * Backend may send a plain string or an object `{ otp, code, expired, instruction }`.
+   */
+  delivery_otp?: string | DeliveryOtpInfo | null;
+  delivery_otp_code?: string | null;
+  show_delivery_otp?: boolean | null;
+  delivery_otp_message?: string | null;
+  otp?: string | null;
+  vendor_mappings?: ShopOrderVendorMapping[];
+}
+
+/** Pull a usable OTP string — never stringify objects (avoids "[object Object]"). */
+function pickOtpCode(...candidates: unknown[]): string | null {
+  for (const candidate of candidates) {
+    if (candidate == null) continue;
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      const digits = String(Math.trunc(candidate));
+      if (digits.length >= 4) return digits;
+      continue;
+    }
+    if (typeof candidate === 'string') {
+      const s = candidate.trim().replace(/\s+/g, '');
+      if (!s || s.toLowerCase() === '[objectobject]' || s.toLowerCase() === 'null') continue;
+      if (/^\d{4,12}$/.test(s)) return s;
+      if (/^[A-Za-z0-9-]{4,16}$/.test(s)) return s;
+      continue;
+    }
+    if (typeof candidate === 'object') {
+      const obj = candidate as Record<string, unknown>;
+      const nested = pickOtpCode(obj.otp, obj.code, obj.delivery_otp, obj.delivery_otp_code);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+
+function deliveryOtpMeta(value: unknown): {
+  code: string | null;
+  expired: boolean;
+  instruction: string | null;
+} {
+  if (value == null) return { code: null, expired: false, instruction: null };
+  if (typeof value === 'string' || typeof value === 'number') {
+    return { code: pickOtpCode(value), expired: false, instruction: null };
+  }
+  if (typeof value === 'object') {
+    const obj = value as DeliveryOtpInfo & Record<string, unknown>;
+    return {
+      code: pickOtpCode(obj.otp, obj.code),
+      expired: Boolean(obj.expired),
+      instruction:
+        typeof obj.instruction === 'string' && obj.instruction.trim()
+          ? obj.instruction.trim()
+          : null,
+    };
+  }
+  return { code: null, expired: false, instruction: null };
+}
+
+function otpFromVendorMappings(mappings: unknown): string | null {
+  if (!Array.isArray(mappings)) return null;
+  for (const row of mappings) {
+    if (!row || typeof row !== 'object') continue;
+    const m = row as ShopOrderVendorMapping;
+    const code = pickOtpCode(m.delivery_otp);
+    if (code) return code;
+  }
+  return null;
+}
+
+/** Resolve delivery OTP from track / detail payload (flexible backend field names). */
+export function resolveDeliveryOtpFromTrack(
+  track: OrderTrackData | null | undefined,
+  detail?: ShopOrderApi | ClientOrderDetails | null
+): {
+  otp: string | null;
+  visible: boolean;
+  expired: boolean;
+  instruction: string | null;
+  fulfillmentType: string;
+  usesOtp: boolean;
+} {
+  if (!track && !detail) {
+    return {
+      otp: null,
+      visible: false,
+      expired: false,
+      instruction: null,
+      fulfillmentType: '',
+      usesOtp: false,
+    };
+  }
+  const anyTrack = (track ?? {}) as OrderTrackData & Record<string, unknown>;
+  const order = (track?.order ?? detail ?? {}) as Record<string, unknown>;
+  const tracking = (track?.tracking ?? {}) as Record<string, unknown>;
+  const fulfillmentType = String(
+    track?.fulfillment_type ??
+      detail?.fulfillment_type ??
+      order.fulfillment_type ??
+      tracking.fulfillment_type ??
+      ''
+  )
+    .trim()
+    .toLowerCase();
+  const usesOtp = Boolean(
+    track?.uses_delivery_otp ??
+      detail?.uses_delivery_otp ??
+      order.uses_delivery_otp ??
+      tracking.uses_delivery_otp
+  );
+
+  const rootMeta = deliveryOtpMeta(
+    track?.delivery_otp ?? detail?.delivery_otp ?? order.delivery_otp ?? anyTrack.delivery_otp
+  );
+  const otp =
+    pickOtpCode(
+      otpFromVendorMappings(detail?.vendor_mappings),
+      otpFromVendorMappings(track?.vendor_mappings),
+      otpFromVendorMappings(order.vendor_mappings),
+      rootMeta.code,
+      track?.delivery_otp_code,
+      detail?.otp,
+      track?.otp,
+      anyTrack.otp,
+      order.otp
+    ) || null;
+
+  const status = String(
+    track?.tracking?.status ?? track?.current_status ?? detail?.order_status ?? order.order_status ?? ''
+  )
+    .trim()
+    .toLowerCase();
+  const isShippedPhase =
+    status.includes('ship') ||
+    status.includes('out_for_delivery') ||
+    status.includes('out for delivery') ||
+    status === 'dispatched';
+  const showFlag = Boolean(
+    track?.show_delivery_otp ?? order.show_delivery_otp ?? tracking.show_delivery_otp
+  );
+  const instruction = rootMeta.instruction;
+  const expired = rootMeta.expired && !otp;
+  const visible =
+    (Boolean(otp) || expired || Boolean(instruction)) &&
+    (fulfillmentType === 'product' || fulfillmentType === '' || usesOtp || showFlag) &&
+    (isShippedPhase || showFlag || usesOtp || Boolean(otp) || expired);
+
+  return {
+    otp,
+    visible: visible && (Boolean(otp) || expired || Boolean(instruction)),
+    expired,
+    instruction,
+    fulfillmentType,
+    usesOtp: usesOtp || Boolean(otp) || expired,
+  };
 }
 
 export interface GetOrderTrackResponse {
   success?: boolean;
   message?: string;
   data?: OrderTrackData;
+}
+
+/** GET /orders/:id — full client order details (Postman alternative route). */
+export interface ClientOrderDetails extends ShopOrderApi {
+  order_number?: string | null;
+  fulfillment_type?: string | null;
+  uses_delivery_otp?: boolean | null;
+  delivery_otp?: string | DeliveryOtpInfo | null;
+  otp?: string | null;
+  vendor_mappings?: ShopOrderVendorMapping[];
+}
+
+export interface GetClientOrderDetailsResponse {
+  success?: boolean;
+  message?: string;
+  data?: ClientOrderDetails;
+  order_number?: string;
+  order_number_short?: string;
+  order_summary?: OrderTrackSummary;
+  fulfillment_type?: string | null;
+  uses_delivery_otp?: boolean | null;
+  delivery_otp?: string | DeliveryOtpInfo | null;
+  otp?: string | null;
+}
+
+/**
+ * GET /orders/:id
+ * Postman: "Orders - Get Details (Alternative Route)"
+ */
+export async function getClientOrderDetails(
+  orderId: string | number
+): Promise<{
+  data: ClientOrderDetails | null;
+  order_summary?: OrderTrackSummary | null;
+  message?: string;
+  delivery_otp?: string | DeliveryOtpInfo | null;
+  uses_delivery_otp?: boolean | null;
+  fulfillment_type?: string | null;
+}> {
+  const id = encodeURIComponent(String(orderId));
+  const response = await apiClient.get<GetClientOrderDetailsResponse>(`/orders/${id}`, {
+    timeout: 25000,
+  });
+  const body = response.data;
+  const raw = body?.data ?? null;
+  if (!raw) {
+    return { data: null, message: body?.message };
+  }
+  const merged: ClientOrderDetails = {
+    ...raw,
+    order_number: raw.order_number ?? body.order_number ?? null,
+    fulfillment_type: raw.fulfillment_type ?? body.fulfillment_type ?? null,
+    uses_delivery_otp: raw.uses_delivery_otp ?? body.uses_delivery_otp ?? null,
+    delivery_otp: raw.delivery_otp ?? body.delivery_otp ?? null,
+    otp: raw.otp ?? body.otp ?? null,
+  };
+  return {
+    data: merged,
+    order_summary: body.order_summary ?? null,
+    message: body.message,
+    delivery_otp: merged.delivery_otp,
+    uses_delivery_otp: merged.uses_delivery_otp,
+    fulfillment_type: merged.fulfillment_type,
+  };
 }
 
 /**

@@ -30,9 +30,12 @@ import {
   rejectSupervisorNewAssignment,
   SupervisorAssignment,
 } from '../../services/supervisorService';
+import SupervisorTechnicianSignupRequestCard from '../../components/supervisor/SupervisorTechnicianSignupRequestCard';
+import { useSupervisorTechnicianSignupRequests } from '../../hooks/useSupervisorTechnicianSignupRequests';
 
 const DASHBOARD_REPORTS_LIMIT = 3;
 const DASHBOARD_NEW_JOBS_LIMIT = 3;
+const DASHBOARD_SIGNUP_REQUESTS_LIMIT = 3;
 
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -88,12 +91,21 @@ const SupervisorDashboardScreen: React.FC = () => {
   const [newJobsTotal, setNewJobsTotal] = useState(0);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
+  const {
+    requests: signupRequests,
+    loading: signupRequestsLoading,
+    actioningId: signupActioningId,
+    loadRequests: loadSignupRequests,
+    onApprove: onApproveSignup,
+    onReject: onRejectSignup,
+  } = useSupervisorTechnicianSignupRequests();
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       setLoading(true);
       setProfileImageError(false);
+      loadSignupRequests();
       Promise.all([
         getSupervisorDashboardSummary(),
         getSupervisorReports(1, 20),
@@ -129,7 +141,7 @@ const SupervisorDashboardScreen: React.FC = () => {
           if (!cancelled) setLoading(false);
         });
       return () => { cancelled = true; };
-    }, [])
+    }, [loadSignupRequests])
   );
 
   const handleNewJobAction = (job: SupervisorAssignment, action: 'accept' | 'reject') => {
@@ -207,6 +219,8 @@ const SupervisorDashboardScreen: React.FC = () => {
   const pendingReportsPreview = reports.slice(0, DASHBOARD_REPORTS_LIMIT);
   const pendingReportsTotal = reports.length;
   const newJobsPreview = newJobs.slice(0, DASHBOARD_NEW_JOBS_LIMIT);
+  const signupRequestsPreview = signupRequests.slice(0, DASHBOARD_SIGNUP_REQUESTS_LIMIT);
+  const signupRequestsTotal = signupRequests.length;
 
   const renderNewJob = ({ item }: { item: SupervisorAssignment }) => {
     const loadingThis = actionLoadingId === item.id;
@@ -539,6 +553,42 @@ const SupervisorDashboardScreen: React.FC = () => {
           />
         </View>
 
+        {/* Technician Signup Requests – first 3, approve/reject inline */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t('supervisorDashboard.pendingSignupRequests')}</Text>
+            <TouchableOpacity
+              style={styles.sectionCountRow}
+              onPress={() => navigation.navigate('SupervisorSignupRequests' as never)}
+            >
+              <Text style={styles.sectionCount}>{signupRequestsTotal}</Text>
+              <Text style={styles.viewAllText}>{t('supervisorDashboard.viewAll')}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {signupRequestsLoading && signupRequests.length === 0 ? (
+            <View style={styles.emptySignupRequests}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            </View>
+          ) : signupRequestsPreview.length === 0 ? (
+            <View style={styles.emptySignupRequests}>
+              <Text style={styles.emptySignupRequestsText}>
+                {t('supervisorDashboard.noPendingSignupRequests')}
+              </Text>
+            </View>
+          ) : (
+            signupRequestsPreview.map((item) => (
+              <SupervisorTechnicianSignupRequestCard
+                key={item.id}
+                item={item}
+                isActioning={signupActioningId === item.id}
+                onApprove={onApproveSignup}
+                onReject={onRejectSignup}
+              />
+            ))
+          )}
+        </View>
+
         {/* Quick Actions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('supervisorDashboard.quickActions')}</Text>
@@ -839,6 +889,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyNewJobsText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  emptySignupRequests: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    alignItems: 'center',
+  },
+  emptySignupRequestsText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     textAlign: 'center',

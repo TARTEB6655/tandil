@@ -62,6 +62,7 @@ import AdminSendNotificationScreen from '../screens/admin/AdminSendNotificationS
 import AdminBroadcastLogScreen from '../screens/admin/AdminBroadcastLogScreen';
 import AdminOperationalAreasScreen from '../screens/admin/AdminOperationalAreasScreen';
 import AdminOrderStatisticsScreen from '../screens/admin/AdminOrderStatisticsScreen';
+import AdminOrderDetailScreen from '../screens/admin/AdminOrderDetailScreen';
 import AdminWalletMonitoringScreen from '../screens/admin/AdminWalletMonitoringScreen';
 import AdminWalletClientDetailScreen from '../screens/admin/AdminWalletClientDetailScreen';
 import AdminLoyaltyScreen from '../screens/admin/AdminLoyaltyScreen';
@@ -80,6 +81,7 @@ import AdminVendorLiveChatScreen from '../screens/admin/AdminVendorLiveChatScree
 import AdminVendorManagementScreen from '../screens/admin/AdminVendorManagementScreen';
 import AdminVendorFormScreen from '../screens/admin/AdminVendorFormScreen';
 import AdminVendorProductsScreen from '../screens/admin/AdminVendorProductsScreen';
+import AdminVendorProductFormScreen from '../screens/admin/AdminVendorProductFormScreen';
 import AdminVendorTypesEmiratesScreen from '../screens/admin/AdminVendorTypesEmiratesScreen';
 import AdminSchedulingScreen from '../screens/admin/AdminSchedulingScreen';
 import AdminSchedulingSettingsScreen from '../screens/admin/AdminSchedulingSettingsScreen';
@@ -224,6 +226,7 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminBroadcastLog" component={AdminBroadcastLogScreen} />
         <Stack.Screen name="AdminOperationalAreas" component={AdminOperationalAreasScreen} />
         <Stack.Screen name="AdminOrderStatistics" component={AdminOrderStatisticsScreen} />
+        <Stack.Screen name="AdminOrderDetail" component={AdminOrderDetailScreen} />
         <Stack.Screen name="AdminWalletMonitoring" component={AdminWalletMonitoringScreen} />
         <Stack.Screen name="AdminWalletClientDetail" component={AdminWalletClientDetailScreen} />
         <Stack.Screen name="AdminLoyalty" component={AdminLoyaltyScreen} />
@@ -242,6 +245,7 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminVendorManagement" component={AdminVendorManagementScreen} />
         <Stack.Screen name="AdminVendorForm" component={AdminVendorFormScreen} />
         <Stack.Screen name="AdminVendorProducts" component={AdminVendorProductsScreen} />
+        <Stack.Screen name="AdminVendorProductForm" component={AdminVendorProductFormScreen} />
         <Stack.Screen name="AdminVendorTypesEmirates" component={AdminVendorTypesEmiratesScreen} />
         <Stack.Screen name="AdminScheduling" component={AdminSchedulingScreen} />
         <Stack.Screen name="AdminSchedulingSettings" component={AdminSchedulingSettingsScreen} />

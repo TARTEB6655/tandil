@@ -13,6 +13,8 @@ export interface AddCartItemRequest {
   booking_date?: string;
   /** Preferred time slot label, e.g. "10:00 AM - 12:00 PM" */
   booking_slot?: string;
+  /** Required area in m² for area-based (per_m2) pricing */
+  area_m2?: number;
 }
 
 export interface AddCartItemResponse {
@@ -36,6 +38,11 @@ export interface CartApiItem {
   quantity: number;
   line_total: number;
   currency: string;
+  /** Area-based pricing fields (when present) */
+  area_m2?: number | string | null;
+  unit_price?: number | string | null;
+  pricing_type?: string | null;
+  price_per_m2?: number | string | null;
 }
 
 /** Order summary from GET /shop/cart response data.order_summary */
@@ -45,6 +52,11 @@ export interface CartOrderSummary {
   shipping: number;
   total: number;
   currency: string;
+  tax?: number;
+  tax_percent?: number;
+  is_instant_order?: boolean;
+  instant_order_fee?: number;
+  instant_order_fee_label?: string | null;
 }
 
 /** Order summary from GET /shop/order-summary API (Auth required) */
@@ -58,6 +70,9 @@ export interface OrderSummaryData {
   tax?: number;
   total: number;
   currency: string;
+  is_instant_order?: boolean;
+  instant_order_fee?: number;
+  instant_order_fee_label?: string | null;
   wallet_available?: boolean;
   wallet_balance?: number;
   use_wallet?: boolean;
@@ -85,6 +100,10 @@ export interface BuyNowSummaryItem {
   quantity: number;
   line_total: number;
   currency: string;
+  area_m2?: number | string | null;
+  unit_price?: number | string | null;
+  pricing_type?: string | null;
+  price_per_m2?: number | string | null;
 }
 
 export interface BuyNowSummaryData {
@@ -140,6 +159,7 @@ export async function getBuyNowSummary(
     wallet_amount?: number;
     selected_option_ids?: number[];
     coupon_code?: string;
+    area_m2?: number;
   }
 ): Promise<BuyNowSummaryData | null> {
   const selectedOptionIds = options?.selected_option_ids?.filter(
@@ -155,6 +175,9 @@ export async function getBuyNowSummary(
       ...(typeof options?.use_wallet === 'boolean' ? { use_wallet: options.use_wallet } : {}),
       ...(typeof options?.wallet_amount === 'number' ? { wallet_amount: options.wallet_amount } : {}),
       ...(couponCode ? { coupon_code: couponCode } : {}),
+      ...(typeof options?.area_m2 === 'number' && options.area_m2 > 0
+        ? { area_m2: options.area_m2 }
+        : {}),
     },
     { timeout: 15000 }
   );
@@ -165,17 +188,19 @@ export async function getBuyNowSummary(
 /**
  * Add item to cart. Requires user to be logged in (customer token).
  * POST /shop/cart/add with JSON body:
- * { product_id, quantity, selected_option_ids?, booking_date?, booking_slot? }.
+ * { product_id, quantity, selected_option_ids?, booking_date?, booking_slot?, area_m2? }.
  */
 export async function addCartItem(
   productId: number,
   quantity: number,
   selectedOptionIds?: number[],
-  booking?: { booking_date?: string; booking_slot?: string }
+  booking?: { booking_date?: string; booking_slot?: string; area_m2?: number }
 ): Promise<AddCartItemResponse> {
   const optionIds = selectedOptionIds?.filter((id) => Number.isFinite(id) && id > 0);
   const bookingDate = booking?.booking_date?.trim();
   const bookingSlot = booking?.booking_slot?.trim();
+  const areaM2 =
+    typeof booking?.area_m2 === 'number' && booking.area_m2 > 0 ? booking.area_m2 : undefined;
   const response = await apiClient.post<AddCartItemResponse>(
     '/shop/cart/add',
     {
@@ -184,6 +209,7 @@ export async function addCartItem(
       ...(optionIds?.length ? { selected_option_ids: optionIds } : {}),
       ...(bookingDate ? { booking_date: bookingDate } : {}),
       ...(bookingSlot ? { booking_slot: bookingSlot } : {}),
+      ...(areaM2 != null ? { area_m2: areaM2 } : {}),
     } as AddCartItemRequest,
     {
       timeout: 15000,

@@ -78,6 +78,9 @@ export interface ShopOrderSummaryContract {
   tax?: number;
   total: number;
   currency: string;
+  is_instant_order?: boolean;
+  instant_order_fee?: number;
+  instant_order_fee_label?: string | null;
 }
 
 /** POST /shop/checkout/stripe/payment-intent — request body (mobile sends this). */

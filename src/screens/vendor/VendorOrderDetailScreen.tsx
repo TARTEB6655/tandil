@@ -29,7 +29,10 @@ import {
 import {
   vendorOrderService,
   VendorOrderDetail,
+  VendorOrderTrackData,
 } from '../../services/vendorOrderService';
+import { TrackingTimeline } from '../../components/common/TrackingTimeline';
+import type { TrackTimelineItem } from '../../services/orderService';
 
 const STATUS_STEP_META = [
   { id: 'pending', icon: 'time', color: COLORS.warning },
@@ -64,6 +67,16 @@ function statusColor(status: string): string {
   return step?.color ?? COLORS.textSecondary;
 }
 
+function isProductFulfillment(
+  order: Pick<VendorOrderDetail, 'fulfillment_type'> | null,
+  track?: VendorOrderTrackData | null
+): boolean {
+  const type = String(order?.fulfillment_type || track?.fulfillment_type || '')
+    .toLowerCase()
+    .trim();
+  return type === 'product';
+}
+
 const VendorOrderDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -71,11 +84,12 @@ const VendorOrderDetailScreen: React.FC = () => {
   const { orderId } = route.params || {};
 
   const [order, setOrder] = useState<VendorOrderDetail | null>(null);
+  const [track, setTrack] = useState<VendorOrderTrackData | null>(null);
+  const [trackLoading, setTrackLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [shipModalVisible, setShipModalVisible] = useState(false);
-  const [trackingNumber, setTrackingNumber] = useState('');
-  const [shipNote, setShipNote] = useState('');
+  const [otpModalVisible, setOtpModalVisible] = useState(false);
+  const [deliveryOtp, setDeliveryOtp] = useState('');
 
   const statusSteps = STATUS_STEP_META.map((step) => ({
     ...step,
@@ -85,21 +99,39 @@ const VendorOrderDetailScreen: React.FC = () => {
   const orderStatus = order?.status ?? 'pending';
   const currentIndex = statusSteps.findIndex((s) => s.id === orderStatus);
 
+  const loadTrack = useCallback(async () => {
+    if (!orderId) {
+      setTrack(null);
+      return;
+    }
+    setTrackLoading(true);
+    try {
+      const data = await vendorOrderService.getOrderTrack(orderId);
+      setTrack(data);
+    } catch {
+      setTrack(null);
+    } finally {
+      setTrackLoading(false);
+    }
+  }, [orderId]);
+
   const loadOrder = useCallback(async () => {
     setLoading(true);
     try {
       const data = await vendorOrderService.getOrder(orderId);
       setOrder(data);
+      void loadTrack();
     } catch (error: unknown) {
       Alert.alert(
         t('common.error'),
         error instanceof Error ? error.message : t('vendorOrders.loadFailed')
       );
       setOrder(null);
+      setTrack(null);
     } finally {
       setLoading(false);
     }
-  }, [orderId, t]);
+  }, [orderId, loadTrack, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -107,14 +139,40 @@ const VendorOrderDetailScreen: React.FC = () => {
     }, [loadOrder])
   );
 
-  const firstItem = order?.items?.[0];
   const notesText = order?.notes?.map((n) => n.note).filter(Boolean).join('\n\n') || '';
+  const money = (amount?: number) => {
+    if (amount == null || Number.isNaN(amount)) return '—';
+    const currency = order?.currency || 'AED';
+    return `${currency} ${amount.toFixed(2)}`;
+  };
 
   const handleStatusUpdate = (newStatus: string) => {
     if (!order) return;
     if (newStatus === orderStatus) return;
 
-    if (newStatus === 'confirmed' && orderStatus === 'pending') {
+    if (order.can_update_status === false) {
+      Alert.alert(
+        t('vendorOrders.updateStatusTitle'),
+        order.fulfillment_note ||
+          t('vendorOrders.statusUpdateNotAllowed', {
+            defaultValue: 'Status updates are not available for this order. You can track progress only.',
+          })
+      );
+      return;
+    }
+
+    const allowed = order.available_statuses?.map((s) => String(s.value)) ?? [];
+    if (allowed.length > 0 && !allowed.includes(newStatus)) {
+      Alert.alert(t('vendorOrders.updateStatusTitle'), t('vendorOrders.statusNotAllowed'));
+      return;
+    }
+
+    if (
+      newStatus === 'confirmed' &&
+      String(order.fulfillment_type || track?.fulfillment_type || '').toLowerCase() === 'product' &&
+      order.can_update_status !== false &&
+      (order.can_confirm === true || orderStatus === 'pending')
+    ) {
       Alert.alert(t('vendorOrders.updateStatusTitle'), t('vendorOrders.confirmThisOrder'), [
         { text: t('common.cancel'), style: 'cancel' },
         {
@@ -127,6 +185,7 @@ const VendorOrderDetailScreen: React.FC = () => {
                 note: t('vendorOrders.noteAccepted'),
               });
               setOrder(updated);
+              await loadTrack();
               Alert.alert(t('common.success'), t('vendorOrders.orderConfirmed'));
             } catch (error: unknown) {
               Alert.alert(
@@ -142,13 +201,59 @@ const VendorOrderDetailScreen: React.FC = () => {
       return;
     }
 
-    if (newStatus === 'shipped' && (orderStatus === 'confirmed' || orderStatus === 'processing')) {
-      setShipNote(t('vendorOrders.noteDefault'));
-      setShipModalVisible(true);
+    if (
+      newStatus === 'shipped' &&
+      order.can_update_status !== false &&
+      (orderStatus === 'confirmed' || orderStatus === 'processing' || order.can_ship)
+    ) {
+      Alert.alert(
+        t('vendorOrders.shipOrder'),
+        t('vendorOrders.shipOrderMessage', {
+          defaultValue: 'Mark {{order}} as shipped?',
+          order: order.order_number,
+        }),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('vendorOrders.ship'),
+            onPress: async () => {
+              setActionLoading(true);
+              try {
+                const updated = await vendorOrderService.updateOrderStatus(orderId, {
+                  status: 'shipped',
+                });
+                setOrder(updated);
+                await loadTrack();
+                Alert.alert(t('common.success'), t('vendorOrders.orderShipped'));
+              } catch (error: unknown) {
+                Alert.alert(
+                  t('common.error'),
+                  error instanceof Error ? error.message : t('vendorOrders.shipFailed')
+                );
+              } finally {
+                setActionLoading(false);
+              }
+            },
+          },
+        ]
+      );
       return;
     }
 
-    if (newStatus === 'delivered' && orderStatus === 'shipped') {
+    if (
+      newStatus === 'delivered' &&
+      order.can_update_status !== false &&
+      (orderStatus === 'shipped' || order.can_mark_delivered || order.can_confirm_delivery_otp)
+    ) {
+      if (
+        isProductFulfillment(order, track) ||
+        order.uses_delivery_otp ||
+        order.can_confirm_delivery_otp
+      ) {
+        setDeliveryOtp('');
+        setOtpModalVisible(true);
+        return;
+      }
       Alert.alert(t('vendorOrders.updateStatusTitle'), t('vendorOrders.markDeliveredConfirm'), [
         { text: t('common.cancel'), style: 'cancel' },
         {
@@ -161,6 +266,7 @@ const VendorOrderDetailScreen: React.FC = () => {
                 note: t('vendorOrders.noteDelivered'),
               });
               setOrder(updated);
+              await loadTrack();
               Alert.alert(t('common.success'), t('vendorOrders.orderDelivered'));
             } catch (error: unknown) {
               Alert.alert(
@@ -176,29 +282,100 @@ const VendorOrderDetailScreen: React.FC = () => {
       return;
     }
 
+    if (newStatus === 'cancelled' || (allowed.includes(newStatus) && newStatus !== orderStatus)) {
+      Alert.alert(
+        t('vendorOrders.updateStatusTitle'),
+        t('vendorOrders.updateStatusConfirm', {
+          defaultValue: `Update order status to ${newStatus}?`,
+          status: newStatus,
+        }),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('vendorOrders.update'),
+            style: newStatus === 'cancelled' ? 'destructive' : 'default',
+            onPress: async () => {
+              setActionLoading(true);
+              try {
+                const updated = await vendorOrderService.updateOrderStatus(orderId, {
+                  status: newStatus as any,
+                });
+                setOrder(updated);
+                await loadTrack();
+                Alert.alert(t('common.success'), t('vendorOrders.statusUpdated', { defaultValue: 'Status updated.' }));
+              } catch (error: unknown) {
+                Alert.alert(
+                  t('common.error'),
+                  error instanceof Error ? error.message : t('vendorOrders.deliverFailed')
+                );
+              } finally {
+                setActionLoading(false);
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     Alert.alert(t('vendorOrders.updateStatusTitle'), t('vendorOrders.statusNotAllowed'));
   };
 
-  const handleShip = async () => {
-    if (!trackingNumber.trim()) {
-      Alert.alert(t('vendorOrders.trackingRequired'), t('vendorOrders.trackingRequiredMessage'));
+  const handleConfirmDeliveryOtp = async () => {
+    if (!order) return;
+    const code = deliveryOtp.trim().replace(/\s+/g, '');
+    if (!code) {
+      Alert.alert(
+        t('vendorOrders.deliveryOtpTitle', { defaultValue: 'Delivery OTP' }),
+        t('vendorOrders.deliveryOtpRequired', {
+          defaultValue: 'Enter the OTP shown in the customer’s Tandil app.',
+        })
+      );
       return;
     }
     setActionLoading(true);
     try {
-      const updated = await vendorOrderService.updateOrderStatus(orderId, {
-        status: 'shipped',
-        note: shipNote.trim() || t('vendorOrders.noteDefault'),
-        tracking_number: trackingNumber.trim(),
+      const updated = await vendorOrderService.confirmDeliveryWithOtp(orderId, code, {
+        shopOrderId: order.shop_order_id || order.order_id,
       });
       setOrder(updated);
-      setShipModalVisible(false);
-      setTrackingNumber('');
-      Alert.alert(t('common.success'), t('vendorOrders.orderShipped'));
+      await loadTrack();
+      setOtpModalVisible(false);
+      setDeliveryOtp('');
+      Alert.alert(t('common.success'), t('vendorOrders.orderDelivered'));
+    } catch (error: unknown) {
+      const raw = error instanceof Error ? error.message : '';
+      const isGenericHttp =
+        !raw || /^request failed with status code/i.test(raw) || /status code 422/i.test(raw);
+      Alert.alert(
+        t('common.error'),
+        isGenericHttp
+          ? t('vendorOrders.deliveryOtpInvalid', { defaultValue: 'Invalid OTP' })
+          : raw
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResendDeliveryOtp = async () => {
+    if (!order) return;
+    setActionLoading(true);
+    try {
+      const res = await vendorOrderService.resendDeliveryOtp(orderId, {
+        shopOrderId: order.shop_order_id || order.order_id,
+      });
+      Alert.alert(
+        t('common.success'),
+        res.message ||
+          t('vendorOrders.deliveryOtpResent', {
+            defaultValue: 'A new delivery OTP was sent to the customer’s app.',
+          })
+      );
     } catch (error: unknown) {
       Alert.alert(
         t('common.error'),
-        error instanceof Error ? error.message : t('vendorOrders.shipFailed')
+        error instanceof Error ? error.message : t('vendorOrders.deliverFailed')
       );
     } finally {
       setActionLoading(false);
@@ -220,7 +397,8 @@ const VendorOrderDetailScreen: React.FC = () => {
     }
     setActionLoading(true);
     try {
-      const uri = await vendorOrderService.downloadInvoicePdf(orderId);
+      const fileId = order.shop_order_id || orderId;
+      const uri = await vendorOrderService.downloadInvoicePdf(fileId);
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
@@ -246,7 +424,8 @@ const VendorOrderDetailScreen: React.FC = () => {
     }
     setActionLoading(true);
     try {
-      const uri = await vendorOrderService.downloadOrderPdf(orderId);
+      const fileId = order.shop_order_id || orderId;
+      const uri = await vendorOrderService.downloadOrderPdf(fileId);
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
@@ -302,6 +481,18 @@ const VendorOrderDetailScreen: React.FC = () => {
   }
 
   const color = statusColor(orderStatus);
+  const trackTimeline: TrackTimelineItem[] = (track?.timeline ?? []).map((step) => ({
+    key: step.key,
+    label: step.label,
+    description: step.description,
+    completed: step.completed,
+    timestamp: step.date_display && step.date_display !== '—'
+      ? step.date_display
+      : step.timestamp,
+  }));
+  const progressStatusLabel =
+    statusSteps.find((s) => s.id === orderStatus)?.name ||
+    t(`vendorOrders.${orderStatus}`, { defaultValue: order.status_label || orderStatus });
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -317,7 +508,9 @@ const VendorOrderDetailScreen: React.FC = () => {
           <View style={styles.heroTop}>
             <View>
               <Text style={styles.heroOrderId}>{order.order_number}</Text>
-              <Text style={styles.heroDate}>{formatDateTime(order.order_date)}</Text>
+              <Text style={styles.heroDate}>
+                {order.order_date_display || formatDateTime(order.order_date)}
+              </Text>
             </View>
             <View style={[styles.heroBadge, { backgroundColor: color + '18' }]}>
               <Ionicons
@@ -326,94 +519,199 @@ const VendorOrderDetailScreen: React.FC = () => {
                 color={color}
               />
               <Text style={[styles.heroBadgeText, { color }]}>
-                {statusSteps.find((s) => s.id === orderStatus)?.name || orderStatus}
+                {progressStatusLabel}
               </Text>
             </View>
           </View>
           <Text style={styles.heroAmount}>
             {order.total_amount > 0
-              ? `AED ${order.total_amount.toFixed(2)}`
+              ? money(order.total_amount)
               : t('vendorOrders.free')}
           </Text>
         </VendorCard>
 
         <Text style={styles.sectionLabel}>{t('vendorOrders.orderProgress')}</Text>
         <VendorCard style={styles.timelineCard}>
-          <View style={styles.timelineRow}>
-            {statusSteps.map((step, index) => {
-              const done = currentIndex >= index;
-              const active = orderStatus === step.id;
-              return (
-                <View key={step.id} style={styles.timelineItem}>
-                  <View
-                    style={[
-                      styles.timelineDot,
-                      done && { backgroundColor: step.color, borderColor: step.color },
-                      active && { transform: [{ scale: 1.15 }] },
-                    ]}
-                  >
-                    <Ionicons
-                      name={step.icon as any}
-                      size={14}
-                      color={done ? '#fff' : COLORS.textSecondary}
-                    />
-                  </View>
-                  <Text
-                    style={[styles.timelineLabel, done && { color: step.color, fontWeight: FONT_WEIGHTS.semiBold }]}
-                    numberOfLines={1}
-                  >
-                    {step.name}
+          {trackLoading && trackTimeline.length === 0 ? (
+            <View style={styles.trackLoadingWrap}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={styles.trackLoadingText}>
+                {t('vendorOrders.trackLoading', { defaultValue: 'Loading progress…' })}
+              </Text>
+            </View>
+          ) : trackTimeline.length > 0 ? (
+            <>
+              <View style={styles.trackHeader}>
+                <Text style={styles.trackStatusLabel}>{progressStatusLabel}</Text>
+                {track?.tracking_display && track.tracking_display !== '—' ? (
+                  <Text style={styles.trackMeta}>
+                    {t('vendorOrders.tracking')}: {track.tracking_display}
                   </Text>
-                  {index < statusSteps.length - 1 ? (
+                ) : track?.fulfillment_type ? (
+                  <Text style={styles.trackMeta}>
+                    {t('vendorOrders.fulfillmentType', {
+                      defaultValue: 'Fulfillment: {{type}}',
+                      type: track.fulfillment_type,
+                    })}
+                  </Text>
+                ) : null}
+              </View>
+              <TrackingTimeline timeline={trackTimeline} />
+            </>
+          ) : (
+            <View style={styles.timelineRow}>
+              {statusSteps.map((step, index) => {
+                const apiStep = order.timeline?.find((s) => s.status === step.id);
+                const done =
+                  apiStep?.completed === true ||
+                  (apiStep?.completed == null && currentIndex >= index);
+                const active = apiStep?.current === true || orderStatus === step.id;
+                return (
+                  <View key={step.id} style={styles.timelineItem}>
                     <View
                       style={[
-                        styles.timelineConnector,
-                        currentIndex > index && { backgroundColor: step.color },
+                        styles.timelineDot,
+                        done && { backgroundColor: step.color, borderColor: step.color },
+                        active && { transform: [{ scale: 1.15 }] },
                       ]}
-                    />
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
+                    >
+                      <Ionicons
+                        name={step.icon as any}
+                        size={14}
+                        color={done ? '#fff' : COLORS.textSecondary}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.timelineLabel,
+                        done && { color: step.color, fontWeight: FONT_WEIGHTS.semiBold },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {apiStep?.label || step.name}
+                    </Text>
+                    {index < statusSteps.length - 1 ? (
+                      <View
+                        style={[
+                          styles.timelineConnector,
+                          (apiStep?.completed || currentIndex > index) && {
+                            backgroundColor: step.color,
+                          },
+                        ]}
+                      />
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </VendorCard>
 
         <Text style={styles.sectionLabel}>{t('vendorOrders.product')}</Text>
         <VendorCard>
-          <View style={styles.productRow}>
-            {firstItem?.product_image || order.product_image ? (
-              <Image
-                source={{ uri: firstItem?.product_image || order.product_image }}
-                style={styles.productImage}
-              />
-            ) : (
-              <View style={[styles.productImage, styles.productFallback]}>
-                <Ionicons name="cube" size={28} color={COLORS.primary} />
+          {(order.items?.length ? order.items : [null]).map((item, index) => (
+            <View
+              key={item?.id || `item-${index}`}
+              style={[styles.productRow, index > 0 && { marginTop: SPACING.md }]}
+            >
+              {item?.product_image || order.product_image ? (
+                <Image
+                  source={{ uri: item?.product_image || order.product_image }}
+                  style={styles.productImage}
+                />
+              ) : (
+                <View style={[styles.productImage, styles.productFallback]}>
+                  <Ionicons name="cube" size={28} color={COLORS.primary} />
+                </View>
+              )}
+              <View style={styles.productMeta}>
+                <Text style={styles.productName}>
+                  {item?.product_name || order.product_name || t('vendorOrders.product')}
+                </Text>
+                <Text style={styles.productQty}>
+                  {t('vendorOrders.qtyValue', {
+                    count: item?.quantity ?? order.quantity ?? 1,
+                  })}
+                </Text>
+                {item?.area_m2 != null && item.area_m2 > 0 ? (
+                  <>
+                    <Text style={styles.productQty}>
+                      {t('orders.areaValue', {
+                        defaultValue: 'Area: {{area}} m²',
+                        area: item.area_m2,
+                      })}
+                    </Text>
+                    <Text style={styles.productQty}>
+                      {t('orders.unitPriceValue', {
+                        defaultValue: 'Unit price: AED {{price}}/m²',
+                        price: Number(item.price_per_m2 ?? item.unit_price).toFixed(2),
+                      })}
+                    </Text>
+                  </>
+                ) : null}
+                <Text style={styles.productPrice}>
+                  {(item?.total ?? order.total_amount) > 0
+                    ? money(item?.total ?? order.total_amount)
+                    : t('vendorOrders.freeProduct')}
+                </Text>
               </View>
-            )}
-            <View style={styles.productMeta}>
-              <Text style={styles.productName}>
-                {firstItem?.product_name || order.product_name || t('vendorOrders.product')}
-              </Text>
-              <Text style={styles.productQty}>
-                {t('vendorOrders.qtyValue', {
-                  count: firstItem?.quantity ?? order.quantity ?? 1,
-                })}
-              </Text>
-              <Text style={styles.productPrice}>
-                {order.total_amount > 0
-                  ? `AED ${(firstItem?.total ?? order.total_amount).toFixed(2)}`
-                  : t('vendorOrders.freeProduct')}
-              </Text>
             </View>
-          </View>
+          ))}
         </VendorCard>
 
         <Text style={styles.sectionLabel}>{t('vendorOrders.orderInfo')}</Text>
         <VendorCard style={styles.infoCard}>
-          {renderInfoRow(t('vendorOrders.orderDate'), formatDateTime(order.order_date), 'calendar-outline')}
-          {renderInfoRow(t('vendorOrders.deliveryDate'), formatDate(order.delivery_date), 'bicycle-outline')}
-          {renderInfoRow(t('vendorOrders.tracking'), order.tracking_number || '—', 'navigate-outline')}
+          {renderInfoRow(
+            t('vendorOrders.orderDate'),
+            order.order_date_display || formatDateTime(order.order_date),
+            'calendar-outline'
+          )}
+          {renderInfoRow(
+            t('vendorOrders.deliveryDate'),
+            order.delivery_date_display || formatDate(order.delivery_date),
+            'bicycle-outline'
+          )}
+          {renderInfoRow(
+            t('vendorOrders.tracking'),
+            order.tracking_display || order.tracking_number || '—',
+            'navigate-outline'
+          )}
+          {renderInfoRow(
+            t('vendorOrders.paymentMethod', { defaultValue: 'Payment method' }),
+            order.payment_method || '—',
+            'card-outline'
+          )}
+          {renderInfoRow(
+            t('vendorOrders.paymentStatus', { defaultValue: 'Payment status' }),
+            order.payment_status || '—',
+            'checkmark-circle-outline'
+          )}
+          {order.subtotal != null
+            ? renderInfoRow(
+                t('vendorOrders.subtotal', { defaultValue: 'Subtotal' }),
+                money(order.subtotal),
+                'pricetag-outline'
+              )
+            : null}
+          {order.tax != null
+            ? renderInfoRow(
+                t('vendorOrders.tax', { defaultValue: 'Tax' }),
+                money(order.tax),
+                'receipt-outline'
+              )
+            : null}
+          {order.shipping != null
+            ? renderInfoRow(
+                t('vendorOrders.shipping', { defaultValue: 'Shipping' }),
+                money(order.shipping),
+                'car-outline'
+              )
+            : null}
+          {renderInfoRow(
+            t('vendorOrders.total', { defaultValue: 'Total' }),
+            money(order.total_amount),
+            'cash-outline'
+          )}
         </VendorCard>
 
         <Text style={styles.sectionLabel}>{t('vendorOrders.customer')}</Text>
@@ -480,69 +778,163 @@ const VendorOrderDetailScreen: React.FC = () => {
           </View>
         </View>
 
-        <Text style={styles.sectionLabel}>{t('vendorOrders.updateStatus')}</Text>
-        <VendorCard>
-          <View style={styles.statusGrid}>
-            {statusSteps.map((step) => {
-              const active = orderStatus === step.id;
-              return (
+        {order.can_update_status === false ? (
+          <>
+            <Text style={styles.sectionLabel}>{t('vendorOrders.tracking', { defaultValue: 'Tracking' })}</Text>
+            <VendorCard>
+              <View style={styles.trackOnlyBox}>
+                <Ionicons name="navigate-outline" size={22} color={COLORS.primary} />
+                <Text style={styles.trackOnlyText}>
+                  {order.fulfillment_note ||
+                    t('vendorOrders.serviceTrackOnly', {
+                      defaultValue:
+                        'Service order — handled by supervisor/technician. You can track progress only.',
+                    })}
+                </Text>
+              </View>
+            </VendorCard>
+          </>
+        ) : (
+          <>
+            <Text style={styles.sectionLabel}>{t('vendorOrders.updateStatus')}</Text>
+            <VendorCard>
+              <View style={styles.statusGrid}>
+                {(order.available_statuses?.length
+                  ? order.available_statuses.map((opt) => ({
+                      id: opt.value,
+                      name: opt.label,
+                      icon:
+                        statusSteps.find((s) => s.id === opt.value)?.icon ||
+                        ('ellipse-outline' as const),
+                      color: statusColor(String(opt.value)),
+                      enabled: opt.enabled !== false,
+                    }))
+                  : statusSteps.map((s) => ({ ...s, enabled: true }))
+                ).map((step) => {
+                  const active = orderStatus === step.id;
+                  const disabled = actionLoading || step.enabled === false;
+                  return (
+                    <TouchableOpacity
+                      key={step.id}
+                      style={[
+                        styles.statusChip,
+                        active && { backgroundColor: step.color + '18', borderColor: step.color },
+                        disabled && !active && styles.statusChipDisabled,
+                      ]}
+                      onPress={() => handleStatusUpdate(String(step.id))}
+                      disabled={disabled}
+                    >
+                      <Ionicons
+                        name={step.icon as any}
+                        size={16}
+                        color={active ? step.color : COLORS.textSecondary}
+                      />
+                      <Text style={[styles.statusChipText, active && { color: step.color }]}>
+                        {step.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {(isProductFulfillment(order, track) || order.uses_delivery_otp) &&
+              orderStatus === 'shipped' ? (
+                <Text style={styles.otpHint}>
+                  {t('vendorOrders.deliveryOtpHint', {
+                    defaultValue:
+                      'After shipping, ask the customer for the OTP shown in their Tandil app, then enter it here to confirm delivery. No SMS is used.',
+                  })}
+                </Text>
+              ) : null}
+              {(order.can_confirm_delivery_otp ||
+                ((isProductFulfillment(order, track) || order.uses_delivery_otp) &&
+                  orderStatus === 'shipped')) && (
                 <TouchableOpacity
-                  key={step.id}
-                  style={[
-                    styles.statusChip,
-                    active && { backgroundColor: step.color + '18', borderColor: step.color },
-                  ]}
-                  onPress={() => handleStatusUpdate(step.id)}
+                  style={styles.otpConfirmBtn}
+                  onPress={() => {
+                    setDeliveryOtp('');
+                    setOtpModalVisible(true);
+                  }}
                   disabled={actionLoading}
                 >
-                  <Ionicons
-                    name={step.icon as any}
-                    size={16}
-                    color={active ? step.color : COLORS.textSecondary}
-                  />
-                  <Text style={[styles.statusChipText, active && { color: step.color }]}>
-                    {step.name}
+                  <Ionicons name="keypad-outline" size={18} color="#fff" />
+                  <Text style={styles.otpConfirmBtnText}>
+                    {t('vendorOrders.confirmWithOtp', {
+                      defaultValue: 'Confirm delivery with OTP',
+                    })}
                   </Text>
                 </TouchableOpacity>
-              );
-            })}
-          </View>
-        </VendorCard>
+              )}
+            </VendorCard>
+          </>
+        )}
       </ScrollView>
 
-      <Modal visible={shipModalVisible} transparent animationType="slide">
+      <Modal visible={otpModalVisible} transparent animationType="slide">
         <KeyboardAvoidingView
           style={styles.modalOverlay}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.modalCard}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>{t('vendorOrders.shipOrder')}</Text>
-            <Text style={styles.fieldLabel}>{t('vendorOrders.trackingNumber')}</Text>
+            <Text style={styles.modalTitle}>
+              {t('vendorOrders.deliveryOtpTitle', { defaultValue: 'Delivery OTP' })}
+            </Text>
+            <Text style={styles.otpModalBody}>
+              {t('vendorOrders.deliveryOtpBody', {
+                defaultValue:
+                  'Ask the customer to open Order Tracking in Tandil and read the delivery code. Enter it below to mark this order delivered.',
+              })}
+            </Text>
+            <Text style={styles.fieldLabel}>
+              {t('vendorOrders.deliveryOtpLabel', { defaultValue: 'Customer OTP' })}
+            </Text>
             <TextInput
               style={styles.modalInput}
-              placeholder={t('vendorOrders.trackingPlaceholder')}
+              placeholder="••••••"
               placeholderTextColor={COLORS.textSecondary}
-              value={trackingNumber}
-              onChangeText={setTrackingNumber}
-              autoCapitalize="characters"
-            />
-            <Text style={styles.fieldLabel}>{t('vendorOrders.note')}</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder={t('vendorOrders.noteDefault')}
-              placeholderTextColor={COLORS.textSecondary}
-              value={shipNote}
-              onChangeText={setShipNote}
+              value={deliveryOtp}
+              onChangeText={setDeliveryOtp}
+              keyboardType="number-pad"
+              maxLength={8}
+              autoFocus
             />
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setShipModalVisible(false)}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => {
+                  setOtpModalVisible(false);
+                  setDeliveryOtp('');
+                }}
+              >
                 <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalConfirm} onPress={handleShip}>
-                <Text style={styles.modalConfirmText}>{t('vendorOrders.ship')}</Text>
+              <TouchableOpacity
+                style={styles.modalConfirm}
+                onPress={() => void handleConfirmDeliveryOtp()}
+                disabled={actionLoading}
+              >
+                {actionLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>
+                    {t('vendorOrders.confirmDelivery', { defaultValue: 'Confirm delivery' })}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
+            {(order?.can_resend_delivery_otp || order?.resend_delivery_otp_endpoint) && (
+              <TouchableOpacity
+                style={styles.resendOtpBtn}
+                onPress={() => void handleResendDeliveryOtp()}
+                disabled={actionLoading}
+              >
+                <Text style={styles.resendOtpText}>
+                  {t('vendorOrders.resendDeliveryOtp', {
+                    defaultValue: 'Resend OTP to customer app',
+                  })}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -613,6 +1005,29 @@ const styles = StyleSheet.create({
   },
   timelineCard: {
     paddingVertical: SPACING.md,
+  },
+  trackLoadingWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.sm,
+  },
+  trackLoadingText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+  },
+  trackHeader: {
+    marginBottom: SPACING.sm,
+  },
+  trackStatusLabel: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+  },
+  trackMeta: {
+    marginTop: 4,
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
   },
   timelineRow: {
     flexDirection: 'row',
@@ -817,6 +1232,58 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.textSecondary,
+  },
+  statusChipDisabled: {
+    opacity: 0.45,
+  },
+  trackOnlyBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+  },
+  trackOnlyText: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+  },
+  otpHint: {
+    marginTop: SPACING.md,
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+  },
+  otpConfirmBtn: {
+    marginTop: SPACING.md,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.round,
+    paddingVertical: 12,
+    paddingHorizontal: SPACING.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  otpConfirmBtnText: {
+    color: '#fff',
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  otpModalBody: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+    marginBottom: SPACING.md,
+  },
+  resendOtpBtn: {
+    marginTop: SPACING.md,
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+  },
+  resendOtpText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   modalOverlay: {
     flex: 1,

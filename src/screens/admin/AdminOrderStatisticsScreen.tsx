@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -144,6 +145,7 @@ const AdminOrderStatisticsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const fetchData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -321,24 +323,56 @@ const AdminOrderStatisticsScreen: React.FC = () => {
   }, [selectedTab, allOrders, processingOrders, cancelledOrders, completedOrders]);
 
   const summaryCards = [
-    { key: 'total', label: t('admin.orderStatistics.cards.totalOrders', { defaultValue: 'Total orders' }), value: stats.summary.total_orders },
-    { key: 'pending', label: t('admin.orderStatistics.cards.pending', { defaultValue: 'Pending' }), value: stats.summary.pending_orders },
-    { key: 'processing', label: t('admin.orderStatistics.cards.inProgress', { defaultValue: 'In progress' }), value: stats.summary.in_progress_orders },
-    { key: 'completed', label: t('admin.orderStatistics.cards.completed', { defaultValue: 'Completed' }), value: stats.summary.completed_orders },
-    { key: 'cancelled', label: t('admin.orderStatistics.cards.cancelled', { defaultValue: 'Cancelled' }), value: stats.summary.cancelled_orders },
+    {
+      key: 'total',
+      label: t('admin.orderStatistics.cards.totalOrders', { defaultValue: 'Total orders' }),
+      value: stats.summary.total_orders,
+      icon: 'receipt-outline' as const,
+      tint: COLORS.primary,
+    },
+    {
+      key: 'pending',
+      label: t('admin.orderStatistics.cards.pending', { defaultValue: 'Pending' }),
+      value: stats.summary.pending_orders,
+      icon: 'time-outline' as const,
+      tint: COLORS.warning,
+    },
+    {
+      key: 'processing',
+      label: t('admin.orderStatistics.cards.inProgress', { defaultValue: 'In progress' }),
+      value: stats.summary.in_progress_orders,
+      icon: 'sync-outline' as const,
+      tint: COLORS.info,
+    },
+    {
+      key: 'completed',
+      label: t('admin.orderStatistics.cards.completed', { defaultValue: 'Completed' }),
+      value: stats.summary.completed_orders,
+      icon: 'checkmark-done-outline' as const,
+      tint: COLORS.success,
+    },
+    {
+      key: 'cancelled',
+      label: t('admin.orderStatistics.cards.cancelled', { defaultValue: 'Cancelled' }),
+      value: stats.summary.cancelled_orders,
+      icon: 'close-circle-outline' as const,
+      tint: COLORS.error,
+    },
     {
       key: 'revenue',
       label: `${t('admin.orderStatistics.cards.revenue', { defaultValue: 'Revenue' })} (${stats.financial.currency || 'AED'})`,
       value: stats.financial.gross_revenue.toFixed(2),
+      icon: 'cash-outline' as const,
+      tint: COLORS.primaryLight,
     },
   ];
 
   const getStatusColor = (status: string) => {
     const s = String(status || '').toLowerCase();
     if (s.includes('cancel')) return COLORS.error;
-    if (s.includes('complete')) return COLORS.success;
+    if (s.includes('complete') || s.includes('deliver')) return COLORS.success;
     if (s.includes('progress') || s.includes('assign') || s.includes('process')) return COLORS.info;
-    if (s.includes('confirm')) return COLORS.primary;
+    if (s.includes('ship') || s.includes('confirm')) return COLORS.primary;
     return COLORS.warning;
   };
 
@@ -355,29 +389,124 @@ const AdminOrderStatisticsScreen: React.FC = () => {
     });
   };
 
+  const handleDeleteOrder = useCallback(
+    (order: AdminDashboardOrderListItem) => {
+      const label = `#${order.order_number_short || order.id}`;
+      Alert.alert(
+        t('admin.orderStatistics.deleteTitle', { defaultValue: 'Delete order' }),
+        t('admin.orderStatistics.deleteConfirm', {
+          defaultValue: 'Delete order {{order}}? This cannot be undone.',
+          order: label,
+        }),
+        [
+          { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+          {
+            text: t('common.delete', { defaultValue: 'Delete' }),
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                setDeletingId(order.id);
+                try {
+                  const res = await adminService.bulkDeleteOrders([order.id]);
+                  Alert.alert(
+                    t('common.success', { defaultValue: 'Success' }),
+                    res.message ||
+                      t('admin.orderStatistics.deleteSuccess', {
+                        defaultValue: 'Order deleted.',
+                      })
+                  );
+                  await fetchData(true);
+                } catch (e: unknown) {
+                  const msg =
+                    (e as { response?: { data?: { message?: string } } })?.response?.data
+                      ?.message ||
+                    (e as Error)?.message ||
+                    t('admin.orderStatistics.deleteFailed', {
+                      defaultValue: 'Could not delete order.',
+                    });
+                  Alert.alert(t('common.error', { defaultValue: 'Error' }), msg);
+                } finally {
+                  setDeletingId(null);
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+    [fetchData, t]
+  );
+
   const renderOrderItem = ({ item }: { item: AdminDashboardOrderListItem }) => {
     const statusColor = getStatusColor(item.order_status);
+    const initial = (
+      item.customer?.name ||
+      t('admin.orderStatistics.guest', { defaultValue: 'Guest' })
+    )
+      .charAt(0)
+      .toUpperCase();
+    const busy = deletingId === item.id;
     return (
-      <View style={styles.orderRow}>
-        <View style={styles.orderPrimary}>
-          <Text style={styles.orderNumber}>#{item.order_number_short || item.id}</Text>
-          <Text style={styles.orderDate}>{formatDate(item.created_at)}</Text>
-        </View>
-        <View style={styles.orderCustomerWrap}>
-          <Text style={styles.orderCustomerName} numberOfLines={1}>
-            {item.customer?.name || t('admin.orderStatistics.guest', { defaultValue: 'Guest' })}
-          </Text>
-          <Text style={styles.orderCustomerEmail} numberOfLines={1}>
-            {item.customer?.email || '—'}
-          </Text>
-        </View>
-        <View style={styles.orderAmountWrap}>
-          <Text style={styles.orderAmount}>{formatAmount(item.total_amount)}</Text>
-          <View style={[styles.statusPill, { backgroundColor: statusColor + '1F' }]}>
-            <Text style={[styles.statusPillText, { color: statusColor }]}>{item.order_status}</Text>
+      <TouchableOpacity
+        style={styles.orderCard}
+        activeOpacity={0.85}
+        disabled={busy}
+        onPress={() =>
+          navigation.navigate('AdminOrderDetail', {
+            orderId: item.id,
+          })
+        }
+      >
+        <View style={[styles.orderAccent, { backgroundColor: statusColor }]} />
+        <View style={styles.orderCardBody}>
+          <View style={styles.orderCardTop}>
+            <View style={[styles.avatar, { backgroundColor: statusColor + '22' }]}>
+              <Text style={[styles.avatarText, { color: statusColor }]}>{initial}</Text>
+            </View>
+            <View style={styles.orderCardMeta}>
+              <Text style={styles.orderNumber}>#{item.order_number_short || item.id}</Text>
+              <Text style={styles.orderDate}>{formatDate(item.created_at)}</Text>
+            </View>
+            <View style={[styles.statusPill, { backgroundColor: statusColor + '18' }]}>
+              <Text style={[styles.statusPillText, { color: statusColor }]}>{item.order_status}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              disabled={busy}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                handleDeleteOrder(item);
+              }}
+            >
+              {busy ? (
+                <ActivityIndicator size="small" color={COLORS.error} />
+              ) : (
+                <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+              )}
+            </TouchableOpacity>
+          </View>
+          <View style={styles.orderCardBottom}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.orderCustomerName} numberOfLines={1}>
+                {item.customer?.name || t('admin.orderStatistics.guest', { defaultValue: 'Guest' })}
+              </Text>
+              <Text style={styles.orderCustomerEmail} numberOfLines={1}>
+                {item.customer?.email || '—'}
+              </Text>
+            </View>
+            <View style={styles.orderAmountWrap}>
+              <Text style={styles.orderAmount}>{formatAmount(item.total_amount)}</Text>
+              <View style={styles.viewRow}>
+                <Text style={styles.viewText}>
+                  {t('admin.orderStatistics.view', { defaultValue: 'View' })}
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
+              </View>
+            </View>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -392,10 +521,16 @@ const AdminOrderStatisticsScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <View style={styles.headerDecor} />
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
+          <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('admin.orders.title')}</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerEyebrow}>
+            {t('admin.orderStatistics.eyebrow', { defaultValue: 'Dashboard' })}
+          </Text>
+          <Text style={styles.headerTitle}>{t('admin.orders.title')}</Text>
+        </View>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -421,8 +556,15 @@ const AdminOrderStatisticsScreen: React.FC = () => {
             <View style={styles.summaryGrid}>
               {summaryCards.map((card) => (
                 <View key={card.key} style={styles.summaryCard}>
-                  <Text style={styles.summaryLabel}>{card.label}</Text>
-                  <Text style={styles.summaryValue}>{card.value}</Text>
+                  <View style={[styles.summaryIconWrap, { backgroundColor: card.tint + '18' }]}>
+                    <Ionicons name={card.icon} size={16} color={card.tint} />
+                  </View>
+                  <Text style={styles.summaryLabel} numberOfLines={2}>
+                    {card.label}
+                  </Text>
+                  <Text style={[styles.summaryValue, card.key === 'revenue' && { color: COLORS.primary }]}>
+                    {card.value}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -438,7 +580,12 @@ const AdminOrderStatisticsScreen: React.FC = () => {
                     {tab.label}
                   </Text>
                   <View style={[styles.tabCount, selectedTab === tab.key && styles.tabCountActive]}>
-                    <Text style={[styles.tabCountText, selectedTab === tab.key && styles.tabCountTextActive]}>
+                    <Text
+                      style={[
+                        styles.tabCountText,
+                        selectedTab === tab.key && styles.tabCountTextActive,
+                      ]}
+                    >
                       {tab.count}
                     </Text>
                   </View>
@@ -446,22 +593,24 @@ const AdminOrderStatisticsScreen: React.FC = () => {
               ))}
             </View>
 
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeadText, styles.colOrder]}>
-                {t('admin.orderStatistics.columns.order', { defaultValue: 'Order' })}
+            <View style={styles.listSectionHeader}>
+              <Text style={styles.listSectionTitle}>
+                {t('admin.orderStatistics.recent', { defaultValue: 'Orders' })}
               </Text>
-              <Text style={[styles.tableHeadText, styles.colCustomer]}>
-                {t('admin.orderStatistics.columns.customer', { defaultValue: 'Customer' })}
-              </Text>
-              <Text style={[styles.tableHeadText, styles.colAmount]}>
-                {t('admin.orderStatistics.columns.totalStatus', { defaultValue: 'Total / Status' })}
+              <Text style={styles.listSectionCount}>
+                {t('admin.orderStatistics.found', {
+                  defaultValue: '{{count}} found',
+                  count: currentOrders.length,
+                })}
               </Text>
             </View>
           </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="receipt-outline" size={48} color={COLORS.textSecondary} />
+            <View style={styles.emptyIconWrap}>
+              <Ionicons name="receipt-outline" size={36} color={COLORS.primary} />
+            </View>
             <Text style={styles.emptyStateText}>
               {t('admin.orderStatistics.emptyTab', { defaultValue: 'No orders in this tab.' })}
             </Text>
@@ -476,39 +625,57 @@ const AdminOrderStatisticsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceLight,
   },
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surfaceLight,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.lg,
-    paddingBottom: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    paddingBottom: SPACING.lg,
+    backgroundColor: COLORS.primary,
+    overflow: 'hidden',
+  },
+  headerDecor: {
+    position: 'absolute',
+    top: -40,
+    right: -20,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerEyebrow: {
+    fontSize: FONT_SIZES.xs,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: FONT_WEIGHTS.medium,
+    marginBottom: 2,
   },
   headerTitle: {
-    flex: 1,
-    textAlign: 'center',
     fontSize: FONT_SIZES.xl,
-    color: COLORS.text,
+    color: '#fff',
     fontWeight: FONT_WEIGHTS.bold,
   },
   headerSpacer: {
-    width: 36,
+    width: 40,
   },
   errorBanner: {
     marginHorizontal: SPACING.lg,
@@ -532,18 +699,27 @@ const styles = StyleSheet.create({
   summaryCard: {
     width: '31%',
     minWidth: 105,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
+    borderRadius: 16,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.md,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.sm,
+  },
+  summaryIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.xs,
   },
   summaryLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: 10,
     color: COLORS.textSecondary,
     textTransform: 'uppercase',
     marginBottom: 4,
+    fontWeight: FONT_WEIGHTS.medium,
   },
   summaryValue: {
     fontSize: FONT_SIZES.lg,
@@ -552,25 +728,26 @@ const styles = StyleSheet.create({
   },
   tabRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: SPACING.lg,
-    marginTop: SPACING.md,
-    marginBottom: SPACING.sm,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
     gap: SPACING.sm,
   },
   tabBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
     gap: SPACING.xs,
   },
   tabBtnActive: {
-    backgroundColor: COLORS.primary + '12',
-    borderColor: COLORS.primary + '55',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   tabText: {
     fontSize: FONT_SIZES.sm,
@@ -578,60 +755,87 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.medium,
   },
   tabTextActive: {
-    color: COLORS.primary,
+    color: '#fff',
   },
   tabCount: {
-    minWidth: 20,
+    minWidth: 22,
     paddingHorizontal: 6,
-    borderRadius: 10,
-    backgroundColor: COLORS.textSecondary + '44',
+    borderRadius: 11,
+    backgroundColor: COLORS.surface,
     alignItems: 'center',
   },
   tabCountActive: {
-    backgroundColor: COLORS.primary + '33',
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
   tabCountText: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   tabCountTextActive: {
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.semiBold,
+    color: '#fff',
   },
-  tableHeader: {
+  listSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.sm,
   },
-  tableHeadText: {
-    fontSize: FONT_SIZES.xs,
+  listSectionTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+  },
+  listSectionCount: {
+    fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    textTransform: 'uppercase',
-    fontWeight: FONT_WEIGHTS.semiBold,
   },
-  colOrder: { flex: 1.15 },
-  colCustomer: { flex: 1.3 },
-  colAmount: { flex: 1.1, textAlign: 'right' },
   listContent: {
-    paddingBottom: SPACING.xl,
+    paddingBottom: SPACING.xl * 2,
   },
-  orderRow: {
+  orderCard: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.background,
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    flexDirection: 'row',
+  },
+  orderAccent: {
+    width: 4,
+  },
+  orderCardBody: {
+    flex: 1,
+    padding: SPACING.md,
+  },
+  orderCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    marginBottom: SPACING.sm,
   },
-  orderPrimary: { flex: 1.15, paddingRight: 6 },
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.sm,
+  },
+  avatarText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  orderCardMeta: {
+    flex: 1,
+    minWidth: 0,
+  },
   orderNumber: {
     fontSize: FONT_SIZES.md,
-    fontWeight: FONT_WEIGHTS.semiBold,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
   },
   orderDate: {
@@ -639,33 +843,61 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
   },
-  orderCustomerWrap: { flex: 1.3, paddingRight: 6 },
+  orderCardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: SPACING.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.border,
+  },
   orderCustomerName: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.text,
-    fontWeight: FONT_WEIGHTS.medium,
+    fontWeight: FONT_WEIGHTS.semiBold,
   },
   orderCustomerEmail: {
     marginTop: 2,
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
   },
-  orderAmountWrap: { flex: 1.1, alignItems: 'flex-end' },
+  orderAmountWrap: {
+    alignItems: 'flex-end',
+    marginLeft: SPACING.sm,
+  },
   orderAmount: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  viewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 2,
+  },
+  viewText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
     fontWeight: FONT_WEIGHTS.semiBold,
   },
   statusPill: {
-    marginTop: 4,
     borderRadius: BORDER_RADIUS.round,
-    paddingHorizontal: SPACING.xs,
-    paddingVertical: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   statusPillText: {
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.semiBold,
     textTransform: 'capitalize',
+  },
+  deleteBtn: {
+    marginLeft: SPACING.sm,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: COLORS.error + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyState: {
     alignItems: 'center',
@@ -673,6 +905,14 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xl * 2,
     paddingHorizontal: SPACING.lg,
     gap: SPACING.sm,
+  },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    backgroundColor: COLORS.primary + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyStateText: {
     color: COLORS.textSecondary,
