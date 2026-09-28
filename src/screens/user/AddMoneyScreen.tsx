@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { Button } from '../../components/common/Button';
@@ -70,6 +71,7 @@ function parseAmount(value: string): number {
 const AddMoneyScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const customInputRef = useRef<TextInput>(null);
   const [currency, setCurrency] = useState('AED');
   const [balance, setBalance] = useState(0);
@@ -357,7 +359,14 @@ const AddMoneyScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View
+        style={[
+          styles.footer,
+          Platform.OS === 'android' && {
+            paddingBottom: Math.max(insets.bottom, SPACING.md) + SPACING.sm,
+          },
+        ]}
+      >
         <Button
           title={
             canSubmit && selectedAmount != null

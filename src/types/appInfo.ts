@@ -44,8 +44,8 @@ export interface AppContactInfo {
 
 export const DEFAULT_CLIENT_CONTACT: AppContactInfo = {
   company: 'Tandil',
-  website: 'https://tandil.ae',
-  websiteLabel: 'tandil.ae',
+  website: 'https://app.tandil.ae',
+  websiteLabel: 'app.tandil.ae',
   email: 'support@tandil.com',
   phone: '+971569206959',
   whatsappDisplay: '+971 569206959',
@@ -58,8 +58,8 @@ export const DEFAULT_CLIENT_CONTACT: AppContactInfo = {
 
 export const DEFAULT_VENDOR_CONTACT: AppContactInfo = {
   company: 'Tandil',
-  website: 'https://tandil.ae',
-  websiteLabel: 'tandil.ae',
+  website: 'https://app.tandil.ae',
+  websiteLabel: 'app.tandil.ae',
   email: 'info@tandil.ae',
   whatsappDisplay: '+971 569206959',
   whatsappDial: '+971569206959',

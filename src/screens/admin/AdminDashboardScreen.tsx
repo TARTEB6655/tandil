@@ -9,9 +9,12 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { Image } from 'expo-image';
@@ -63,6 +66,7 @@ type TimeRange = 'daily' | 'weekly' | 'monthly' | 'yearly';
 const AdminDashboardScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const [timeRange, setTimeRange] = useState<TimeRange>('daily');
   const [showTimeRangeModal, setShowTimeRangeModal] = useState(false);
   const [statistics, setStatistics] = useState<any>(null);
@@ -582,8 +586,16 @@ const AdminDashboardScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      {Platform.OS === 'android' ? (
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} translucent />
+      ) : null}
       {/* Header */}
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          Platform.OS === 'android' && { paddingTop: Math.max(insets.top, 12) + SPACING.md },
+        ]}
+      >
         <View style={styles.headerDecor} />
         <View style={styles.headerContent}>
           <View style={styles.headerTextWrap}>

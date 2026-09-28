@@ -18,6 +18,7 @@ export type ScheduledJobStatus =
   | 'confirmed'
   | 'in_progress'
   | 'completed'
+  | 'delivered'
   | 'cancelled'
   | 'rescheduled'
   | 'rejected';
@@ -78,6 +79,10 @@ export interface ScheduledJob {
   startTime: string; // HH:mm
   endTime: string;
   status: ScheduledJobStatus;
+  /** API display label when provided (e.g. "Delivered"). */
+  statusLabel?: string;
+  orderNumber?: string;
+  jobSource?: string;
   address?: string;
   notes?: string;
   overlapsTechnician?: boolean;

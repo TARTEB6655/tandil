@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
@@ -86,6 +87,7 @@ interface ShippingAddress {
 const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const user = useAppStore((s) => s.user);
   const { initPaymentSheet, presentPaymentSheet, confirmPlatformPayPayment } = useStripe();
   const route = useRoute<any>();
@@ -145,7 +147,10 @@ const CheckoutScreen: React.FC = () => {
   const [applyWallet, setApplyWallet] = useState(false);
   const [walletSummaryLoading, setWalletSummaryLoading] = useState(false);
   const [applePaySupported, setApplePaySupported] = useState(false);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'stripe' | 'apple_pay'>('stripe');
+  const [googlePaySupported, setGooglePaySupported] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
+    'stripe' | 'apple_pay' | 'google_pay'
+  >('stripe');
   const [couponCartLines, setCouponCartLines] = useState<CartLineForCoupons[]>([]);
   const walletRefreshRequestRef = useRef(0);
   const applyWalletPrevRef = useRef(false);
@@ -384,14 +389,38 @@ const CheckoutScreen: React.FC = () => {
   }, [currentStep, applyWallet, walletApiBalance, total, orderSummaryApi]);
 
   useEffect(() => {
-    if (currentStep !== 'payment' || Platform.OS !== 'ios' || !isApplePayEnabled()) {
+    if (currentStep !== 'payment') {
       setApplePaySupported(false);
+      setGooglePaySupported(false);
       return;
     }
+
     let cancelled = false;
-    isPlatformPaySupported().then((supported) => {
-      if (!cancelled) setApplePaySupported(supported);
-    });
+    const stripePk = getStripePublishableKey();
+    const isStripeTestMode = /pk_test_/i.test(String(stripePk));
+
+    if (Platform.OS === 'ios' && isApplePayEnabled()) {
+      isPlatformPaySupported().then((supported) => {
+        if (!cancelled) setApplePaySupported(supported);
+      });
+    } else {
+      setApplePaySupported(false);
+    }
+
+    if (Platform.OS === 'android') {
+      isPlatformPaySupported({
+        googlePay: { testEnv: isStripeTestMode },
+      })
+        .then((supported) => {
+          if (!cancelled) setGooglePaySupported(supported);
+        })
+        .catch(() => {
+          if (!cancelled) setGooglePaySupported(false);
+        });
+    } else {
+      setGooglePaySupported(false);
+    }
+
     return () => {
       cancelled = true;
     };
@@ -824,6 +853,102 @@ const CheckoutScreen: React.FC = () => {
     }
   };
 
+  const handleGooglePay = async () => {
+    if (Platform.OS !== 'android') return;
+
+    const { dueNow, isWalletOnlyCheckout } = getCheckoutPaymentPreview();
+    const stripePk = getStripePublishableKey();
+
+    if (isWalletOnlyCheckout || dueNow <= 0) {
+      handlePlaceOrder();
+      return;
+    }
+
+    if (!stripePk) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t(
+          'checkout.stripeKeyMissing',
+          'Add your Stripe publishable key: set EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY or extra.stripePublishableKey in app config (pk_test_… or pk_live_…). Rebuild the native app after changing plugins.'
+        ),
+        [{ text: t('common.ok', 'OK') }]
+      );
+      return;
+    }
+
+    if (!googlePaySupported) {
+      Alert.alert(
+        t('checkout.googlePayUnavailableTitle', 'Google Pay unavailable'),
+        t(
+          'checkout.googlePayUnavailableBody',
+          'Use a real Android phone with Google Play Services, sign in to a Google account, add a card in Google Pay, and install a release/preview APK (not Expo Go).'
+        ),
+        [{ text: t('common.ok', 'OK') }]
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data: pi, message: piMessage, walletOnlyComplete } =
+        await requestCheckoutPaymentIntent();
+
+      if (walletOnlyComplete) {
+        showOrderPlacedAlert();
+        return;
+      }
+
+      if (!pi?.client_secret) {
+        const body =
+          piMessage ||
+          t(
+            'checkout.paymentIntentFailed',
+            'Could not start payment. Ensure the server exposes POST /shop/checkout/stripe/payment-intent and try again.'
+          );
+        Alert.alert(t('common.error', 'Error'), body, [{ text: t('common.ok', 'OK') }]);
+        return;
+      }
+
+      const merchantCountryCode = 'AE';
+      const currencyCode = String(currency || 'AED').toUpperCase();
+      const isStripeTestMode = /pk_test_/i.test(String(stripePk));
+
+      const { error: googlePayError } = await confirmPlatformPayPayment(pi.client_secret, {
+        googlePay: {
+          testEnv: isStripeTestMode,
+          merchantName: 'Tandil',
+          merchantCountryCode,
+          currencyCode,
+          billingAddressConfig: {
+            format: PlatformPay.BillingAddressFormat.Min,
+            isRequired: false,
+          },
+        },
+      });
+
+      if (googlePayError) {
+        if (googlePayError.code === 'Canceled') {
+          return;
+        }
+        Alert.alert(
+          t('common.error', 'Error'),
+          googlePayError.message ||
+            t('checkout.paymentOpenFailed', 'Payment could not be completed.'),
+          [{ text: t('common.ok', 'OK') }]
+        );
+        return;
+      }
+
+      await finalizeOrderAfterStripe(pi.client_secret);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      captureException(err, { tags: { area: 'checkout_google_pay' } });
+      Alert.alert(t('common.error', 'Error'), msg, [{ text: t('common.ok', 'OK') }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleUseMyLocation = async () => {
     setLocating(true);
     try {
@@ -1020,9 +1145,13 @@ const CheckoutScreen: React.FC = () => {
       isApplePayEnabled() &&
       !isWalletOnlyCheckout &&
       dueNow > 0;
+    const showGooglePay =
+      Platform.OS === 'android' &&
+      !isWalletOnlyCheckout &&
+      dueNow > 0;
 
     const renderPaymentOption = (opts: {
-      id: 'stripe' | 'apple_pay';
+      id: 'stripe' | 'apple_pay' | 'google_pay';
       icon: keyof typeof Ionicons.glyphMap;
       iconColor: string;
       iconBg: string;
@@ -1082,6 +1211,19 @@ const CheckoutScreen: React.FC = () => {
                 iconBg: '#E8E8ED',
                 title: t('checkout.applePayLabel', 'Apple Pay'),
                 subtitle: t('checkout.applePaySubtitle', 'Fast and secure checkout with Apple Pay'),
+              })
+            : null}
+          {showGooglePay
+            ? renderPaymentOption({
+                id: 'google_pay',
+                icon: 'logo-google',
+                iconColor: '#4285F4',
+                iconBg: '#E8F0FE',
+                title: t('checkout.googlePayLabel', 'Google Pay'),
+                subtitle: t(
+                  'checkout.googlePaySubtitle',
+                  'Fast and secure checkout with Google Pay'
+                ),
               })
             : null}
         </View>
@@ -1202,8 +1344,14 @@ const CheckoutScreen: React.FC = () => {
         isApplePayEnabled() &&
         !isWalletOnlyCheckout &&
         dueNow > 0;
+      const canUseGooglePay =
+        Platform.OS === 'android' &&
+        !isWalletOnlyCheckout &&
+        dueNow > 0;
       if (selectedPaymentMethod === 'apple_pay' && canUseApplePay) {
         handleApplePay();
+      } else if (selectedPaymentMethod === 'google_pay' && canUseGooglePay) {
+        handleGooglePay();
       } else {
         handlePlaceOrder();
       }
@@ -1412,7 +1560,14 @@ const CheckoutScreen: React.FC = () => {
       </ScrollView>
 
       {/* Bottom Actions */}
-      <View style={styles.bottomActions}>
+      <View
+        style={[
+          styles.bottomActions,
+          Platform.OS === 'android' && {
+            paddingBottom: Math.max(insets.bottom, SPACING.md) + SPACING.sm,
+          },
+        ]}
+      >
         {currentStep !== 'location' && (
           <TouchableOpacity
             style={styles.backButton}
@@ -1438,7 +1593,9 @@ const CheckoutScreen: React.FC = () => {
                   : currentStep === 'payment'
                     ? selectedPaymentMethod === 'apple_pay'
                       ? t('checkout.applePayPayWith', 'Pay with Apple Pay')
-                      : t('checkout.placeOrder')
+                      : selectedPaymentMethod === 'google_pay'
+                        ? t('checkout.googlePayPayWith', 'Pay with Google Pay')
+                        : t('checkout.placeOrder')
                     : t('checkout.next')}
             </Text>
           {currentStep !== 'payment' && (

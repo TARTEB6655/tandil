@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useStripe, PlatformPay } from '@stripe/stripe-react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
@@ -31,9 +32,10 @@ import {
   confirmMembershipAfterStripe,
   extractMembershipPaymentIntentId,
   type MembershipPurchaseMode,
+  type MembershipPaymentMethod,
 } from '../../services/clientMembershipService';
 
-type PaymentMethodId = 'stripe' | 'apple_pay';
+type PaymentMethodId = 'stripe' | 'apple_pay' | 'google_pay';
 
 export type MembershipCheckoutParams = {
   mode?: MembershipPurchaseMode;
@@ -50,6 +52,7 @@ const MembershipCheckoutScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const insets = useSafeAreaInsets();
   const params = (route.params ?? {}) as MembershipCheckoutParams;
 
   const mode: MembershipPurchaseMode = params.mode || 'purchase';
@@ -64,6 +67,7 @@ const MembershipCheckoutScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const showApplePay = Platform.OS === 'ios' && isApplePayEnabled() && amount > 0;
+  const showGooglePay = Platform.OS === 'android' && amount > 0;
   const amountLabel = useMemo(
     () => `${currency} ${amount.toFixed(2)}`,
     [currency, amount]
@@ -173,16 +177,20 @@ const MembershipCheckoutScreen: React.FC = () => {
     showSuccess();
   };
 
-  const requestIntent = async (method: PaymentMethodId) =>
-    createMembershipPaymentIntent({
+  const requestIntent = async (method: PaymentMethodId) => {
+    // Backend currently accepts stripe | apple_pay. Google Pay uses the same Stripe PaymentIntent.
+    const apiMethod: MembershipPaymentMethod =
+      method === 'apple_pay' ? 'apple_pay' : 'stripe';
+    return createMembershipPaymentIntent({
       mode,
       plan_key: planKey,
       plan_id: params.planId,
       membership_id: membershipId,
       amount: Math.round(amount * 100) / 100,
-      payment_method: method,
+      payment_method: apiMethod,
       currency,
     });
+  };
 
   const handleStripeCardPay = async () => {
     if (Platform.OS === 'web') {
@@ -387,6 +395,87 @@ const MembershipCheckoutScreen: React.FC = () => {
     }
   };
 
+  const handleGooglePay = async () => {
+    if (!showGooglePay) {
+      void handleStripeCardPay();
+      return;
+    }
+
+    const stripePk = getStripePublishableKey();
+    if (!stripePk) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t(
+          'checkout.stripeKeyMissing',
+          'Add your Stripe publishable key: set EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY or extra.stripePublishableKey in app config.'
+        )
+      );
+      return;
+    }
+
+    if ((mode === 'renew' || mode === 'upgrade') && membershipId == null) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t('memberships.missingSubscriptionId', {
+          defaultValue: 'Missing membership id. Go back and try again.',
+        })
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data: pi, message: piMessage, notImplemented } = await requestIntent('google_pay');
+
+      if (notImplemented || !pi?.client_secret) {
+        Alert.alert(
+          t('common.error', 'Error'),
+          piMessage ||
+            t('memberships.paymentFailed', {
+              defaultValue: 'Could not start membership payment.',
+            }),
+          [{ text: t('common.ok', 'OK') }]
+        );
+        return;
+      }
+
+      const isStripeTestMode = /pk_test_/i.test(String(stripePk));
+      const { error: googlePayError } = await confirmPlatformPayPayment(pi.client_secret, {
+        googlePay: {
+          testEnv: isStripeTestMode,
+          merchantName: 'Tandil',
+          merchantCountryCode: 'AE',
+          currencyCode: currency,
+          billingAddressConfig: {
+            format: PlatformPay.BillingAddressFormat.Min,
+            isRequired: false,
+          },
+        },
+      });
+
+      if (googlePayError) {
+        if (googlePayError.code === 'Canceled') return;
+        Alert.alert(
+          t('common.error', 'Error'),
+          googlePayError.message || t('checkout.paymentFailed', 'Payment failed. Please try again.')
+        );
+        return;
+      }
+
+      await finalizeAfterStripe(pi.client_secret, pi.payment_intent_id);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : t('memberships.paymentFailed', {
+              defaultValue: 'Could not start membership payment.',
+            });
+      Alert.alert(t('common.error', 'Error'), message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePay = () => {
     if (!(amount > 0)) {
       Alert.alert(
@@ -397,6 +486,8 @@ const MembershipCheckoutScreen: React.FC = () => {
     }
     if (selectedPaymentMethod === 'apple_pay' && showApplePay) {
       void handleApplePay();
+    } else if (selectedPaymentMethod === 'google_pay' && showGooglePay) {
+      void handleGooglePay();
     } else {
       void handleStripeCardPay();
     }
@@ -467,7 +558,7 @@ const MembershipCheckoutScreen: React.FC = () => {
           <Text style={styles.paymentMethodHint}>
             {t(
               'memberships.selectPaymentHint',
-              'Pay with Stripe or Apple Pay — same secure methods used for wallet top-up.'
+              'Pay with Stripe, Apple Pay, or Google Pay — same secure methods used for wallet top-up.'
             )}
           </Text>
 
@@ -493,6 +584,19 @@ const MembershipCheckoutScreen: React.FC = () => {
                   subtitle: t(
                     'memberships.applePaySubtitle',
                     'Fast and secure checkout with Apple Pay'
+                  ),
+                })
+              : null}
+            {showGooglePay
+              ? renderPaymentOption({
+                  id: 'google_pay',
+                  icon: 'logo-google',
+                  iconColor: '#4285F4',
+                  iconBg: '#E8F0FE',
+                  title: t('checkout.googlePayLabel', 'Google Pay'),
+                  subtitle: t(
+                    'memberships.googlePaySubtitle',
+                    'Fast and secure checkout with Google Pay'
                   ),
                 })
               : null}
@@ -527,7 +631,14 @@ const MembershipCheckoutScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View
+        style={[
+          styles.footer,
+          Platform.OS === 'android' && {
+            paddingBottom: Math.max(insets.bottom, SPACING.md) + SPACING.sm,
+          },
+        ]}
+      >
         {loading ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={COLORS.primary} />
@@ -543,10 +654,15 @@ const MembershipCheckoutScreen: React.FC = () => {
                     amount: amountLabel,
                     defaultValue: `Pay ${amountLabel} with Apple Pay`,
                   })
-                : t('wallet.topUp.payWithStripe', {
-                    amount: amountLabel,
-                    defaultValue: `Pay ${amountLabel} with Stripe`,
-                  })
+                : selectedPaymentMethod === 'google_pay' && showGooglePay
+                  ? t('wallet.topUp.payWithGooglePay', {
+                      amount: amountLabel,
+                      defaultValue: `Pay ${amountLabel} with Google Pay`,
+                    })
+                  : t('wallet.topUp.payWithStripe', {
+                      amount: amountLabel,
+                      defaultValue: `Pay ${amountLabel} with Stripe`,
+                    })
             }
             onPress={handlePay}
             size="large"
@@ -555,7 +671,9 @@ const MembershipCheckoutScreen: React.FC = () => {
                 name={
                   selectedPaymentMethod === 'apple_pay' && showApplePay
                     ? 'logo-apple'
-                    : 'lock-closed-outline'
+                    : selectedPaymentMethod === 'google_pay' && showGooglePay
+                      ? 'logo-google'
+                      : 'lock-closed-outline'
                 }
                 size={18}
                 color={COLORS.background}

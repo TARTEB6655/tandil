@@ -48,9 +48,16 @@ const generateEmployeeId = (role: string, userId: number): string => {
 function getNormalizedRole(user: AdminUser): string {
   const raw = (user.role || user.roles?.[0]?.name || '').toString().trim();
   const lower = raw.toLowerCase();
-  if (lower === 'area manager') return 'area_manager';
-  if (lower === 'hr manager' || lower === 'hr_manager') return 'hr';
-  const normalized = lower.replace(/\s+/g, '_');
+  if (lower === 'area manager' || lower === 'area-manager') return 'area_manager';
+  if (
+    lower === 'hr manager' ||
+    lower === 'hr_manager' ||
+    lower === 'hr-manager' ||
+    lower === 'hrmanager'
+  ) {
+    return 'hr';
+  }
+  const normalized = lower.replace(/\s+/g, '_').replace(/-/g, '_');
   return normalized || '';
 }
 
@@ -74,17 +81,61 @@ const UsersManagementScreen: React.FC = () => {
     clients?: number;
   } | null>(null);
 
-  // Fetch user statistics (global counts from API; clients from API or 0)
+  // Fetch user statistics (global counts from API; managers aligned with list filter)
   const fetchUserStatistics = useCallback(async () => {
     try {
       const response = await adminService.getUsersStatistics();
-      if (response.success && response.data) {
-        const data = response.data as { all_users: number; workers: number; supervisors: number; managers: number; clients?: number };
-        setUserStats({
-          ...data,
-          clients: data.clients ?? 0,
-        });
+      if (!(response.success && response.data)) return;
+
+      const data = response.data as {
+        all_users: number;
+        workers: number;
+        supervisors: number;
+        managers: number;
+        clients?: number;
+        hr?: number;
+        hr_managers?: number;
+        area_managers?: number;
+        area_manager?: number;
+      };
+
+      let managersCount =
+        Number(data.managers ?? 0) +
+        Number(data.hr ?? data.hr_managers ?? 0) +
+        Number(data.area_managers ?? data.area_manager ?? 0);
+
+      // Backend "managers" often counts only one role; list shows HR + Area Manager.
+      // Recount from users so the badge matches the Managers tab.
+      try {
+        const usersRes = await adminService.getUsers({ per_page: 200, page: 1 });
+        let allUsers: AdminUser[] = [];
+        if (usersRes?.data) {
+          if (Array.isArray(usersRes.data)) {
+            allUsers = usersRes.data;
+          } else if (
+            typeof usersRes.data === 'object' &&
+            Array.isArray((usersRes.data as { data?: AdminUser[] }).data)
+          ) {
+            allUsers = (usersRes.data as { data: AdminUser[] }).data;
+          }
+        }
+        if (allUsers.length > 0) {
+          managersCount = allUsers.filter((u) => {
+            const r = getNormalizedRole(u);
+            return r === 'area_manager' || r === 'hr' || r === 'manager';
+          }).length;
+        }
+      } catch {
+        // keep API-derived managersCount
       }
+
+      setUserStats({
+        all_users: data.all_users,
+        workers: data.workers,
+        supervisors: data.supervisors,
+        managers: managersCount,
+        clients: data.clients ?? 0,
+      });
     } catch (err: any) {
       console.error('Error fetching user statistics:', err);
     }

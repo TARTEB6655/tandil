@@ -517,7 +517,12 @@ const AdminPendingReportsScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={styles.container}
+      // Tab screen already sits above the bottom tab bar — extra bottom inset
+      // creates a large empty gap on Android. Stack pushes still need bottom inset.
+      edges={showBackButton ? ['top', 'bottom'] : ['top']}
+    >
       {/* Header */}
       <View style={styles.header}>
         {showBackButton ? (
@@ -1204,6 +1209,8 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: SPACING.lg,
+    paddingBottom: SPACING.xxl,
+    flexGrow: 1,
   },
   reportCard: {
     backgroundColor: COLORS.surface,

@@ -9,10 +9,12 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { useAppStore } from '../../store';
@@ -28,6 +30,7 @@ const LANGUAGES = [
 const AdminSettingsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t, i18n } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { logout, setLanguage } = useAppStore();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
@@ -136,6 +139,13 @@ const AdminSettingsScreen: React.FC = () => {
     {
       titleKey: 'admin.settings.vendorSupportSection',
       items: [
+        {
+          icon: 'headset',
+          titleKey: 'admin.settings.supportTickets.title',
+          subtitleKey: 'admin.settings.supportTickets.subtitle',
+          type: 'navigation',
+          onPress: () => navigation.navigate('AdminSupportTickets'),
+        },
         {
           icon: 'chatbubbles',
           titleKey: 'admin.settings.vendorLiveChat.title',
@@ -266,11 +276,21 @@ const AdminSettingsScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          Platform.OS === 'android' && {
+            paddingTop: Math.max(insets.top, 12) + SPACING.md,
+          },
+        ]}
+      >
         <Text style={styles.headerTitle}>{t('admin.settings.title')}</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Admin Info Card – from GET /admin/dashboard/profile */}
         <View style={styles.adminCard}>
           {profilePictureUrl ? (
@@ -417,6 +437,10 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xl,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
+  },
+  scrollContent: {
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xxl + SPACING.lg,
   },
   adminCard: {
     flexDirection: 'row',

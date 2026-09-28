@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useStripe, PlatformPay } from '@stripe/stripe-react-native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
@@ -23,9 +24,10 @@ import {
   createWalletTopUpPaymentIntent,
   confirmWalletTopUpAfterStripe,
   extractWalletTopUpPaymentIntentId,
+  type WalletTopUpPaymentMethod,
 } from '../../services/walletTopUpService';
 
-type PaymentMethodId = 'stripe' | 'apple_pay';
+type PaymentMethodId = 'stripe' | 'apple_pay' | 'google_pay';
 
 type RouteParams = {
   amount: number;
@@ -36,6 +38,7 @@ const WalletTopUpPaymentScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const insets = useSafeAreaInsets();
   const params = (route.params ?? {}) as RouteParams;
   const amount = Number(params.amount) || 0;
   const currency = String(params.currency || 'AED').toUpperCase();
@@ -45,6 +48,7 @@ const WalletTopUpPaymentScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const showApplePay = Platform.OS === 'ios' && isApplePayEnabled() && amount > 0;
+  const showGooglePay = Platform.OS === 'android' && amount > 0;
   const amountLabel = useMemo(
     () => `${currency} ${amount.toFixed(2)}`,
     [currency, amount]
@@ -136,11 +140,15 @@ const WalletTopUpPaymentScreen: React.FC = () => {
     showTopUpSuccess();
   };
 
-  const requestTopUpIntent = async (method: PaymentMethodId) =>
-    createWalletTopUpPaymentIntent({
+  const requestTopUpIntent = async (method: PaymentMethodId) => {
+    // Backend currently accepts stripe | apple_pay. Google Pay uses the same Stripe PaymentIntent.
+    const apiMethod: WalletTopUpPaymentMethod =
+      method === 'apple_pay' ? 'apple_pay' : 'stripe';
+    return createWalletTopUpPaymentIntent({
       amount: Math.round(amount * 100) / 100,
-      payment_method: method,
+      payment_method: apiMethod,
     });
+  };
 
   const handleStripeCardPay = async () => {
     if (Platform.OS === 'web') {
@@ -332,6 +340,80 @@ const WalletTopUpPaymentScreen: React.FC = () => {
     }
   };
 
+  const handleGooglePay = async () => {
+    if (!showGooglePay) {
+      handleStripeCardPay();
+      return;
+    }
+
+    const stripePk = getStripePublishableKey();
+    if (!stripePk) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t(
+          'checkout.stripeKeyMissing',
+          'Add your Stripe publishable key: set EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY or extra.stripePublishableKey in app config.'
+        )
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data: pi, message: piMessage, notImplemented } = await requestTopUpIntent('google_pay');
+
+      if (notImplemented || !pi?.client_secret) {
+        Alert.alert(
+          t('wallet.topUp.apiPendingTitle', 'Payment UI ready'),
+          notImplemented
+            ? t(
+                'wallet.topUp.apiPendingBody',
+                'Stripe and Apple Pay are ready on this screen. Connect backend endpoints POST /client/wallet/add-money/payment-intent and POST /client/wallet/add-money/confirm to complete live top-ups. Shop checkout payments are unchanged.'
+              )
+            : piMessage ||
+                t(
+                  'wallet.topUp.paymentIntentFailed',
+                  'Could not start wallet top-up. Please try again or contact support.'
+                ),
+          [{ text: t('common.ok', 'OK') }]
+        );
+        return;
+      }
+
+      const isStripeTestMode = /pk_test_/i.test(String(stripePk));
+      const { error: googlePayError } = await confirmPlatformPayPayment(pi.client_secret, {
+        googlePay: {
+          testEnv: isStripeTestMode,
+          merchantName: 'Tandil',
+          merchantCountryCode: 'AE',
+          currencyCode: currency,
+          billingAddressConfig: {
+            format: PlatformPay.BillingAddressFormat.Min,
+            isRequired: false,
+          },
+        },
+      });
+
+      if (googlePayError) {
+        if (googlePayError.code === 'Canceled') return;
+        Alert.alert(
+          t('common.error', 'Error'),
+          googlePayError.message || t('checkout.paymentFailed', 'Payment failed. Please try again.')
+        );
+        return;
+      }
+
+      await finalizeAfterStripe(pi.client_secret, pi.payment_intent_id);
+    } catch (err: any) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        err?.message || t('wallet.topUp.paymentFailed', 'Wallet top-up failed. Please try again.')
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePay = () => {
     if (!(amount > 0)) {
       Alert.alert(
@@ -342,6 +424,8 @@ const WalletTopUpPaymentScreen: React.FC = () => {
     }
     if (selectedPaymentMethod === 'apple_pay' && showApplePay) {
       handleApplePay();
+    } else if (selectedPaymentMethod === 'google_pay' && showGooglePay) {
+      handleGooglePay();
     } else {
       handleStripeCardPay();
     }
@@ -412,7 +496,7 @@ const WalletTopUpPaymentScreen: React.FC = () => {
           <Text style={styles.paymentMethodHint}>
             {t(
               'wallet.topUp.selectPaymentHint',
-              'Pay with Stripe or Apple Pay — same secure methods used for shop and services.'
+              'Pay with Stripe, Apple Pay, or Google Pay — same secure methods used for shop and services.'
             )}
           </Text>
 
@@ -438,6 +522,19 @@ const WalletTopUpPaymentScreen: React.FC = () => {
                   subtitle: t(
                     'wallet.topUp.applePaySubtitle',
                     'Fast and secure top-up with Apple Pay'
+                  ),
+                })
+              : null}
+            {showGooglePay
+              ? renderPaymentOption({
+                  id: 'google_pay',
+                  icon: 'logo-google',
+                  iconColor: '#4285F4',
+                  iconBg: '#E8F0FE',
+                  title: t('checkout.googlePayLabel', 'Google Pay'),
+                  subtitle: t(
+                    'wallet.topUp.googlePaySubtitle',
+                    'Fast and secure top-up with Google Pay'
                   ),
                 })
               : null}
@@ -473,7 +570,14 @@ const WalletTopUpPaymentScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View
+        style={[
+          styles.footer,
+          Platform.OS === 'android' && {
+            paddingBottom: Math.max(insets.bottom, SPACING.md) + SPACING.sm,
+          },
+        ]}
+      >
         {loading ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={COLORS.primary} />
@@ -489,10 +593,15 @@ const WalletTopUpPaymentScreen: React.FC = () => {
                     amount: amountLabel,
                     defaultValue: `Pay ${amountLabel} with Apple Pay`,
                   })
-                : t('wallet.topUp.payWithStripe', {
-                    amount: amountLabel,
-                    defaultValue: `Pay ${amountLabel} with Stripe`,
-                  })
+                : selectedPaymentMethod === 'google_pay' && showGooglePay
+                  ? t('wallet.topUp.payWithGooglePay', {
+                      amount: amountLabel,
+                      defaultValue: `Pay ${amountLabel} with Google Pay`,
+                    })
+                  : t('wallet.topUp.payWithStripe', {
+                      amount: amountLabel,
+                      defaultValue: `Pay ${amountLabel} with Stripe`,
+                    })
             }
             onPress={handlePay}
             size="large"
@@ -501,7 +610,9 @@ const WalletTopUpPaymentScreen: React.FC = () => {
                 name={
                   selectedPaymentMethod === 'apple_pay' && showApplePay
                     ? 'logo-apple'
-                    : 'lock-closed-outline'
+                    : selectedPaymentMethod === 'google_pay' && showGooglePay
+                      ? 'logo-google'
+                      : 'lock-closed-outline'
                 }
                 size={18}
                 color={COLORS.background}

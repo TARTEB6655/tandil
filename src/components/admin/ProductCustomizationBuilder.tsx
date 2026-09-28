@@ -7,7 +7,11 @@ import { useTranslation } from 'react-i18next';
 import { Input } from '../common/Input';
 import { BORDER_RADIUS, COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING } from '../../constants';
 import type { ProductCustomizationConfig, ProductOptionGroup } from '../../types/productCustomization';
-import { compressImageForUpload } from '../../utils/compressImage';
+import {
+  catalogImagePickerOptions,
+  compressCatalogImageForUpload,
+  ImageTooLargeError,
+} from '../../utils/compressImage';
 
 type Props = {
   value: ProductCustomizationConfig;
@@ -100,15 +104,28 @@ export const ProductCustomizationBuilder: React.FC<Props> = ({ value, onChange }
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        quality: 0.8,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
       if (result.canceled || !result.assets?.[0]?.uri) return;
 
-      const compressedUri = await compressImageForUpload(result.assets[0].uri);
-      updateOption(groupId, optionId, { imageUrl: compressedUri });
+      try {
+        const compressedUri = await compressCatalogImageForUpload(
+          result.assets[0].uri,
+          result.assets[0].fileSize
+        );
+        updateOption(groupId, optionId, { imageUrl: compressedUri });
+      } catch (sizeErr: any) {
+        if (sizeErr?.name === 'ImageTooLargeError' || sizeErr instanceof ImageTooLargeError) {
+          Alert.alert(
+            t('common.error', { defaultValue: 'Error' }),
+            sizeErr.message ||
+              t('common.imageMaxSize', {
+                defaultValue: 'You can upload an image of up to 5 MB only. Please choose a smaller file.',
+              })
+          );
+          return;
+        }
+        throw sizeErr;
+      }
     } catch {
       Alert.alert(
         t('common.error', { defaultValue: 'Error' }),

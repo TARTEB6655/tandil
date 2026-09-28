@@ -15,6 +15,7 @@ import MapView, { Marker, Region } from 'react-native-maps';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { adminService, AdminOperationalAreaItem, AdminOperationalAreaSupervisor, AdminOperationalAreasSummary } from '../../services/adminService';
 import { useTranslation } from 'react-i18next';
+import { canShowNativeMap } from '../../utils/mapsAvailability';
 
 const UAE_REGION: Region = {
   latitude: 24.35,
@@ -291,6 +292,17 @@ const AdminOperationalAreasScreen: React.FC = () => {
               <ActivityIndicator size="small" color={COLORS.primary} />
               <Text style={styles.mapLoadingText}>
                 {t('admin.operationalAreas.updatingMap', { defaultValue: 'Updating map...' })}
+              </Text>
+            </View>
+          ) : !canShowNativeMap() ? (
+            // Android without Google Maps API key: mounting MapView kills the process.
+            <View style={[styles.mapView, styles.mapLoadingOverlay]}>
+              <Ionicons name="map-outline" size={28} color={COLORS.textSecondary} />
+              <Text style={styles.mapLoadingText}>
+                {t('admin.operationalAreas.mapUnavailable', {
+                  defaultValue:
+                    'Map preview needs a Google Maps API key on Android. Zone list below still works.',
+                })}
               </Text>
             </View>
           ) : (

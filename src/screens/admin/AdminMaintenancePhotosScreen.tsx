@@ -27,7 +27,11 @@ import {
   AdminMaintenancePhoto,
   isMaintenancePhotoActive,
 } from '../../services/adminService';
-import { compressImageForUpload } from '../../utils/compressImage';
+import {
+  catalogImagePickerOptions,
+  compressCatalogImageForUpload,
+  isImageTooLargeError,
+} from '../../utils/compressImage';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -126,29 +130,47 @@ const AdminMaintenancePhotosScreen: React.FC = () => {
           return;
         }
 
-        const res = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          allowsEditing: true,
-          aspect: [4, 5],
-          quality: 0.85,
-        });
+        const res = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
         if (!res.canceled && res.assets?.[0]?.uri) {
-          const originalUri = res.assets[0].uri;
+          const asset = res.assets[0];
           setCompressingKind(kind);
           try {
-            const compressedUri = await compressImageForUpload(originalUri);
+            const compressedUri = await compressCatalogImageForUpload(asset.uri, asset.fileSize);
             if (kind === 'before') setFormBeforeUri(compressedUri);
             else setFormAfterUri(compressedUri);
-          } catch {
-            if (kind === 'before') setFormBeforeUri(originalUri);
-            else setFormAfterUri(originalUri);
+          } catch (sizeErr: unknown) {
+            if (isImageTooLargeError(sizeErr)) {
+              Alert.alert(
+                t('admin.users.error'),
+                sizeErr.message ||
+                  t('admin.maintenancePhotos.imageMaxSize', {
+                    defaultValue:
+                      'You can upload an image of up to 5 MB only. Please choose a smaller file.',
+                  })
+              );
+              return;
+            }
+            // Compression failed for another reason — keep original only if under limit.
+            if (kind === 'before') setFormBeforeUri(asset.uri);
+            else setFormAfterUri(asset.uri);
           } finally {
             setCompressingKind(null);
           }
         }
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        Alert.alert(t('admin.users.error'), msg || t('admin.maintenancePhotos.errorPickImage'));
+        if (isImageTooLargeError(e)) {
+          Alert.alert(
+            t('admin.users.error'),
+            e.message ||
+              t('admin.maintenancePhotos.imageMaxSize', {
+                defaultValue:
+                  'You can upload an image of up to 5 MB only. Please choose a smaller file.',
+              })
+          );
+        } else {
+          const msg = e instanceof Error ? e.message : String(e);
+          Alert.alert(t('admin.users.error'), msg || t('admin.maintenancePhotos.errorPickImage'));
+        }
         setCompressingKind(null);
       }
     },
@@ -292,6 +314,11 @@ const AdminMaintenancePhotosScreen: React.FC = () => {
                 </View>
                 <Text style={styles.uploadEmptyTitle}>{label}</Text>
                 <Text style={styles.uploadEmptyHint}>{t('admin.maintenancePhotos.tapToUpload')}</Text>
+                <Text style={styles.uploadSizeHint}>
+                  {t('admin.maintenancePhotos.imageMaxSizeHint', {
+                    defaultValue: 'Max file size: 5 MB',
+                  })}
+                </Text>
               </>
             )}
           </View>
@@ -887,6 +914,13 @@ const styles = StyleSheet.create({
   uploadIconCircleBefore: { backgroundColor: '#EDE4D3' },
   uploadEmptyTitle: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.semiBold, color: COLORS.text },
   uploadEmptyHint: { fontSize: 11, color: COLORS.textSecondary, marginTop: 4, textAlign: 'center' },
+  uploadSizeHint: {
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+    marginTop: 6,
+    textAlign: 'center',
+  },
   kindBadge: {
     position: 'absolute',
     bottom: 8,

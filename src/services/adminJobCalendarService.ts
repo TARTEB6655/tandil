@@ -57,20 +57,25 @@ function normalizeStatus(raw: unknown): ScheduledJobStatus {
   const s = String(raw ?? 'pending')
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, '_');
+    .replace(/[\s-]+/g, '_');
   const allowed: ScheduledJobStatus[] = [
     'pending',
     'confirmed',
     'in_progress',
     'completed',
+    'delivered',
     'cancelled',
     'rescheduled',
     'rejected',
   ];
-  // Common aliases from backend
+  // Common aliases from backend / shop orders
   if (s === 'reject' || s === 'declined') return 'rejected';
   if (s === 'cancel' || s === 'canceled') return 'cancelled';
   if (s === 'inprogress' || s === 'progress') return 'in_progress';
+  if (s === 'complete' || s === 'done' || s === 'fulfilled') return 'completed';
+  if (s === 'deliver' || s === 'delivery_completed') return 'delivered';
+  if (s === 'shipped' || s === 'out_for_delivery') return 'in_progress';
+  if (s === 'processing' || s === 'accepted' || s === 'assigned') return 'confirmed';
   return (allowed.includes(s as ScheduledJobStatus) ? s : 'pending') as ScheduledJobStatus;
 }
 
@@ -211,6 +216,7 @@ export function mapApiCalendarJobToScheduledJob(row: Record<string, unknown>): S
 
   const startTime = normalizeHHmm(
     row.start_time ??
+      row.scheduled_time ??
       row.startTime ??
       row.start ??
       row.time_from ??
@@ -220,7 +226,13 @@ export function mapApiCalendarJobToScheduledJob(row: Record<string, unknown>): S
     '09:00'
   );
   const endTime = normalizeHHmm(
-    row.end_time ?? row.endTime ?? row.end ?? row.time_to ?? row.to_time ?? row.slot_end,
+    row.end_time ??
+      row.scheduled_end_time ??
+      row.endTime ??
+      row.end ??
+      row.time_to ??
+      row.to_time ??
+      row.slot_end,
     startTime
   );
 
@@ -250,7 +262,13 @@ export function mapApiCalendarJobToScheduledJob(row: Record<string, unknown>): S
     'Customer';
 
   const technicianName =
-    pickName(row, ['technician_name', 'technicianName', 'tech_name', 'assigned_to']) ||
+    pickName(row, [
+      'technician_name',
+      'technicianName',
+      'tech_name',
+      'assigned_to',
+      'supervisor_name',
+    ]) ||
     pickName(technicianObj, ['name', 'full_name', 'fullName']) ||
     null;
 
@@ -264,9 +282,25 @@ export function mapApiCalendarJobToScheduledJob(row: Record<string, unknown>): S
     row.has_overlap ??
     row.overlap;
 
+  const qty = Number(row.quantity);
+  const titleBase = serviceName;
+  const serviceWithQty =
+    Number.isFinite(qty) && qty > 1 ? `${titleBase} × ${qty}` : titleBase;
+
+  const statusRaw =
+    row.status ??
+    row.order_status ??
+    row.booking_status ??
+    row.job_status ??
+    row.vendor_order_status;
+  const status = normalizeStatus(statusRaw);
+  const statusLabel =
+    pickName(row, ['status_label', 'order_status_label', 'vendor_order_status_label']) ||
+    undefined;
+
   return {
     id: String(idRaw),
-    serviceName,
+    serviceName: serviceWithQty,
     customerName,
     customerPhone:
       pickName(row, ['customer_phone', 'phone', 'client_phone']) ||
@@ -277,7 +311,10 @@ export function mapApiCalendarJobToScheduledJob(row: Record<string, unknown>): S
     date,
     startTime,
     endTime,
-    status: normalizeStatus(row.status ?? row.booking_status ?? row.job_status),
+    status,
+    statusLabel,
+    orderNumber: pickName(row, ['order_number', 'orderNumber', 'order_no']) || undefined,
+    jobSource: pickName(row, ['job_source', 'fulfillment_type', 'source']) || undefined,
     address: pickName(row, ['address', 'location', 'service_address']) || undefined,
     notes: pickName(row, ['notes', 'internal_notes', 'remark', 'remarks']) || undefined,
     overlapsTechnician:
@@ -296,8 +333,22 @@ export function markTechnicianOverlaps(jobs: ScheduledJob[]): ScheduledJob[] {
     const overlaps = jobs.some((other) => {
       if (other.id === job.id) return false;
       if (other.date !== job.date) return false;
-      if (other.status === 'cancelled' || other.status === 'rejected') return false;
-      if (job.status === 'cancelled' || job.status === 'rejected') return false;
+      if (
+        other.status === 'cancelled' ||
+        other.status === 'rejected' ||
+        other.status === 'completed' ||
+        other.status === 'delivered'
+      ) {
+        return false;
+      }
+      if (
+        job.status === 'cancelled' ||
+        job.status === 'rejected' ||
+        job.status === 'completed' ||
+        job.status === 'delivered'
+      ) {
+        return false;
+      }
       const sameTech =
         (job.technicianId && other.technicianId && job.technicianId === other.technicianId) ||
         (!!job.technicianName &&

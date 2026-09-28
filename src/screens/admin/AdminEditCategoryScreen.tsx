@@ -21,7 +21,11 @@ import { buildFullImageUrl } from '../../config/api';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { adminService, AdminCategory } from '../../services/adminService';
-import { compressImageForUpload } from '../../utils/compressImage';
+import {
+  catalogImagePickerOptions,
+  compressCatalogImageForUpload,
+  ImageTooLargeError,
+} from '../../utils/compressImage';
 import { getCategoryShippingCost, getCategoryTaxPercentage } from '../../utils/categoryPricing';
 
 type AdminEditCategoryParams = { category: AdminCategory };
@@ -82,14 +86,27 @@ const AdminEditCategoryScreen: React.FC = () => {
         );
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: false,
-        quality: 0.8,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
       if (!result.canceled && result.assets?.[0]) {
-        const uri = await compressImageForUpload(result.assets[0].uri);
-        setImage({ uri });
+        try {
+          const uri = await compressCatalogImageForUpload(
+            result.assets[0].uri,
+            result.assets[0].fileSize
+          );
+          setImage({ uri });
+        } catch (sizeErr: any) {
+          if (sizeErr?.name === 'ImageTooLargeError' || sizeErr instanceof ImageTooLargeError) {
+            Alert.alert(
+              t('common.error', { defaultValue: 'Error' }),
+              sizeErr.message ||
+                t('common.imageMaxSize', {
+                  defaultValue: 'You can upload an image of up to 5 MB only. Please choose a smaller file.',
+                })
+            );
+            return;
+          }
+          throw sizeErr;
+        }
       }
     } catch (err: any) {
       Alert.alert(

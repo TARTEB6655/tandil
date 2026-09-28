@@ -106,6 +106,7 @@ const AdminSchedulingCalendarScreen: React.FC = () => {
       case 'rejected':
         return COLORS.error;
       case 'completed':
+      case 'delivered':
         return COLORS.success;
       case 'in_progress':
         return COLORS.info;
@@ -212,7 +213,7 @@ const AdminSchedulingCalendarScreen: React.FC = () => {
                       ]}
                     >
                       <Text style={[styles.statusText, { color: statusColor(job.status) }]}>
-                        {statusLabel(job.status)}
+                        {job.statusLabel || statusLabel(job.status)}
                       </Text>
                     </View>
                   </View>
@@ -220,6 +221,7 @@ const AdminSchedulingCalendarScreen: React.FC = () => {
                   <Text style={styles.jobMeta}>
                     {job.customerName}
                     {job.technicianName ? ` · ${job.technicianName}` : ''}
+                    {job.orderNumber ? ` · ${job.orderNumber}` : ''}
                   </Text>
                   {job.overlapsTechnician ? (
                     <View style={styles.overlapRow}>

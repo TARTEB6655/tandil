@@ -17,6 +17,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { adminService, AdminDashboardProfile } from '../../services/adminService';
 import Header from '../../components/common/Header';
+import {
+  catalogImagePickerOptions,
+  compressProfileImageForUpload,
+  isImageTooLargeError,
+} from '../../utils/compressImage';
 
 const AdminProfileEditScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -57,18 +62,32 @@ const AdminProfileEditScreen: React.FC = () => {
         );
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
       if (!result.canceled && result.assets?.[0]) {
-        setProfilePicture({
-          uri: result.assets[0].uri,
-          type: 'image/jpeg',
-          name: 'profile.jpg',
-        });
+        try {
+          const uri = await compressProfileImageForUpload(
+            result.assets[0].uri,
+            result.assets[0].fileSize
+          );
+          setProfilePicture({
+            uri,
+            type: 'image/jpeg',
+            name: 'profile.jpg',
+          });
+        } catch (sizeErr: unknown) {
+          if (isImageTooLargeError(sizeErr)) {
+            Alert.alert(
+              t('common.error'),
+              sizeErr.message ||
+                t('common.imageMaxSize', {
+                  defaultValue:
+                    'You can upload an image of up to 5 MB only. Please choose a smaller file.',
+                })
+            );
+            return;
+          }
+          throw sizeErr;
+        }
       }
     } catch (err: any) {
       Alert.alert(t('common.error'), err?.message ?? t('admin.settings.profileSetting.openPhotosFailed'));

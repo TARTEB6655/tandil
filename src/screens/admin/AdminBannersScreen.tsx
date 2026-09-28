@@ -14,7 +14,7 @@ import {
   Switch,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -27,6 +27,8 @@ import { compressImageForUpload } from '../../utils/compressImage';
 const AdminBannersScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const fabBottom = Math.max(insets.bottom, 12) + SPACING.lg;
   const [banners, setBanners] = useState<AdminBanner[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -295,7 +297,7 @@ const AdminBannersScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
@@ -337,7 +339,7 @@ const AdminBannersScreen: React.FC = () => {
       )}
 
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: fabBottom }]}
         onPress={() => {
           resetCreateForm();
           setCreateVisible(true);
@@ -489,7 +491,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
   },
-  listContent: { padding: SPACING.lg, paddingBottom: SPACING.xl * 2 },
+  listContent: { padding: SPACING.lg, paddingBottom: SPACING.xl * 3 },
   centerWrap: {
     flex: 1,
     justifyContent: 'center',
@@ -554,9 +556,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: SPACING.lg,
     bottom: SPACING.lg,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.primary,
@@ -564,7 +566,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
-    elevation: 4,
+    elevation: 6,
+    zIndex: 10,
   },
   modalOverlay: {
     flex: 1,

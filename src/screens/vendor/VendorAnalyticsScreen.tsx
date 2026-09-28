@@ -10,8 +10,9 @@ import {
   Alert,
   Share,
   RefreshControl,
+  Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -83,6 +84,7 @@ function SimpleBarChart({
 const VendorAnalyticsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   const [selectedPeriod, setSelectedPeriod] = useState('month');
   const [loading, setLoading] = useState(true);
@@ -317,6 +319,10 @@ const VendorAnalyticsScreen: React.FC = () => {
         <ScrollView
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}
+          contentContainerStyle={{
+            paddingBottom:
+              SPACING.xl + (Platform.OS === 'android' ? Math.max(insets.bottom, 16) : insets.bottom),
+          }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -909,9 +915,8 @@ const styles = StyleSheet.create({
   },
   actionsSection: {
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
+    paddingTop: SPACING.lg,
     gap: SPACING.sm,
-    paddingBottom: SPACING.xl,
   },
   exportButton: {
     flexDirection: 'row',

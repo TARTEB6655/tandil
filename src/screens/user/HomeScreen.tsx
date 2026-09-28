@@ -751,7 +751,12 @@ const HomeScreen: React.FC = () => {
   const featuredBadges = [t('home.badges.popular'), t('home.badges.new'), t('home.badges.bestValue')];
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView
+      style={styles.container}
+      // Android tab bar already handles bottom inset — extra bottom safe area
+      // leaves a blank gap above the menu. iOS keeps bottom edge as before.
+      edges={Platform.OS === 'android' ? [] : ['bottom']}
+    >
       <Header 
         title={t('home.title')}
         showBack={false}

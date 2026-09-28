@@ -1,4 +1,5 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createStackNavigator } from '@react-navigation/stack';
 import { DeliveryStackParamList } from '../types';
@@ -18,7 +19,11 @@ const Stack = createStackNavigator<DeliveryStackParamList>();
 
 const DeliveryAppNavigator = () => {
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={{ flex: 1 }}
+      // Android: avoid outer bottom inset gap above system nav (match client/tab bar).
+      edges={Platform.OS === 'android' ? ['top'] : ['top', 'bottom']}
+    >
       <Stack.Navigator
         screenOptions={{
           headerShown: false,

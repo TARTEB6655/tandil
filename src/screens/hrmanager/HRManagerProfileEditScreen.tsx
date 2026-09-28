@@ -16,6 +16,11 @@ import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { hrService, HRProfileData } from '../../services/hrService';
+import {
+  catalogImagePickerOptions,
+  compressProfileImageForUpload,
+  isImageTooLargeError,
+} from '../../utils/compressImage';
 
 const HRManagerProfileEditScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -68,18 +73,32 @@ const HRManagerProfileEditScreen: React.FC = () => {
         );
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
       if (!result.canceled && result.assets?.[0]) {
-        setProfilePicture({
-          uri: result.assets[0].uri,
-          type: 'image/jpeg',
-          name: 'profile.jpg',
-        });
+        try {
+          const uri = await compressProfileImageForUpload(
+            result.assets[0].uri,
+            result.assets[0].fileSize
+          );
+          setProfilePicture({
+            uri,
+            type: 'image/jpeg',
+            name: 'profile.jpg',
+          });
+        } catch (sizeErr: unknown) {
+          if (isImageTooLargeError(sizeErr)) {
+            Alert.alert(
+              t('technician.error', 'Error'),
+              sizeErr.message ||
+                t('common.imageMaxSize', {
+                  defaultValue:
+                    'You can upload an image of up to 5 MB only. Please choose a smaller file.',
+                })
+            );
+            return;
+          }
+          throw sizeErr;
+        }
       }
     } catch (err: any) {
       Alert.alert(

@@ -24,7 +24,12 @@ import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { adminService, AdminProduct, AdminCategory, AdminService } from '../../services/adminService';
 import { setPendingProductImage } from './pendingProductImage';
-import { compressImageForUpload, compressImagesForUpload } from '../../utils/compressImage';
+import {
+  catalogImagePickerOptions,
+  compressCatalogImageForUpload,
+  compressCatalogImagesForUpload,
+  ImageTooLargeError,
+} from '../../utils/compressImage';
 import ProductCustomizationBuilder from '../../components/admin/ProductCustomizationBuilder';
 import type { ProductCustomizationConfig } from '../../types/productCustomization';
 import {
@@ -246,14 +251,27 @@ const AdminEditProductScreen: React.FC = () => {
         Alert.alert(t('admin.editProduct.notAvailable'), t('admin.editProduct.notAvailableMessage'), [{ text: 'OK' }]);
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: false,
-        quality: 0.8,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
       if (!result.canceled && result.assets?.[0]) {
-        const uri = await compressImageForUpload(result.assets[0].uri);
-        setMainImage({ uri });
+        try {
+          const uri = await compressCatalogImageForUpload(
+            result.assets[0].uri,
+            result.assets[0].fileSize
+          );
+          setMainImage({ uri });
+        } catch (sizeErr: any) {
+          if (sizeErr?.name === 'ImageTooLargeError' || sizeErr instanceof ImageTooLargeError) {
+            Alert.alert(
+              t('common.error', { defaultValue: 'Error' }),
+              sizeErr.message ||
+                t('common.imageMaxSize', {
+                  defaultValue: 'You can upload an image of up to 5 MB only. Please choose a smaller file.',
+                })
+            );
+            return;
+          }
+          throw sizeErr;
+        }
       }
     } catch (err: any) {
       Alert.alert(t('admin.editProduct.unableToOpenPhotos'), err?.message ?? t('admin.editProduct.unableToOpenPhotos'), [{ text: 'OK' }]);
@@ -275,14 +293,28 @@ const AdminEditProductScreen: React.FC = () => {
         Alert.alert(t('admin.editProduct.notAvailable'), t('admin.editProduct.notAvailableMessage'), [{ text: 'OK' }]);
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true,
-        quality: 0.8,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(
+        catalogImagePickerOptions({ allowsMultipleSelection: true })
+      );
       if (!result.canceled && result.assets?.length) {
-        const uris = await compressImagesForUpload(result.assets!.map((a) => a.uri));
-        setExtraImages((prev) => [...prev, ...uris.map((uri) => ({ uri }))]);
+        try {
+          const uris = await compressCatalogImagesForUpload(
+            result.assets.map((a) => ({ uri: a.uri, fileSize: a.fileSize }))
+          );
+          setExtraImages((prev) => [...prev, ...uris.map((uri) => ({ uri }))]);
+        } catch (sizeErr: any) {
+          if (sizeErr?.name === 'ImageTooLargeError' || sizeErr instanceof ImageTooLargeError) {
+            Alert.alert(
+              t('common.error', { defaultValue: 'Error' }),
+              sizeErr.message ||
+                t('common.imageMaxSize', {
+                  defaultValue: 'You can upload an image of up to 5 MB only. Please choose a smaller file.',
+                })
+            );
+            return;
+          }
+          throw sizeErr;
+        }
       }
     } catch (err: any) {
       Alert.alert(t('admin.editProduct.unableToOpenPhotos'), err?.message ?? t('admin.editProduct.unableToOpenPhotos'), [{ text: 'OK' }]);
@@ -705,6 +737,13 @@ const AdminEditProductScreen: React.FC = () => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('admin.editProduct.mainImageTitle')}</Text>
             <Text style={styles.uploadedHint}>{t('admin.editProduct.mainImageHint')}</Text>
+            <Text style={styles.imageSizeLimit}>
+              {t('admin.editProduct.imageMaxSizeHint', {
+                defaultValue: t('admin.addProduct.imageMaxSizeHint', {
+                  defaultValue: 'Max file size: 5 MB',
+                }),
+              })}
+            </Text>
             {!mainImage && (
               <View style={styles.uploadedPreviewWrap}>
                 <Text style={styles.uploadedLabel}>{t('admin.editProduct.currentMainImage')}</Text>
@@ -753,6 +792,13 @@ const AdminEditProductScreen: React.FC = () => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('admin.editProduct.extraImagesTitle')}</Text>
             <Text style={styles.uploadedHint}>{t('admin.editProduct.extraImagesHint')}</Text>
+            <Text style={styles.imageSizeLimit}>
+              {t('admin.editProduct.imageMaxSizeHint', {
+                defaultValue: t('admin.addProduct.imageMaxSizeHint', {
+                  defaultValue: 'Max file size: 5 MB',
+                }),
+              })}
+            </Text>
             {extraImages.length === 0 && existingExtraItems.length > 0 && (
               <View style={styles.extraImagesCard}>
                 <Text style={styles.extraImagesCardTitle}>{t('admin.editProduct.currentGalleryImages')}</Text>
@@ -986,6 +1032,13 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
+    marginBottom: SPACING.xs,
+  },
+  imageSizeLimit: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+    marginBottom: SPACING.sm,
   },
   thumbScroll: { marginHorizontal: -SPACING.lg },
   extraImagesCard: {

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,8 @@ import {
 
 const SCREEN_BG = COLORS.surfaceLight;
 
+type LoadMode = 'initial' | 'refresh' | 'silent' | 'more';
+
 const AdminVendorManagementScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
@@ -36,18 +38,30 @@ const AdminVendorManagementScreen: React.FC = () => {
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  const searchRef = useRef(search);
+  searchRef.current = search;
+  const hasLoadedRef = useRef(false);
+  const loadInFlightRef = useRef(false);
+
   const load = useCallback(
-    async (pageNum = 1, isRefresh = false, query = search) => {
-      if (isRefresh) setRefreshing(true);
-      else if (pageNum === 1) setLoading(true);
-      else setLoadingMore(true);
+    async (pageNum: number = 1, mode: LoadMode = 'initial', query?: string) => {
+      // Avoid stacking duplicate focus/initial reloads while one request is in flight.
+      if (loadInFlightRef.current && (mode === 'silent' || mode === 'initial')) return;
+      loadInFlightRef.current = true;
+
+      if (mode === 'refresh') setRefreshing(true);
+      else if (mode === 'more') setLoadingMore(true);
+      else if (mode === 'initial') setLoading(true);
+      // silent: keep current list visible (used when returning from edit)
+
       setError(null);
+      const searchQuery = query !== undefined ? query : searchRef.current;
       try {
         const result = await adminVendorManagementService.getManagementPage({
           page: pageNum,
           per_page: 15,
           sort: 'newest',
-          search: query,
+          search: searchQuery,
         });
         if (pageNum === 1) {
           setVendors(result.vendors);
@@ -57,25 +71,32 @@ const AdminVendorManagementScreen: React.FC = () => {
         }
         setPage(result.pagination.current_page);
         setHasMore(result.pagination.current_page < result.pagination.last_page);
+        hasLoadedRef.current = true;
       } catch (err: unknown) {
         setError(
           err instanceof Error
             ? err.message
             : t('adminVendorManagement.loadFailed', { defaultValue: 'Failed to load vendors.' })
         );
-        if (pageNum === 1) setVendors([]);
+        if (pageNum === 1 && !hasLoadedRef.current) setVendors([]);
       } finally {
+        loadInFlightRef.current = false;
         setLoading(false);
         setRefreshing(false);
         setLoadingMore(false);
       }
     },
-    [search, t]
+    [t]
   );
 
   useFocusEffect(
     useCallback(() => {
-      load(1);
+      // First open: show spinner. Returning from edit/add: keep list, refresh in background.
+      if (!hasLoadedRef.current) {
+        void load(1, 'initial');
+      } else {
+        void load(1, 'silent');
+      }
     }, [load])
   );
 
@@ -84,7 +105,8 @@ const AdminVendorManagementScreen: React.FC = () => {
     overview?.revenue_formatted ||
     `${currency} ${Math.round(overview?.total_revenue ?? 0)}`;
 
-  const renderVendor = ({ item }: { item: AdminManagedVendor }) => (
+  const renderVendor = useCallback(
+    ({ item }: { item: AdminManagedVendor }) => (
     <View style={styles.card}>
       <View style={styles.cardAccent} />
       <TouchableOpacity
@@ -200,6 +222,8 @@ const AdminVendorManagementScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
     </View>
+    ),
+    [navigation, t]
   );
 
   const listHeader = (
@@ -245,20 +269,20 @@ const AdminVendorManagementScreen: React.FC = () => {
           placeholderTextColor={COLORS.textSecondary}
           value={search}
           onChangeText={setSearch}
-          onSubmitEditing={() => load(1, true, search)}
+          onSubmitEditing={() => load(1, 'refresh', search)}
           returnKeyType="search"
         />
         {search.length > 0 ? (
           <TouchableOpacity
             onPress={() => {
               setSearch('');
-              load(1, true, '');
+              load(1, 'refresh', '');
             }}
           >
             <Ionicons name="close-circle" size={18} color={COLORS.textSecondary} />
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.searchBtn} onPress={() => load(1, true, search)}>
+          <TouchableOpacity style={styles.searchBtn} onPress={() => load(1, 'refresh', search)}>
             <Text style={styles.searchBtnText}>{t('common.ok', { defaultValue: 'Go' })}</Text>
           </TouchableOpacity>
         )}
@@ -332,7 +356,7 @@ const AdminVendorManagementScreen: React.FC = () => {
             <Ionicons name="cloud-offline-outline" size={36} color={COLORS.primary} />
           </View>
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => load(1, true)}>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => load(1, 'refresh')}>
             <Text style={styles.retryText}>{t('common.retry', { defaultValue: 'Retry' })}</Text>
           </TouchableOpacity>
         </View>
@@ -346,12 +370,12 @@ const AdminVendorManagementScreen: React.FC = () => {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => load(1, true)}
+              onRefresh={() => load(1, 'refresh')}
               tintColor={COLORS.primary}
             />
           }
           onEndReached={() => {
-            if (!loadingMore && hasMore) load(page + 1);
+            if (!loadingMore && hasMore) load(page + 1, 'more');
           }}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={

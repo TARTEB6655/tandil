@@ -9,6 +9,7 @@ import {
   RefreshControl,
   TextInput,
   Keyboard,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -19,6 +20,7 @@ import { adminService, AdminSupportTicket } from '../../services/adminService';
 
 const PER_PAGE = 20;
 type StatusFilter = '' | 'open' | 'in_progress' | 'resolved' | 'closed';
+type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 
 const STATUS_OPTIONS: { value: StatusFilter; labelKey: string }[] = [
   { value: '', labelKey: 'admin.supportTickets.all' },
@@ -26,6 +28,13 @@ const STATUS_OPTIONS: { value: StatusFilter; labelKey: string }[] = [
   { value: 'in_progress', labelKey: 'admin.supportTickets.inProgress' },
   { value: 'resolved', labelKey: 'admin.supportTickets.resolved' },
   { value: 'closed', labelKey: 'admin.supportTickets.closed' },
+];
+
+const CHANGE_STATUS_OPTIONS: { value: TicketStatus; labelKey: string }[] = [
+  { value: 'open', labelKey: 'admin.supportTickets.status.open' },
+  { value: 'in_progress', labelKey: 'admin.supportTickets.status.in_progress' },
+  { value: 'resolved', labelKey: 'admin.supportTickets.status.resolved' },
+  { value: 'closed', labelKey: 'admin.supportTickets.status.closed' },
 ];
 
 function formatDate(iso: string): string {
@@ -52,17 +61,27 @@ function statusColor(status: string): string {
   return COLORS.textSecondary;
 }
 
+function statusLabelKey(status: string): string {
+  return `admin.supportTickets.status.${(status || '').toLowerCase().replace(/-/g, '_')}`;
+}
+
 const AdminSupportTicketsScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const [tickets, setTickets] = useState<AdminSupportTicket[]>([]);
-  const [pagination, setPagination] = useState<{ current_page: number; last_page: number; per_page: number; total: number } | null>(null);
+  const [pagination, setPagination] = useState<{
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  } | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
   const searchInputRef = useRef<TextInput>(null);
 
   const fetchTickets = useCallback(
@@ -124,28 +143,116 @@ const AdminSupportTicketsScreen: React.FC = () => {
     fetchTickets(1, true);
   }, [fetchTickets]);
 
-  const renderTicket = ({ item }: { item: AdminSupportTicket }) => (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.8}
-      onPress={() => navigation.navigate('SupportTicketChat', { ticket: item })}
-    >
-      <View style={styles.cardHeader}>
-        <Text style={styles.ticketNumber}>{item.ticket_number}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: statusColor(item.status) + '20' }]}>
-          <Text style={[styles.statusText, { color: statusColor(item.status) }]}>
-            {t(`admin.supportTickets.status.${(item.status || '').toLowerCase().replace(/-/g, '_')}`, item.status)}
-          </Text>
-        </View>
-      </View>
-      <Text style={styles.subject} numberOfLines={1}>{item.subject}</Text>
-      <Text style={styles.message} numberOfLines={2}>{item.message}</Text>
-      <View style={styles.cardMeta}>
-        <Text style={styles.metaText}>{item.user_name || item.email}</Text>
-        <Text style={styles.metaText}>{formatDate(item.created_at)}</Text>
-      </View>
-    </TouchableOpacity>
+  const applyStatusLocally = useCallback(
+    (ticketId: number, nextStatus: TicketStatus) => {
+      setTickets((prev) => {
+        if (statusFilter && statusFilter !== nextStatus) {
+          return prev.filter((ticket) => ticket.id !== ticketId);
+        }
+        return prev.map((ticket) =>
+          ticket.id === ticketId ? { ...ticket, status: nextStatus } : ticket
+        );
+      });
+    },
+    [statusFilter]
   );
+
+  const handleChangeStatus = useCallback(
+    (item: AdminSupportTicket) => {
+      if (updatingStatusId != null) return;
+      Alert.alert(t('admin.supportTickets.changeStatus', 'Change status'), item.ticket_number, [
+        ...CHANGE_STATUS_OPTIONS.map((opt) => ({
+          text: t(opt.labelKey, opt.value),
+          onPress: () => {
+            const current = String(item.status || '')
+              .toLowerCase()
+              .replace(/-/g, '_');
+            if (current === opt.value) return;
+            setUpdatingStatusId(item.id);
+            adminService
+              .updateSupportTicketStatus(item.id, opt.value)
+              .then((res) => {
+                if (res.success) {
+                  applyStatusLocally(item.id, opt.value);
+                } else {
+                  Alert.alert(
+                    t('common.error', 'Error'),
+                    res.message ??
+                      t('admin.supportTickets.statusUpdateFailed', 'Failed to update status.')
+                  );
+                }
+              })
+              .catch(() =>
+                Alert.alert(
+                  t('common.error', 'Error'),
+                  t('admin.supportTickets.statusUpdateFailed', 'Failed to update status.')
+                )
+              )
+              .finally(() => setUpdatingStatusId(null));
+          },
+        })),
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' as const },
+      ]);
+    },
+    [applyStatusLocally, t, updatingStatusId]
+  );
+
+  const renderTicket = ({ item }: { item: AdminSupportTicket }) => {
+    const isUpdating = updatingStatusId === item.id;
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate('SupportTicketChat', { ticket: item })}
+      >
+        <View style={styles.cardHeader}>
+          <Text style={styles.ticketNumber}>{item.ticket_number}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor(item.status) + '20' }]}>
+            <Text style={[styles.statusText, { color: statusColor(item.status) }]}>
+              {t(statusLabelKey(item.status), item.status)}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.subject} numberOfLines={1}>
+          {item.subject}
+        </Text>
+        <Text style={styles.message} numberOfLines={2}>
+          {item.message}
+        </Text>
+        <View style={styles.cardMeta}>
+          <Text style={styles.metaText}>{item.user_name || item.email}</Text>
+          <Text style={styles.metaText}>{formatDate(item.created_at)}</Text>
+        </View>
+
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={styles.changeStatusBtn}
+            onPress={() => handleChangeStatus(item)}
+            disabled={isUpdating}
+            activeOpacity={0.85}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            {isUpdating ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <>
+                <Ionicons name="swap-horizontal-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.changeStatusBtnText}>
+                  {t('admin.supportTickets.changeStatus', 'Change status')}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <View style={styles.openChatHint}>
+            <Text style={styles.openChatHintText}>
+              {t('admin.supportTickets.openChat', 'Open chat')}
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={COLORS.textSecondary} />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const total = pagination?.total ?? 0;
 
@@ -163,7 +270,10 @@ const AdminSupportTicketsScreen: React.FC = () => {
           <TextInput
             ref={searchInputRef}
             style={styles.searchInput}
-            placeholder={t('admin.supportTickets.searchPlaceholder', 'Search by ticket #, subject, email...')}
+            placeholder={t(
+              'admin.supportTickets.searchPlaceholder',
+              'Search by ticket #, subject, email...'
+            )}
             placeholderTextColor={COLORS.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -171,13 +281,21 @@ const AdminSupportTicketsScreen: React.FC = () => {
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => { setSearchQuery(''); fetchTickets(1, true); }} style={styles.clearBtn}>
+            <TouchableOpacity
+              onPress={() => {
+                setSearchQuery('');
+                fetchTickets(1, true);
+              }}
+              style={styles.clearBtn}
+            >
               <Ionicons name="close-circle" size={20} color={COLORS.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
         <TouchableOpacity style={styles.searchSubmitBtn} onPress={handleSearchSubmit}>
-          <Text style={styles.searchSubmitText}>{t('admin.supportTickets.search', 'Search')}</Text>
+          <Text style={styles.searchSubmitText}>
+            {t('admin.supportTickets.search', 'Search')}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -188,7 +306,12 @@ const AdminSupportTicketsScreen: React.FC = () => {
             style={[styles.filterChip, statusFilter === opt.value && styles.filterChipActive]}
             onPress={() => setStatusFilter(opt.value)}
           >
-            <Text style={[styles.filterChipText, statusFilter === opt.value && styles.filterChipTextActive]}>
+            <Text
+              style={[
+                styles.filterChipText,
+                statusFilter === opt.value && styles.filterChipTextActive,
+              ]}
+            >
               {t(opt.labelKey)}
             </Text>
           </TouchableOpacity>
@@ -198,7 +321,9 @@ const AdminSupportTicketsScreen: React.FC = () => {
       {loading && page === 1 ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>{t('admin.supportTickets.loading', 'Loading tickets...')}</Text>
+          <Text style={styles.loadingText}>
+            {t('admin.supportTickets.loading', 'Loading tickets...')}
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -209,7 +334,9 @@ const AdminSupportTicketsScreen: React.FC = () => {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="document-text-outline" size={48} color={COLORS.textSecondary} />
-              <Text style={styles.emptyText}>{t('admin.supportTickets.noTickets', 'No support tickets found.')}</Text>
+              <Text style={styles.emptyText}>
+                {t('admin.supportTickets.noTickets', 'No support tickets found.')}
+              </Text>
             </View>
           }
           ListHeaderComponent={
@@ -221,8 +348,14 @@ const AdminSupportTicketsScreen: React.FC = () => {
           }
           onEndReached={loadMore}
           onEndReachedThreshold={0.3}
-          ListFooterComponent={loadingMore ? <ActivityIndicator size="small" color={COLORS.primary} style={styles.footerLoader} /> : null}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator size="small" color={COLORS.primary} style={styles.footerLoader} />
+            ) : null
+          }
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
+          }
         />
       )}
     </View>
@@ -264,7 +397,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.sm,
   },
-  searchSubmitText: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.semiBold, color: COLORS.background },
+  searchSubmitText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.background,
+  },
   filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -296,18 +433,95 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xs },
-  ticketNumber: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.semiBold, color: COLORS.primary },
-  statusBadge: { paddingHorizontal: SPACING.sm, paddingVertical: 2, borderRadius: BORDER_RADIUS.sm },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  ticketNumber: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
+  statusBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.sm,
+  },
   statusText: { fontSize: FONT_SIZES.xs, fontWeight: FONT_WEIGHTS.semiBold },
-  subject: { fontSize: FONT_SIZES.md, fontWeight: FONT_WEIGHTS.semiBold, color: COLORS.text, marginBottom: 4 },
-  message: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, marginBottom: SPACING.sm },
-  cardMeta: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' },
+  subject: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  message: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+  },
+  cardMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    marginBottom: SPACING.sm,
+  },
   metaText: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.xl },
-  loadingText: { marginTop: SPACING.sm, fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: SPACING.sm,
+  },
+  changeStatusBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '12',
+    minHeight: 34,
+    minWidth: 120,
+    justifyContent: 'center',
+  },
+  changeStatusBtnText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
+  openChatHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  openChatHintText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  loadingText: {
+    marginTop: SPACING.sm,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+  },
   empty: { alignItems: 'center', paddingVertical: SPACING.xxl },
-  emptyText: { marginTop: SPACING.md, fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
+  emptyText: {
+    marginTop: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+  },
   footerLoader: { paddingVertical: SPACING.md },
 });
 

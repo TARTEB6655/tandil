@@ -160,7 +160,7 @@ const TechnicianProfileScreen: React.FC = () => {
   if (loading && !profile) {
     return (
       <View style={styles.container}>
-        <View style={[styles.header, { marginBottom: 20 }]}>
+        <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.text} />
           </TouchableOpacity>
@@ -178,7 +178,7 @@ const TechnicianProfileScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={[styles.header, { marginBottom: 20 }]}>
+      <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -190,6 +190,8 @@ const TechnicianProfileScreen: React.FC = () => {
       </View>
 
       <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => fetchProfile(true)} colors={[COLORS.primary]} />
@@ -235,26 +237,38 @@ const TechnicianProfileScreen: React.FC = () => {
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Ionicons name="checkmark-circle-outline" size={24} color={COLORS.success} />
-            <Text style={styles.statValue}>{technician.completedJobs}</Text>
-            <Text style={styles.statLabel}>{t('technician.jobsCompleted')}</Text>
+            <Ionicons name="checkmark-circle-outline" size={22} color={COLORS.success} />
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+              {technician.completedJobs}
+            </Text>
+            <Text style={styles.statLabel} numberOfLines={2}>
+              {t('technician.jobsCompleted')}
+            </Text>
           </View>
           
           <View style={styles.statCard}>
-            <Ionicons name="cash-outline" size={24} color={COLORS.primary} />
-            <Text style={styles.statValue}>{t('orders.currency', { defaultValue: 'AED' })} {Number(technician.totalEarnings).toFixed(2)}</Text>
-            <Text style={styles.statLabel}>{t('technician.totalEarnings')}</Text>
+            <Ionicons name="cash-outline" size={22} color={COLORS.primary} />
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+              {t('orders.currency', { defaultValue: 'AED' })} {Number(technician.totalEarnings).toFixed(2)}
+            </Text>
+            <Text style={styles.statLabel} numberOfLines={2}>
+              {t('technician.totalEarnings')}
+            </Text>
           </View>
           
           <View style={styles.statCard}>
-            <Ionicons name="calendar-outline" size={24} color={COLORS.info} />
-            <Text style={styles.statValue}>{technician.memberSince}</Text>
-            <Text style={styles.statLabel}>{t('technician.memberSince')}</Text>
+            <Ionicons name="calendar-outline" size={22} color={COLORS.info} />
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+              {technician.memberSince}
+            </Text>
+            <Text style={styles.statLabel} numberOfLines={2}>
+              {t('technician.memberSince')}
+            </Text>
           </View>
         </View>
 
         {/* Menu Items */}
-        <View style={styles.section}>
+        <View style={[styles.section, styles.settingsSection]}>
           <Text style={styles.sectionTitle}>{t('technician.settings')}</Text>
           <View style={styles.menuContainer}>
             {menuItems.map(renderMenuItem)}
@@ -267,12 +281,16 @@ const TechnicianProfileScreen: React.FC = () => {
           <View style={styles.accountActions}>
             <TouchableOpacity style={styles.accountAction}>
               <Ionicons name="download-outline" size={20} color={COLORS.primary} />
-              <Text style={styles.accountActionText}>{t('technician.downloadData')}</Text>
+              <Text style={styles.accountActionText} numberOfLines={2}>
+                {t('technician.downloadData')}
+              </Text>
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.accountAction}>
               <Ionicons name="trash-outline" size={20} color={COLORS.error} />
-              <Text style={[styles.accountActionText, { color: COLORS.error }]}>{t('technician.deleteAccount')}</Text>
+              <Text style={[styles.accountActionText, styles.accountActionDanger]} numberOfLines={2}>
+                {t('technician.deleteAccount')}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -291,8 +309,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.md,
   },
   backButton: {
     padding: SPACING.sm,
@@ -304,6 +322,13 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 40,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xxl,
   },
   centeredContent: {
     flex: 1,
@@ -317,7 +342,8 @@ const styles = StyleSheet.create({
   },
   profileHeader: {
     alignItems: 'center',
-    paddingVertical: SPACING.xl,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.lg,
     paddingHorizontal: SPACING.lg,
   },
   avatarContainer: {
@@ -403,21 +429,25 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.lg,
-    gap: SPACING.md,
+    marginBottom: SPACING.md,
+    gap: SPACING.sm,
   },
   statCard: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: COLORS.surface,
     borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
     alignItems: 'center',
   },
   statValue: {
-    fontSize: FONT_SIZES.md,
+    width: '100%',
+    fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
     marginTop: SPACING.xs,
+    textAlign: 'center',
   },
   statLabel: {
     fontSize: FONT_SIZES.xs,
@@ -428,6 +458,9 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: SPACING.lg,
     paddingHorizontal: SPACING.lg,
+  },
+  settingsSection: {
+    marginTop: SPACING.lg,
   },
   sectionTitle: {
     fontSize: FONT_SIZES.lg,
@@ -452,29 +485,41 @@ const styles = StyleSheet.create({
   menuItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+    marginRight: SPACING.sm,
   },
   menuItemText: {
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
     marginLeft: SPACING.md,
+    flexShrink: 1,
   },
   accountActions: {
     flexDirection: 'row',
-    gap: SPACING.md,
+    gap: SPACING.sm,
   },
   accountAction: {
     flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
     borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.md,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
   },
   accountActionText: {
-    fontSize: FONT_SIZES.md,
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.text,
     marginLeft: SPACING.sm,
     fontWeight: FONT_WEIGHTS.medium,
+  },
+  accountActionDanger: {
+    color: COLORS.error,
   },
 });
 

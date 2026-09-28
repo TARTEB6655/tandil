@@ -22,10 +22,17 @@ const stripeMerchantIdentifier = enableApplePay
     'merchant.com.tandilapp.uae'
   : '';
 
+// Android MapView requires a Google Maps SDK key in the native binary.
+// Without it, opening any screen that mounts MapView hard-crashes the app.
+const googleMapsAndroidApiKey =
+  process.env.GOOGLE_MAPS_API_KEY ||
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
+  '';
+
 const basePlugins = Array.isArray(expo.plugins) ? expo.plugins : [];
 const pluginsWithoutStripe = basePlugins.filter((p) => {
   const name = Array.isArray(p) ? p[0] : p;
-  return name !== '@stripe/stripe-react-native' && name !== 'sentry-expo';
+  return name !== '@stripe/stripe-react-native' && name !== 'sentry-expo' && name !== 'react-native-maps';
 });
 const stripePlugin = [
   '@stripe/stripe-react-native',
@@ -34,6 +41,16 @@ const stripePlugin = [
     ...(stripeMerchantIdentifier ? { merchantIdentifier: stripeMerchantIdentifier } : {}),
   },
 ];
+const mapsPlugins = googleMapsAndroidApiKey
+  ? [
+      [
+        'react-native-maps',
+        {
+          androidGoogleMapsApiKey: googleMapsAndroidApiKey,
+        },
+      ],
+    ]
+  : [];
 
 module.exports = {
   ...appJson,
@@ -64,11 +81,23 @@ module.exports = {
         'ACCESS_COARSE_LOCATION',
         'ACCESS_FINE_LOCATION',
       ],
+      ...(googleMapsAndroidApiKey
+        ? {
+            config: {
+              ...(expo.android?.config || {}),
+              googleMaps: {
+                apiKey: googleMapsAndroidApiKey,
+              },
+            },
+          }
+        : {}),
     },
     extra: {
       ...expo.extra,
       easBuildProfile,
       enableApplePay,
+      // Used by JS to avoid mounting MapView on Android builds that lack a Maps key.
+      googleMapsAndroidConfigured: Boolean(googleMapsAndroidApiKey),
       stripePublishableKey:
         process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || expo.extra?.stripePublishableKey || '',
       stripeMerchantIdentifier: enableApplePay ? stripeMerchantIdentifier : '',
@@ -86,6 +115,7 @@ module.exports = {
     plugins: [
       ...pluginsWithoutStripe,
       stripePlugin,
+      ...mapsPlugins,
       [
         'expo-location',
         {

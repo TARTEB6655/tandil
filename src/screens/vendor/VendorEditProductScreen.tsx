@@ -28,7 +28,12 @@ import {
   VENDOR_SCREEN_BG,
 } from '../../components/vendor/VendorUi';
 import { vendorService, VendorProductDetail } from '../../services/vendorService';
-import { compressImageForUpload, compressImagesForUpload } from '../../utils/compressImage';
+import {
+  catalogImagePickerOptions,
+  compressCatalogImageForUpload,
+  compressCatalogImagesForUpload,
+  ImageTooLargeError,
+} from '../../utils/compressImage';
 import { hasLocalOptionImageUploads, isLocalImageUri } from '../../utils/adminProductOptions';
 import ProductCustomizationBuilder from '../../components/admin/ProductCustomizationBuilder';
 import type { ProductCustomizationConfig } from '../../types/productCustomization';
@@ -289,15 +294,26 @@ const VendorEditProductScreen: React.FC = () => {
         );
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: false,
-        quality: 0.8,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
       if (!result.canceled && result.assets?.[0]) {
-        const uri = await compressImageForUpload(result.assets[0].uri);
-        setMainImage({ uri });
-        setRemoveMainImageFlag(false);
+        try {
+          const uri = await compressCatalogImageForUpload(
+            result.assets[0].uri,
+            result.assets[0].fileSize
+          );
+          setMainImage({ uri });
+          setRemoveMainImageFlag(false);
+        } catch (sizeErr: any) {
+          if (sizeErr?.name === 'ImageTooLargeError' || sizeErr instanceof ImageTooLargeError) {
+            Alert.alert(
+              'Error',
+              sizeErr.message ||
+                'You can upload an image of up to 5 MB only. Please choose a smaller file.'
+            );
+            return;
+          }
+          throw sizeErr;
+        }
       }
     } catch (err: unknown) {
       const message = (err as { message?: string; code?: string })?.message || (err as { code?: string })?.code || 'Could not open photo library.';
@@ -328,14 +344,26 @@ const VendorEditProductScreen: React.FC = () => {
         );
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true,
-        quality: 0.8,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(
+        catalogImagePickerOptions({ allowsMultipleSelection: true })
+      );
       if (!result.canceled && result.assets?.length) {
-        const uris = await compressImagesForUpload(result.assets.map((a) => a.uri));
-        setExtraImages((prev) => [...prev, ...uris.map((uri) => ({ uri }))]);
+        try {
+          const uris = await compressCatalogImagesForUpload(
+            result.assets.map((a) => ({ uri: a.uri, fileSize: a.fileSize }))
+          );
+          setExtraImages((prev) => [...prev, ...uris.map((uri) => ({ uri }))]);
+        } catch (sizeErr: any) {
+          if (sizeErr?.name === 'ImageTooLargeError' || sizeErr instanceof ImageTooLargeError) {
+            Alert.alert(
+              'Error',
+              sizeErr.message ||
+                'You can upload an image of up to 5 MB only. Please choose a smaller file.'
+            );
+            return;
+          }
+          throw sizeErr;
+        }
       }
     } catch (err: unknown) {
       const message = (err as { message?: string; code?: string })?.message || (err as { code?: string })?.code || 'Could not open photo library.';
@@ -886,7 +914,9 @@ const VendorEditProductScreen: React.FC = () => {
                   {pickingMain ? t('admin.addProduct.opening') : t('admin.addProduct.uploadFromDevice')}
                 </Text>
                 <Text style={styles.uploadSubtitle} numberOfLines={1}>
-                  {t('vendorAddProduct.mainImageTip', { defaultValue: 'JPG or PNG · recommended 800×800' })}
+                  {t('vendorAddProduct.mainImageTip', {
+                    defaultValue: 'JPG or PNG · max 5 MB · recommended 800×800',
+                  })}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />

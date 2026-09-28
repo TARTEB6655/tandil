@@ -23,7 +23,11 @@ import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import Header from '../../components/common/Header';
 import { adminService, AdminProduct, AdminExclusiveOffer } from '../../services/adminService';
-import { compressImageForUpload } from '../../utils/compressImage';
+import {
+  catalogImagePickerOptions,
+  compressCatalogImageForUpload,
+  isImageTooLargeError,
+} from '../../utils/compressImage';
 import { buildFullImageUrl } from '../../config/api';
 import { Image } from 'expo-image';
 
@@ -150,17 +154,21 @@ const AdminEditExclusiveOfferScreen: React.FC = () => {
         );
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: false,
-        quality: 0.8,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
       if (!result.canceled && result.assets?.[0]) {
-        const uri = await compressImageForUpload(result.assets[0].uri);
+        const uri = await compressCatalogImageForUpload(
+          result.assets[0].uri,
+          result.assets[0].fileSize
+        );
         setImage({ uri });
       }
     } catch (err: any) {
-      Alert.alert(t('admin.users.error', 'Error'), err?.message ?? 'Could not open photos');
+      Alert.alert(
+        t('admin.users.error', 'Error'),
+        isImageTooLargeError(err)
+          ? err.message
+          : err?.message ?? 'Could not open photos'
+      );
     } finally {
       setPickingImage(false);
     }
@@ -309,6 +317,11 @@ const AdminEditExclusiveOfferScreen: React.FC = () => {
           </View>
           <View style={styles.fieldRow}>
             <Text style={styles.label}>{t('admin.exclusiveOffers.imageLabel', 'Image')}</Text>
+            <Text style={styles.imageSizeHint}>
+              {t('admin.exclusiveOffers.imageMaxSizeHint', {
+                defaultValue: 'Max file size: 5 MB',
+              })}
+            </Text>
             <TouchableOpacity style={[styles.imageBtn, pickingImage && styles.imageBtnDisabled]} onPress={pickImageFromDevice} disabled={pickingImage}>
               <Ionicons name="image-outline" size={24} color={COLORS.primary} />
               <Text style={styles.imageBtnText}>{pickingImage ? t('common.loading', 'Loading…') : image ? t('admin.exclusiveOffers.imageSelected', 'Image selected') : t('admin.exclusiveOffers.uploadImage', 'Upload image')}</Text>
@@ -399,6 +412,12 @@ const styles = StyleSheet.create({
   scrollContent: { padding: SPACING.lg, paddingBottom: SPACING.xl * 2 },
   sectionTitle: { fontSize: FONT_SIZES.lg, fontWeight: FONT_WEIGHTS.semiBold, color: COLORS.text, marginBottom: SPACING.md },
   label: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.medium, color: COLORS.text, marginBottom: SPACING.xs },
+  imageSizeHint: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+    marginBottom: SPACING.sm,
+  },
   fieldRow: { marginBottom: SPACING.md },
   dropdown: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: BORDER_RADIUS.md, paddingHorizontal: SPACING.md, paddingVertical: SPACING.md },
   dropdownError: { borderColor: COLORS.error },

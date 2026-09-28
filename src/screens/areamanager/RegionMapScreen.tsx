@@ -17,6 +17,7 @@ import {
   getAreaManagerRegionMap,
   AreaManagerRegionMapData,
 } from '../../services/areaManagerService';
+import { canShowNativeMap } from '../../utils/mapsAvailability';
 
 const UAE_CENTER = { lat: 24.0, lng: 54.0 };
 const UAE_REGION: Region = {
@@ -199,23 +200,37 @@ const RegionMapScreen: React.FC = () => {
         <View style={{ width: 24 }} />
       </View>
       <View style={[styles.mapWrap, { height: mapHeight }]}>
-        <MapView
-          style={[styles.map, { width, height: mapHeight }]}
-          initialRegion={UAE_REGION}
-          scrollEnabled
-          zoomEnabled
-        >
-          {markers.map((m) => (
-            <Marker
-              key={m.id}
-              coordinate={{ latitude: m.latitude, longitude: m.longitude }}
-              title={m.title}
-              description={m.description}
-              pinColor={COLORS.primary}
-            />
-          ))}
-        </MapView>
-        {(geocoding || (data && markers.length === 0 && (data.areas.length > 0 || data.team_leaders.length > 0))) && (
+        {canShowNativeMap() ? (
+          <MapView
+            style={[styles.map, { width, height: mapHeight }]}
+            initialRegion={UAE_REGION}
+            scrollEnabled
+            zoomEnabled
+          >
+            {markers.map((m) => (
+              <Marker
+                key={m.id}
+                coordinate={{ latitude: m.latitude, longitude: m.longitude }}
+                title={m.title}
+                description={m.description}
+                pinColor={COLORS.primary}
+              />
+            ))}
+          </MapView>
+        ) : (
+          <View style={[styles.mapUnavailable, { width, height: mapHeight }]}>
+            <Ionicons name="map-outline" size={36} color={COLORS.textSecondary} />
+            <Text style={styles.mapUnavailableText}>
+              {t('admin.areaManagerRegionMap.mapUnavailable', {
+                defaultValue:
+                  'Map needs a Google Maps API key on Android. Location list below still works.',
+              })}
+            </Text>
+          </View>
+        )}
+        {canShowNativeMap() &&
+          (geocoding ||
+            (data && markers.length === 0 && (data.areas.length > 0 || data.team_leaders.length > 0))) && (
           <View style={styles.overlay}>
             <ActivityIndicator size="small" color={COLORS.primary} />
             <Text style={styles.overlayText}>{geocoding ? t('admin.areaManagerRegionMap.findingLocations') : t('admin.areaManagerRegionMap.noCoordinates')}</Text>
@@ -254,6 +269,19 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: FONT_SIZES.lg, fontWeight: FONT_WEIGHTS.bold, color: COLORS.text },
   mapWrap: { position: 'relative', backgroundColor: COLORS.surface, width: '100%' },
   map: { backgroundColor: COLORS.surface },
+  mapUnavailable: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.sm,
+    backgroundColor: COLORS.surface,
+  },
+  mapUnavailableText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   overlay: {
     position: 'absolute',
     bottom: SPACING.md,

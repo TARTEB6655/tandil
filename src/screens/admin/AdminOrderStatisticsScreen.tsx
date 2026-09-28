@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -133,9 +134,13 @@ function shopOrderToDashboardItem(o: {
   };
 }
 
+const SUMMARY_GAP = SPACING.sm;
+
 const AdminOrderStatisticsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t, i18n } = useTranslation();
+  const { width: screenWidth } = useWindowDimensions();
+  const summaryCardWidth = (screenWidth - SPACING.lg * 2 - SUMMARY_GAP * 2) / 3;
   const [stats, setStats] = useState<AdminDashboardOrderStatsResponse['data']>(EMPTY_STATS);
   const [allOrders, setAllOrders] = useState<AdminDashboardOrderListItem[]>([]);
   const [processingOrders, setProcessingOrders] = useState<AdminDashboardOrderListItem[]>([]);
@@ -535,6 +540,7 @@ const AdminOrderStatisticsScreen: React.FC = () => {
       </View>
 
       <FlatList
+        style={styles.list}
         data={currentOrders}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderOrderItem}
@@ -555,7 +561,7 @@ const AdminOrderStatisticsScreen: React.FC = () => {
 
             <View style={styles.summaryGrid}>
               {summaryCards.map((card) => (
-                <View key={card.key} style={styles.summaryCard}>
+                <View key={card.key} style={[styles.summaryCard, { width: summaryCardWidth }]}>
                   <View style={[styles.summaryIconWrap, { backgroundColor: card.tint + '18' }]}>
                     <Ionicons name={card.icon} size={16} color={card.tint} />
                   </View>
@@ -692,13 +698,13 @@ const styles = StyleSheet.create({
   summaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.sm,
+    gap: SUMMARY_GAP,
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.md,
+    width: '100%',
   },
   summaryCard: {
-    width: '31%',
-    minWidth: 105,
+    minWidth: 0,
     backgroundColor: COLORS.background,
     borderRadius: 16,
     paddingVertical: SPACING.md,
@@ -792,8 +798,13 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
   },
+  list: {
+    flex: 1,
+    width: '100%',
+  },
   listContent: {
     paddingBottom: SPACING.xl * 2,
+    width: '100%',
   },
   orderCard: {
     marginHorizontal: SPACING.lg,

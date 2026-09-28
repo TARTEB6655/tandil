@@ -213,6 +213,25 @@ export function getDefaultContactInfo(audience: AppInfoAudience): AppContactInfo
   return audience === 'vendor' ? { ...DEFAULT_VENDOR_CONTACT } : { ...DEFAULT_CLIENT_CONTACT };
 }
 
+/** Map legacy marketing domain to the app site. */
+function normalizeContactWebsite(info: AppContactInfo): AppContactInfo {
+  const website = info.website?.trim();
+  const label = info.websiteLabel?.trim();
+  const isLegacyHost = (value?: string) => {
+    if (!value) return false;
+    const host = value.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').toLowerCase();
+    return host === 'tandil.ae' || host === 'www.tandil.ae';
+  };
+
+  if (!isLegacyHost(website) && !isLegacyHost(label)) return info;
+
+  return {
+    ...info,
+    website: 'https://app.tandil.ae',
+    websiteLabel: 'app.tandil.ae',
+  };
+}
+
 export async function fetchAppContactInfo(audience: AppInfoAudience): Promise<AppContactInfo> {
   const defaults = getDefaultContactInfo(audience);
   const slug = APP_CONTENT_PAGE_SLUG[audience].contact_us;
@@ -220,7 +239,7 @@ export async function fetchAppContactInfo(audience: AppInfoAudience): Promise<Ap
     try {
       const response = await publicApiClient.get(path, { timeout: 12000 });
       const direct = parseContactInfoResponse(response.data);
-      if (direct) return { ...defaults, ...direct };
+      if (direct) return normalizeContactWebsite({ ...defaults, ...direct });
     } catch {
       // try next public contact route
     }

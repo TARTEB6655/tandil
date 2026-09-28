@@ -23,7 +23,11 @@ import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import Header from '../../components/common/Header';
 import { adminService, AdminProduct } from '../../services/adminService';
-import { compressImageForUpload } from '../../utils/compressImage';
+import {
+  catalogImagePickerOptions,
+  compressCatalogImageForUpload,
+  isImageTooLargeError,
+} from '../../utils/compressImage';
 import { Image } from 'expo-image';
 
 const DISCOUNT_TYPES = ['percentage', 'fixed_amount', 'buy_one_get_one'] as const;
@@ -90,17 +94,21 @@ const AdminAddExclusiveOfferScreen: React.FC = () => {
         );
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: false,
-        quality: 0.8,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
       if (!result.canceled && result.assets?.[0]) {
-        const uri = await compressImageForUpload(result.assets[0].uri);
+        const uri = await compressCatalogImageForUpload(
+          result.assets[0].uri,
+          result.assets[0].fileSize
+        );
         setImage({ uri });
       }
     } catch (err: any) {
-      Alert.alert(t('admin.users.error', 'Error'), err?.message ?? 'Could not open photos');
+      Alert.alert(
+        t('admin.users.error', 'Error'),
+        isImageTooLargeError(err)
+          ? err.message
+          : err?.message ?? 'Could not open photos'
+      );
     } finally {
       setPickingImage(false);
     }
@@ -288,6 +296,11 @@ const AdminAddExclusiveOfferScreen: React.FC = () => {
 
           <View style={styles.fieldRow}>
             <Text style={styles.label}>{t('admin.exclusiveOffers.imageLabel', 'Image')}</Text>
+            <Text style={styles.imageSizeHint}>
+              {t('admin.exclusiveOffers.imageMaxSizeHint', {
+                defaultValue: 'Max file size: 5 MB',
+              })}
+            </Text>
             <TouchableOpacity
               style={[styles.imageBtn, pickingImage && styles.imageBtnDisabled]}
               onPress={pickImageFromDevice}
@@ -417,6 +430,12 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   fieldRow: { marginBottom: SPACING.md },
+  imageSizeHint: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+    marginBottom: SPACING.sm,
+  },
   dropdown: {
     flexDirection: 'row',
     alignItems: 'center',

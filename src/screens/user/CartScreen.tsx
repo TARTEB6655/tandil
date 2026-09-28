@@ -9,9 +9,11 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
@@ -89,6 +91,7 @@ function mapApiItemToDisplay(item: CartApiItem): CartItemDisplay {
 const CartScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const isAuthenticated = useIsAuthenticated();
   const { count: cartItemCount } = useCartBadgeCount();
 
@@ -513,7 +516,14 @@ const CartScreen: React.FC = () => {
             </View>
           </ScrollView>
 
-          <View style={styles.checkoutContainer}>
+          <View
+            style={[
+              styles.checkoutContainer,
+              Platform.OS === 'android' && {
+                paddingBottom: Math.max(insets.bottom, SPACING.md) + SPACING.sm,
+              },
+            ]}
+          >
             {!canProceedToCheckout ? (
               <Text style={styles.minOrderHint}>
                 {t('cart.minOrderHint', {

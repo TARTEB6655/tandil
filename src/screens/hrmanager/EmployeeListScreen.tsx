@@ -12,6 +12,7 @@ import {
   Alert,
   Image,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -289,7 +290,12 @@ const EmployeeListScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={styles.container}
+      // Android: bottom inset is handled by the tab bar — extra bottom safe area
+      // creates a white gap above the menu and shrinks list space. iOS unchanged.
+      edges={Platform.OS === 'android' ? ['top'] : ['top', 'bottom']}
+    >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity

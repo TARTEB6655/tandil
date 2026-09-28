@@ -105,7 +105,7 @@ export const ContactUsContentScreen: React.FC<ContactUsContentScreenProps> = ({
 
   const openWebsite = useCallback(() => {
     openLink(
-      contactInfo.website || 'https://tandil.ae',
+      contactInfo.website || 'https://app.tandil.ae',
       t('vendorContact.websiteError', { defaultValue: 'Could not open website.' })
     );
   }, [contactInfo.website, openLink, t]);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -94,7 +94,12 @@ const HRManagerAppNavigator = () => {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={{ flex: 1 }}
+      // Android: tab bar already pads for system nav — outer bottom inset
+      // leaves a tall white gap under the menu. iOS keeps both edges.
+      edges={Platform.OS === 'android' ? ['top'] : ['top', 'bottom']}
+    >
       <Stack.Navigator
         initialRouteName={initialRoute}
         screenOptions={{

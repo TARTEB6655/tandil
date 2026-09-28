@@ -54,6 +54,24 @@ const VideoBannerPlayer: React.FC<{
     }
   }, [muted, player]);
 
+  // Android often stays black while paused until a frame is decoded.
+  // Nudge currentTime after mount so a poster frame appears under the play button.
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled || hasFirstFrame) return;
+      try {
+        player.currentTime = 0.05;
+      } catch {
+        // ignore
+      }
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [player, hasFirstFrame]);
+
   useEventListener(player, 'timeUpdate', ({ currentTime }) => {
     setPositionSec(currentTime ?? 0);
   });
@@ -61,6 +79,12 @@ const VideoBannerPlayer: React.FC<{
   useEventListener(player, 'sourceLoad', ({ duration }) => {
     if (typeof duration === 'number' && duration > 0) {
       setDurationSec(duration);
+    }
+    try {
+      // Seek slightly forward so ExoPlayer paints a frame while still paused.
+      player.currentTime = 0.05;
+    } catch {
+      // ignore
     }
   });
 
@@ -88,18 +112,22 @@ const VideoBannerPlayer: React.FC<{
   return (
     <TouchableOpacity activeOpacity={1} style={styles.media} onPress={togglePlayback}>
       <VideoView
-        style={styles.video}
+        style={[styles.video, !hasFirstFrame && styles.videoHidden]}
         player={player}
         contentFit="cover"
         nativeControls={false}
         allowsFullscreen={false}
         allowsPictureInPicture={false}
-        useExoShutter
+        // false = transparent until first frame (default). Bare `useExoShutter` is true
+        // and paints a solid black shutter on Android while paused.
+        useExoShutter={false}
         onFirstFrameRender={() => setHasFirstFrame(true)}
       />
 
-      {!hasFirstFrame && !isPlaying ? (
-        <View style={styles.cover} pointerEvents="none" />
+      {!hasFirstFrame ? (
+        <View style={styles.cover} pointerEvents="none">
+          <ActivityIndicator size="small" color={COLORS.primary} />
+        </View>
       ) : null}
 
       {!isPlaying ? (
@@ -321,6 +349,9 @@ const styles = StyleSheet.create({
   },
   video: {
     ...StyleSheet.absoluteFillObject,
+  },
+  videoHidden: {
+    opacity: 0,
   },
   cover: {
     ...StyleSheet.absoluteFillObject,

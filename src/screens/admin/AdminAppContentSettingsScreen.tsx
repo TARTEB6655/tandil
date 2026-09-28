@@ -349,12 +349,12 @@ const AdminAppContentSettingsScreen: React.FC = () => {
                 {renderContactField(
                   t('admin.settings.appContent.website', { defaultValue: 'Website URL' }),
                   'website',
-                  { placeholder: 'https://tandil.ae', keyboardType: 'url' }
+                  { placeholder: 'https://app.tandil.ae', keyboardType: 'url' }
                 )}
                 {renderContactField(
                   t('admin.settings.appContent.websiteLabel', { defaultValue: 'Website Label' }),
                   'websiteLabel',
-                  { placeholder: 'tandil.ae' }
+                  { placeholder: 'app.tandil.ae' }
                 )}
                 {renderContactField(
                   t('admin.settings.appContent.email', { defaultValue: 'Email' }),

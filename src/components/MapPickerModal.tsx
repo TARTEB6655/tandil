@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -13,11 +13,100 @@ import {
   Keyboard,
 } from 'react-native';
 import MapView, { Region } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../constants';
 import { getAddressFromCoordinates } from '../utils/addressFromLocation';
 import type { AddressFromLocation } from '../utils/addressFromLocation';
+
+type PickerMapHandle = {
+  animateToRegion: (region: Region, duration?: number) => void;
+};
+
+function buildAndroidMapHtml(latitude: number, longitude: number): string {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; background: #f6f4ef; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map', { zoomControl: true }).setView([${lat}, ${lng}], 14);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+    function postCenter() {
+      const c = map.getCenter();
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          latitude: c.lat,
+          longitude: c.lng
+        }));
+      }
+    }
+    map.on('moveend', postCenter);
+    window.setMapCenter = function(nextLat, nextLng) {
+      map.setView([nextLat, nextLng], Math.max(map.getZoom(), 14));
+    };
+  </script>
+</body>
+</html>`;
+}
+
+const AndroidPickerMap = forwardRef<PickerMapHandle, {
+  initialRegion: Region;
+  onRegionChangeComplete: (region: Region) => void;
+}>(function AndroidPickerMap({ initialRegion, onRegionChangeComplete }, ref) {
+  const webRef = useRef<WebView>(null);
+  const htmlRef = useRef(buildAndroidMapHtml(initialRegion.latitude, initialRegion.longitude));
+
+  useImperativeHandle(ref, () => ({
+    animateToRegion: (region) => {
+      webRef.current?.injectJavaScript(
+        `window.setMapCenter(${Number(region.latitude)},${Number(region.longitude)});true;`
+      );
+    },
+  }));
+
+  return (
+    <WebView
+      ref={webRef}
+      source={{ html: htmlRef.current, baseUrl: 'https://unpkg.com/' }}
+      style={styles.map}
+      originWhitelist={['*']}
+      javaScriptEnabled
+      domStorageEnabled
+      setSupportMultipleWindows={false}
+      onMessage={(event) => {
+        try {
+          const data = JSON.parse(event.nativeEvent.data) as {
+            latitude?: number;
+            longitude?: number;
+          };
+          if (!Number.isFinite(data.latitude) || !Number.isFinite(data.longitude)) return;
+          onRegionChangeComplete({
+            latitude: Number(data.latitude),
+            longitude: Number(data.longitude),
+            latitudeDelta: 0.012,
+            longitudeDelta: 0.012,
+          });
+        } catch {
+          // ignore malformed map messages
+        }
+      }}
+    />
+  );
+});
 
 const DEFAULT_REGION: Region = {
   latitude: 25.2048,
@@ -128,7 +217,7 @@ export default function MapPickerModal({
   loadingMessage = 'Loading map…',
   confirmMessage = 'Use this location',
 }: MapPickerModalProps) {
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<PickerMapHandle>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [region, setRegion] = useState<Region>(DEFAULT_REGION);
@@ -361,6 +450,12 @@ export default function MapPickerModal({
                 <ActivityIndicator size="large" color={COLORS.primary} />
                 <Text style={styles.loadingText}>{loadingMessage}</Text>
               </View>
+            ) : Platform.OS === 'android' ? (
+              <AndroidPickerMap
+                ref={mapRef}
+                initialRegion={region}
+                onRegionChangeComplete={handleRegionChangeComplete}
+              />
             ) : (
               <MapView
                 ref={mapRef}
@@ -368,7 +463,7 @@ export default function MapPickerModal({
                 initialRegion={region}
                 onRegionChangeComplete={handleRegionChangeComplete}
                 showsUserLocation
-                showsMyLocationButton={Platform.OS !== 'web'}
+                showsMyLocationButton
               />
             )}
             {!loading && (

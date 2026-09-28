@@ -14,7 +14,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -42,6 +42,7 @@ const emptyForm = (): FormState => ({
 
 const AdminVendorTypesEmiratesScreen: React.FC = () => {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TabKey>('types');
   const [types, setTypes] = useState<AdminVendorMetaItem[]>([]);
   const [emirates, setEmirates] = useState<AdminVendorMetaItem[]>([]);
@@ -362,7 +363,11 @@ const AdminVendorTypesEmiratesScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <SafeAreaView
+      style={styles.safe}
+      // iOS: keep bottom home-indicator inset. Android: avoid double gap; list pads itself.
+      edges={Platform.OS === 'ios' ? ['bottom'] : []}
+    >
       <Header
         title={t('admin.vendorMeta.title', 'Vendor types & Emirates')}
         showBack
@@ -431,10 +436,14 @@ const AdminVendorTypesEmiratesScreen: React.FC = () => {
         </View>
       ) : (
         <FlatList
+          style={styles.list}
           data={list}
           keyExtractor={(item) => `${tab}-${item.id}`}
           renderItem={renderItem}
-          contentContainerStyle={list.length === 0 ? styles.emptyContent : styles.listContent}
+          contentContainerStyle={[
+            list.length === 0 ? styles.emptyContent : styles.listContent,
+            Platform.OS === 'android' && { paddingBottom: SPACING.xxl + Math.max(insets.bottom, 8) },
+          ]}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={COLORS.primary} />
           }
@@ -599,6 +608,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  list: { flex: 1 },
   listContent: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl },
   emptyContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACING.xl },
   emptyWrap: { alignItems: 'center', gap: SPACING.md },
