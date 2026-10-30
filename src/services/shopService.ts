@@ -47,6 +47,36 @@ export interface ShopProductBookingSlot {
   available: boolean;
 }
 
+export interface ShopProductTreePricingUnit {
+  key?: string;
+  label?: string;
+  unit?: string;
+  unit_price?: number;
+  unit_price_label?: string;
+  optional?: boolean;
+}
+
+/** GET /shop/products/:id — optional `data.area_pricing` (mirror of tree_pricing for m²). */
+export interface ShopProductAreaPricing {
+  enabled?: boolean;
+  optional?: boolean;
+  unit_price?: number | string | null;
+  price_per_m2?: number | string | null;
+  unit_price_label?: string | null;
+  label?: string | null;
+  note?: string | null;
+}
+
+/** GET /shop/products/:id — `data.tree_pricing` */
+export interface ShopProductTreePricing {
+  enabled?: boolean;
+  optional?: boolean;
+  requires_quantity?: boolean;
+  note?: string;
+  trees?: ShopProductTreePricingUnit;
+  palm_trees?: ShopProductTreePricingUnit;
+}
+
 /** Booking calendar from GET /shop/products/:id (`data.booking`). */
 export interface ShopProductBooking {
   enabled: boolean;
@@ -92,8 +122,115 @@ export interface ShopProduct {
   estimated_arrival?: string | null;
   job_duration?: string | null;
   /** Area-based pricing (when returned by shop API / service settings). */
-  pricing_type?: 'fixed' | 'per_m2' | string | null;
+  pricing_type?: 'fixed' | 'per_m2' | 'per_tree' | 'per_palm' | string | null;
+  catalog_price?: string | number | null;
   price_per_m2?: string | number | null;
+  unit_rate?: string | number | null;
+  unit_rate_label?: string | null;
+  checkout_rate_label?: string | null;
+  price_label?: string | null;
+  list_price_label?: string | null;
+  currency?: string | null;
+  price_unit?: string | null;
+  requires_area?: boolean | null;
+  area_optional?: boolean | null;
+  price_per_tree?: string | number | null;
+  price_per_palm?: string | number | null;
+  price_includes_labels?: string[] | null;
+  show_tree_options?: boolean | null;
+  /** When true, show area (m²) and/or fixed vendor pricing breakdown on client product detail. */
+  show_area_pricing_on_client?: boolean | null;
+  /** Merged from GET /shop/vendors/:id/pricing/service when product payload omits area pricing. */
+  vendor_service_pricing?: Record<string, unknown> | null;
+  vendor_id?: number | null;
+  is_vendor_product?: boolean | null;
+  base_price?: string | number | null;
+  fixed_price?: string | number | null;
+  fixed_price_addon?: string | number | null;
+  checkout_price?: string | number | null;
+  enable_fixed_price?: boolean | number | null;
+  enable_per_m2?: boolean | number | null;
+  area_pricing_options?: {
+    fixed?: {
+      checkout_price?: number | string | null;
+      fixed_price?: number | string | null;
+      customer_preview?: { checkout_total?: number | string | null };
+    };
+    per_m2?: Record<string, unknown>;
+  } | null;
+  price_breakdown?: {
+    display_only?: boolean;
+    do_not_add_lines?: boolean;
+    note?: string;
+    lines?: Array<{
+      key?: string;
+      label?: string;
+      amount?: number;
+      amount_label?: string;
+    }>;
+  } | null;
+  area_pricing?: ShopProductAreaPricing | null;
+  /** When true, show optional area (m²) input on service detail (shop API). */
+  show_area_input?: boolean | null;
+  tree_pricing?: ShopProductTreePricing | null;
+  customer_preview?: {
+    mode?: string;
+    price_display?: string;
+    checkout_rate_display?: string;
+    catalog_price_label?: string;
+    fixed_price_label?: string;
+    checkout_total?: number;
+    checkout_total_label?: string;
+    fixed?: {
+      checkout_total?: number | string | null;
+      checkout_total_label?: string;
+      breakdown?: {
+        display_only?: boolean;
+        note?: string;
+        lines?: Array<{
+          key?: string;
+          label?: string;
+          amount?: number;
+          amount_label?: string;
+        }>;
+      };
+      note?: string;
+    };
+    when_fixed_selected?: {
+      checkout_total?: number | string | null;
+      checkout_total_label?: string;
+      breakdown?: {
+        display_only?: boolean;
+        note?: string;
+        lines?: Array<{
+          key?: string;
+          label?: string;
+          amount?: number;
+          amount_label?: string;
+        }>;
+      };
+      note?: string;
+    };
+    price_per_m2?: number | string | null;
+    per_m2_rate?: number | string | null;
+    note?: string;
+    example?: { area?: number; price_per_m2?: number; total?: number; total_label?: string };
+    breakdown?: {
+      display_only?: boolean;
+      do_not_add_lines?: boolean;
+      catalog_price?: number;
+      catalog_price_label?: string;
+      fixed_price?: number;
+      fixed_price_label?: string;
+      note?: string;
+      lines?: Array<{
+        key?: string;
+        label?: string;
+        amount?: number;
+        amount_label?: string;
+      }>;
+    };
+  } | null;
   price_includes?: {
     materials?: boolean | number | string | null;
     installation?: boolean | number | string | null;
@@ -234,7 +371,11 @@ export const shopService = {
         }
       );
       const data = (response?.data as any)?.data ?? null;
-      return data ? normalizeShopProduct(data) : null;
+      if (!data) return null;
+      const normalized = normalizeShopProduct(data);
+      const { applyShopProductAreaRateFields } = await import('./servicePricingService');
+      /** Return immediately; product detail enriches per-m² in background if needed. */
+      return applyShopProductAreaRateFields(normalized);
     } catch (_) {
       return null;
     }

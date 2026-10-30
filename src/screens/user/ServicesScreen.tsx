@@ -179,7 +179,12 @@ const ServicesScreen: React.FC = () => {
     return (
       <TouchableOpacity
         style={styles.serviceCard}
-        onPress={() => navigation.navigate('ProductDetail', { product: detail })}
+        onPress={() =>
+          navigation.navigate('ProductDetail', {
+            product: detail,
+            fromServiceCatalog: true,
+          })
+        }
       >
         <View style={styles.serviceImageContainer}>
           <FallbackImage uri={imageUri} />

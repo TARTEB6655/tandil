@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { StaffLoginShell } from '../../components/auth/StaffLoginShell';
 import { authService } from '../../services/authService';
+import { navigateToForgotPassword } from '../../utils/navigateForgotPassword';
 import { useAppStore } from '../../store';
 
 function goToRoleSelection(navigation: any) {
@@ -76,7 +78,7 @@ const SupervisorLoginScreen: React.FC = () => {
     <StaffLoginShell
       icon="people"
       accent="#3D6B4F"
-      badge="Team Leader"
+      badge={t('admin.supervisorLogin.badge')}
       title={t('admin.supervisorLogin.title')}
       subtitle={t('admin.supervisorLogin.subtitle')}
       email={email}
@@ -98,13 +100,43 @@ const SupervisorLoginScreen: React.FC = () => {
       passwordLabel={t('admin.supervisorLogin.password')}
       passwordPlaceholder={t('admin.supervisorLogin.passwordPlaceholder')}
       forgotPasswordLabel={t('admin.supervisorLogin.forgotPassword')}
-      onForgotPassword={() => {}}
+      onForgotPassword={() => navigateToForgotPassword(navigation, 'supervisor')}
       signInLabel={t('admin.supervisorLogin.signIn')}
       signingInLabel={t('admin.supervisorLogin.signingIn')}
       backLabel={t('admin.supervisorLogin.backToRoles')}
       infoText={t('admin.supervisorLogin.infoText')}
+      footer={
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            {t('supervisorSignup.noAccount')}
+          </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('SupervisorSignup')}>
+            <Text style={styles.signUpText}>{t('supervisorSignup.register')}</Text>
+          </TouchableOpacity>
+        </View>
+      }
     />
   );
 };
+
+const styles = StyleSheet.create({
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: SPACING.md,
+    flexWrap: 'wrap',
+  },
+  footerText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+  },
+  signUpText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    marginLeft: SPACING.xs,
+  },
+});
 
 export default SupervisorLoginScreen;

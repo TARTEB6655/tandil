@@ -16,6 +16,7 @@ import MapView, { Region } from 'react-native-maps';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../constants';
 import { getAddressFromCoordinates } from '../utils/addressFromLocation';
 import type { AddressFromLocation } from '../utils/addressFromLocation';
@@ -125,6 +126,10 @@ type SearchHit = {
 
 interface MapPickerModalProps {
   visible: boolean;
+  /** Render inside a parent Modal/screen (avoids stacked RN Modals). */
+  embedded?: boolean;
+  /** When set, map opens centered here (edit flow) instead of device GPS. */
+  initialCenter?: { latitude: number; longitude: number } | null;
   onClose: () => void;
   onSelect: (address: AddressFromLocation, coords?: { latitude: number; longitude: number }) => void;
   loadingMessage?: string;
@@ -212,6 +217,8 @@ async function searchPlaces(query: string): Promise<SearchHit[]> {
 
 export default function MapPickerModal({
   visible,
+  embedded = false,
+  initialCenter = null,
   onClose,
   onSelect,
   loadingMessage = 'Loading map…',
@@ -233,6 +240,22 @@ export default function MapPickerModal({
       setSearchQuery('');
       setResults([]);
       setShowResults(false);
+      return;
+    }
+    const savedLat = initialCenter?.latitude;
+    const savedLng = initialCenter?.longitude;
+    if (Number.isFinite(savedLat) && Number.isFinite(savedLng)) {
+      const next = {
+        latitude: Number(savedLat),
+        longitude: Number(savedLng),
+        latitudeDelta: 0.012,
+        longitudeDelta: 0.012,
+      };
+      setRegion(next);
+      setLoading(false);
+      requestAnimationFrame(() => {
+        mapRef.current?.animateToRegion(next, 300);
+      });
       return;
     }
     let cancelled = false;
@@ -266,7 +289,7 @@ export default function MapPickerModal({
     return () => {
       cancelled = true;
     };
-  }, [visible]);
+  }, [visible, initialCenter?.latitude, initialCenter?.longitude]);
 
   useEffect(() => {
     return () => {
@@ -355,7 +378,9 @@ export default function MapPickerModal({
           latitude: region.latitude,
           longitude: region.longitude,
         });
-        onClose();
+        if (!embedded) {
+          onClose();
+        }
       } else {
         Alert.alert('Error', result.error);
       }
@@ -366,16 +391,39 @@ export default function MapPickerModal({
     }
   };
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+  if (embedded && !visible) return null;
+
+  const handleClose = () => {
+    Keyboard.dismiss();
+    onClose();
+  };
+
+  const panel = (
+    <View style={[styles.container, embedded && styles.containerEmbedded]}>
+          <View style={[styles.header, embedded && styles.headerEmbedded]}>
+            <TouchableOpacity
+              onPress={handleClose}
+              style={styles.closeBtn}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Close map"
+            >
               <Ionicons name="close" size={24} color={COLORS.text} />
             </TouchableOpacity>
-            <Text style={styles.title}>Pick location from map</Text>
-            <View style={styles.closeBtn} />
+            <Text style={styles.title} numberOfLines={1}>
+              Pick location from map
+            </Text>
+            {embedded ? (
+              <TouchableOpacity
+                onPress={handleClose}
+                style={styles.headerCancelBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.headerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.closeBtn} />
+            )}
           </View>
 
           <View style={styles.searchWrap}>
@@ -444,7 +492,7 @@ export default function MapPickerModal({
             ) : null}
           </View>
 
-          <View style={styles.mapWrap}>
+          <View style={[styles.mapWrap, embedded && styles.mapWrapEmbedded]}>
             {loading ? (
               <View style={styles.loadingMap}>
                 <ActivityIndicator size="large" color={COLORS.primary} />
@@ -473,25 +521,69 @@ export default function MapPickerModal({
             )}
           </View>
 
-          <View style={styles.footer}>
+          <View style={[styles.footer, embedded && styles.footerEmbedded]}>
             <Text style={styles.hint}>Search above or move the map to choose an address</Text>
-            <TouchableOpacity
-              style={[styles.confirmBtn, confirming && styles.confirmBtnDisabled]}
-              onPress={handleUseThisLocation}
-              disabled={confirming}
-            >
-              {confirming ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                  <Text style={styles.confirmBtnText}>{confirmMessage}</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {embedded ? (
+              <View style={styles.footerBtnRow}>
+                <TouchableOpacity
+                  style={styles.footerCancelBtn}
+                  onPress={handleClose}
+                  disabled={confirming}
+                >
+                  <Text style={styles.footerCancelText}>Close map</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmBtn, styles.confirmBtnEmbedded, confirming && styles.confirmBtnDisabled]}
+                  onPress={handleUseThisLocation}
+                  disabled={confirming}
+                >
+                  {confirming ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                      <Text style={styles.confirmBtnText}>{confirmMessage}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.confirmBtn, confirming && styles.confirmBtnDisabled]}
+                onPress={handleUseThisLocation}
+                disabled={confirming}
+              >
+                {confirming ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                    <Text style={styles.confirmBtnText}>{confirmMessage}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
-        </View>
-      </View>
+    </View>
+  );
+
+  if (embedded) {
+    return (
+      <SafeAreaView style={styles.embeddedSafeArea} edges={['top', 'bottom']}>
+        {panel}
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>{panel}</View>
     </Modal>
   );
 }
@@ -508,6 +600,16 @@ const styles = StyleSheet.create({
     borderTopRightRadius: BORDER_RADIUS.lg,
     maxHeight: '92%',
   },
+  embeddedSafeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  containerEmbedded: {
+    flex: 1,
+    maxHeight: undefined,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -517,8 +619,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  closeBtn: { width: 40, alignItems: 'center' },
-  title: { fontSize: FONT_SIZES.lg, fontWeight: FONT_WEIGHTS.bold, color: COLORS.text },
+  headerEmbedded: {
+    zIndex: 100,
+    elevation: 100,
+    backgroundColor: COLORS.background,
+  },
+  closeBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerCancelBtn: {
+    minWidth: 56,
+    height: 40,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingRight: 2,
+  },
+  headerCancelText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+  },
+  title: {
+    flex: 1,
+    fontSize: FONT_SIZES.lg,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+    textAlign: 'center',
+  },
   searchWrap: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.sm,
@@ -584,6 +709,12 @@ const styles = StyleSheet.create({
     height: 300,
     position: 'relative',
   },
+  mapWrapEmbedded: {
+    flex: 1,
+    minHeight: 280,
+    height: undefined,
+    zIndex: 1,
+  },
   map: {
     width: '100%',
     height: '100%',
@@ -608,6 +739,13 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     paddingBottom: SPACING.xl + (Platform.OS === 'ios' ? 20 : 0),
   },
+  footerEmbedded: {
+    zIndex: 100,
+    elevation: 100,
+    backgroundColor: COLORS.background,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
   hint: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
@@ -624,5 +762,22 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
   },
   confirmBtnDisabled: { opacity: 0.7 },
+  confirmBtnEmbedded: { flex: 1 },
   confirmBtnText: { color: '#fff', fontWeight: FONT_WEIGHTS.semiBold, fontSize: FONT_SIZES.md },
+  footerBtnRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'stretch' },
+  footerCancelBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceLight,
+  },
+  footerCancelText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+  },
 });

@@ -1,8 +1,15 @@
 import { Alert, Linking, Platform, Share } from 'react-native';
 import Constants from 'expo-constants';
+import { Asset } from 'expo-asset';
+import * as FileSystem from 'expo-file-system';
 import type { TFunction } from 'i18next';
 
 const IOS_APP_STORE_URL = 'https://apps.apple.com/au/app/tandil/id6757382373';
+
+/** Bundled promo graphic sent with “Share the App” (Profile → About). */
+const SHARE_APP_PROMO_ASSET = require('../../assets/share-app-promo.png');
+
+let cachedSharePromoUri: string | null = null;
 
 function getShareUrl(): string {
   if (Platform.OS === 'ios') return IOS_APP_STORE_URL;
@@ -12,7 +19,38 @@ function getShareUrl(): string {
   return 'https://play.google.com/store/apps/details?id=com.tandilapp.tandil';
 }
 
-/** Opens the native share sheet (Mail, WhatsApp, Messages, etc.). */
+/** Local file URI for the share promo PNG (cached under app cache). */
+async function getShareAppPromoFileUri(): Promise<string | null> {
+  if (Platform.OS === 'web') return null;
+  if (cachedSharePromoUri) return cachedSharePromoUri;
+
+  try {
+    const asset = Asset.fromModule(SHARE_APP_PROMO_ASSET);
+    await asset.downloadAsync();
+    const sourceUri = asset.localUri ?? asset.uri;
+    if (!sourceUri) return null;
+
+    const cacheDir = FileSystem.cacheDirectory;
+    if (!cacheDir) {
+      cachedSharePromoUri = sourceUri;
+      return sourceUri;
+    }
+
+    const dest = `${cacheDir}share-app-promo.png`;
+    const info = await FileSystem.getInfoAsync(dest);
+    if (!info.exists) {
+      await FileSystem.copyAsync({ from: sourceUri, to: dest });
+    }
+    const destInfo = await FileSystem.getInfoAsync(dest);
+    const shareUri = destInfo.uri || dest;
+    cachedSharePromoUri = shareUri;
+    return shareUri;
+  } catch {
+    return null;
+  }
+}
+
+/** Opens the native share sheet (Mail, WhatsApp, Messages, etc.) with promo image + text. */
 export async function shareApp(t: TFunction): Promise<void> {
   const url = getShareUrl();
   const message = t('profile.shareApp.message', {
@@ -23,8 +61,21 @@ export async function shareApp(t: TFunction): Promise<void> {
   const title = t('profile.shareApp.title', { defaultValue: 'Share Tandil' });
 
   try {
-    // iOS ignores `message` when `url` is a local image file, so share text + store link only.
-    // The App Store link still shows the official Tandil icon as a preview in Messages / WhatsApp.
+    const promoUri = await getShareAppPromoFileUri();
+
+    if (promoUri) {
+      try {
+        await Share.share({
+          title,
+          message,
+          url: promoUri,
+        });
+        return;
+      } catch {
+        // Some targets reject file shares — still send the text + store link.
+      }
+    }
+
     await Share.share({ title, message });
   } catch {
     // user dismissed

@@ -20,6 +20,10 @@ import { buildFullImageUrl } from '../../config/api';
 import {
   getEffectiveServicePrice,
   getServicePricingSettings,
+  isCustomerServicePricingVisible,
+  isPerM2ServicePricing,
+  isUnitQuantityServicePricing,
+  parseServicePricingType,
   ServicePricingSettings,
 } from '../../services/servicePricingService';
 
@@ -185,20 +189,33 @@ const StoreScreen: React.FC = () => {
   const renderProductItem = ({ item }: { item: ShopProduct }) => {
     const detail = toDetailProduct(item);
     const imageUri = getProductImage(item);
-    const itemPricingType = String(
+    const itemPricingType = parseServicePricingType(
       item.pricing_type || servicePricing?.pricing_type || 'fixed'
-    ).toLowerCase();
-    const isPerM2 = itemPricingType === 'per_m2' || servicePricing?.requires_area === true;
-    const priceNum = isPerM2
+    );
+    const servicePricingVisible = isCustomerServicePricingVisible(servicePricing);
+    const isPerM2 =
+      servicePricingVisible &&
+      (isPerM2ServicePricing(itemPricingType) ||
+        (servicePricing?.requires_area === true &&
+          !isUnitQuantityServicePricing(itemPricingType)));
+    const isUnitQty = isUnitQuantityServicePricing(itemPricingType);
+    const priceNum = isPerM2 || isUnitQty
       ? getEffectiveServicePrice(servicePricing) ??
-        (typeof item.price_per_m2 === 'string'
-          ? parseFloat(item.price_per_m2) || 0
-          : Number(item.price_per_m2 ?? item.price) || 0)
+        (isUnitQty
+          ? Number(
+              (item as { price_per_tree?: number; price_per_palm?: number }).price_per_tree ??
+                (item as { price_per_palm?: number }).price_per_palm ??
+                item.price_per_m2 ??
+                item.price
+            ) || 0
+          : typeof item.price_per_m2 === 'string'
+            ? parseFloat(item.price_per_m2) || 0
+            : Number(item.price_per_m2 ?? item.price) || 0)
       : typeof item.price === 'string'
         ? parseFloat(item.price) || 0
         : item.price;
     const originalNum = typeof item.compare_at_price === 'string' ? parseFloat(item.compare_at_price) || 0 : (item.compare_at_price ?? 0);
-    const showDiscount = !isPerM2 && originalNum > priceNum;
+    const showDiscount = !isPerM2 && !isUnitQty && originalNum > priceNum;
     return (
       <TouchableOpacity
         style={styles.productCard}
@@ -248,7 +265,13 @@ const StoreScreen: React.FC = () => {
             <View style={styles.priceContainer}>
               <Text style={styles.productPrice}>
                 {t('orders.currency', { defaultValue: 'AED' })} {priceNum}
-                {isPerM2 ? ` ${t('product.perM2', { defaultValue: '/ m²' })}` : ''}
+                {isPerM2
+                  ? ` ${t('product.perM2', { defaultValue: '/ m²' })}`
+                  : itemPricingType === 'per_tree'
+                    ? ` ${t('product.perTree', { defaultValue: '/ tree' })}`
+                    : itemPricingType === 'per_palm'
+                      ? ` ${t('product.perPalm', { defaultValue: '/ palm' })}`
+                      : ''}
               </Text>
               {showDiscount && <Text style={styles.originalPrice}>{t('orders.currency', { defaultValue: 'AED' })} {originalNum}</Text>}
             </View>

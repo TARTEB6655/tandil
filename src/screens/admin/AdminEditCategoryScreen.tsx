@@ -27,6 +27,10 @@ import {
   ImageTooLargeError,
 } from '../../utils/compressImage';
 import { getCategoryShippingCost, getCategoryTaxPercentage } from '../../utils/categoryPricing';
+import AdminCatalogConvertRow from '../../components/admin/AdminCatalogConvertRow';
+import AdminCatalogConvertModal, {
+  AdminCatalogConvertTarget,
+} from '../../components/admin/AdminCatalogConvertModal';
 
 type AdminEditCategoryParams = { category: AdminCategory };
 
@@ -47,6 +51,7 @@ const AdminEditCategoryScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [pickingImage, setPickingImage] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [convertTarget, setConvertTarget] = useState<AdminCatalogConvertTarget | null>(null);
 
   useEffect(() => {
     if (category) {
@@ -357,6 +362,30 @@ const AdminEditCategoryScreen: React.FC = () => {
             <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
           </TouchableOpacity>
 
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {t('admin.catalogConvert.editSectionTitle', { defaultValue: 'Catalog type' })}
+            </Text>
+            <Text style={styles.fieldHint}>
+              {t('admin.catalogConvert.editSectionHint', {
+                defaultValue:
+                  'Change whether this entry appears under Categories or Services in the app.',
+              })}
+            </Text>
+            <AdminCatalogConvertRow
+              direction="category_to_service"
+              onPress={() =>
+                categoryId != null &&
+                setConvertTarget({
+                  direction: 'category_to_service',
+                  id: categoryId,
+                  name: name.trim() || category?.name || '',
+                })
+              }
+              disabled={!categoryId}
+            />
+          </View>
+
           <Button
             title={t('admin.categoryForm.submitUpdate')}
             onPress={handleUpdateCategory}
@@ -367,6 +396,36 @@ const AdminEditCategoryScreen: React.FC = () => {
           <View style={styles.bottomPad} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <AdminCatalogConvertModal
+        visible={convertTarget != null}
+        target={convertTarget}
+        onClose={() => setConvertTarget(null)}
+        onConverted={(result) => {
+          const displayName =
+            result.service?.name ?? convertTarget?.name ?? category?.name ?? '';
+          navigation.replace('AdminServices');
+          const buttons: Array<{ text: string; style?: 'cancel'; onPress?: () => void }> = [
+            { text: t('common.ok'), style: 'cancel' },
+          ];
+          if (result.service) {
+            const convertedService = result.service;
+            buttons.push({
+              text: t('admin.catalogConvert.viewService'),
+              onPress: () => navigation.navigate('AdminEditService', { service: convertedService }),
+            });
+          }
+          Alert.alert(
+            t('admin.catalogConvert.successServiceTitle'),
+            t('admin.catalogConvert.successServiceMessageList', {
+              name: displayName,
+              defaultValue:
+                '{{name}} is now a service and was removed from Categories. You will find it under Services.',
+            }),
+            buttons
+          );
+        }}
+      />
     </SafeAreaView>
   );
 };

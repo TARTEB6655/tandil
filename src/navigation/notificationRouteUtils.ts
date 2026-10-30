@@ -19,7 +19,7 @@ export const ROLE_APP_NOTIFICATION_FETCHERS: Record<string, NotificationAlertFet
   AdminApp: fetchAdminNotificationsForAlert,
 };
 
-const LOGIN_SCREEN_NAMES = new Set(['Login', 'TechnicianSignup']);
+const LOGIN_SCREEN_NAMES = new Set(['Login', 'TechnicianSignup', 'SupervisorSignup']);
 
 function collectRouteNames(state: NavigationState | undefined): string[] {
   const names: string[] = [];

@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { StaffLoginShell } from '../../components/auth/StaffLoginShell';
 import { authService } from '../../services/authService';
+import { navigateToForgotPassword } from '../../utils/navigateForgotPassword';
 import { useAppStore } from '../../store';
 import { COLORS } from '../../constants';
 
@@ -99,7 +100,7 @@ const HRManagerLoginScreen: React.FC = () => {
       passwordLabel={t('admin.hrManagerLogin.password')}
       passwordPlaceholder={t('admin.hrManagerLogin.passwordPlaceholder')}
       forgotPasswordLabel={t('admin.hrManagerLogin.forgotPassword')}
-      onForgotPassword={() => {}}
+      onForgotPassword={() => navigateToForgotPassword(navigation, 'hr')}
       signInLabel={t('admin.hrManagerLogin.signIn')}
       signingInLabel={t('admin.hrManagerLogin.signingIn')}
       backLabel={t('admin.hrManagerLogin.backToRoles')}

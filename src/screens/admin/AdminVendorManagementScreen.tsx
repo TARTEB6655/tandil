@@ -167,6 +167,24 @@ const AdminVendorManagementScreen: React.FC = () => {
             <TouchableOpacity
               style={styles.editBtn}
               onPress={() =>
+                navigation.navigate('AdminVendorPricingManage', {
+                  vendorId: item.vendor_id || item.id,
+                  businessName: item.business_name,
+                  contactName: item.contact_name,
+                  logoUrl: item.logo_url,
+                  currency: item.currency || 'AED',
+                })
+              }
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel={t('adminVendorManagement.vendorPricing', {
+                defaultValue: 'Check vendor pricing',
+              })}
+            >
+              <Ionicons name="pricetag-outline" size={18} color={COLORS.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() =>
                 navigation.navigate('AdminVendorForm', {
                   mode: 'edit',
                   vendorId: item.vendor_id || item.id,

@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { StaffLoginShell } from '../../components/auth/StaffLoginShell';
 import { authService } from '../../services/authService';
+import { navigateToForgotPassword } from '../../utils/navigateForgotPassword';
 import { useAppStore } from '../../store';
 
 function goToRoleSelection(navigation: any) {
@@ -99,7 +100,7 @@ const AdminLoginScreen: React.FC = () => {
       passwordLabel={t('admin.login.password')}
       passwordPlaceholder={t('admin.login.passwordPlaceholder')}
       forgotPasswordLabel={t('admin.login.forgotPassword')}
-      onForgotPassword={() => {}}
+      onForgotPassword={() => navigateToForgotPassword(navigation, 'admin')}
       signInLabel={t('admin.login.signIn')}
       signingInLabel={t('admin.login.signingIn')}
       backLabel={t('admin.login.backToRoles')}

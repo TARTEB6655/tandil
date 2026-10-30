@@ -50,13 +50,6 @@ import {
 } from '../../services/adminVendorManagementService';
 import { adminVendorService } from '../../services/adminVendorService';
 import type { VendorSignupRequest } from '../../types/vendorSignup';
-import {
-  catalogImagePickerOptions,
-  ensureVendorDocumentWithinLimit,
-  isImageTooLargeError,
-  MAX_CATALOG_IMAGE_MB,
-  MAX_VENDOR_DOCUMENT_MB,
-} from '../../utils/compressImage';
 
 type PickedFile = { uri: string; name: string; mimeType: string };
 
@@ -302,7 +295,6 @@ function FileUploadField({
   onClear,
   required,
   existingUrl,
-  maxMb = MAX_VENDOR_DOCUMENT_MB,
 }: {
   label: string;
   file: PickedFile | null;
@@ -310,7 +302,6 @@ function FileUploadField({
   onClear: () => void;
   required?: boolean;
   existingUrl?: string;
-  maxMb?: number;
 }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState<'file' | 'photo' | null>(null);
@@ -330,8 +321,6 @@ function FileUploadField({
         setFallbackOpen(false);
         return;
       }
-      const approxBytes = Math.floor((data.base64.length * 3) / 4);
-      await ensureVendorDocumentWithinLimit('', approxBytes, maxMb);
       const picked = await savePickedBase64File({
         name: data.name,
         mimeType: data.mimeType,
@@ -339,12 +328,7 @@ function FileUploadField({
       });
       onPicked(picked);
       setFallbackOpen(false);
-    } catch (err) {
-      if (isImageTooLargeError(err)) {
-        Alert.alert(t('common.error'), err.message);
-        setFallbackOpen(false);
-        return;
-      }
+    } catch {
       Alert.alert('Error', 'Could not save the selected file. Please try again.');
       setFallbackOpen(false);
     }
@@ -362,15 +346,6 @@ function FileUploadField({
       });
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
-        try {
-          await ensureVendorDocumentWithinLimit(asset.uri, asset.size, maxMb);
-        } catch (sizeErr: unknown) {
-          if (isImageTooLargeError(sizeErr)) {
-            Alert.alert(t('common.error'), sizeErr.message);
-            return;
-          }
-          throw sizeErr;
-        }
         const name = (asset.name || asset.uri.split('/').pop() || 'document').split('?')[0];
         const mimeType =
           asset.mimeType ||
@@ -381,11 +356,7 @@ function FileUploadField({
               : 'image/jpeg');
         onPicked({ uri: asset.uri, name, mimeType });
       }
-    } catch (err) {
-      if (isImageTooLargeError(err)) {
-        Alert.alert(t('common.error'), err.message);
-        return;
-      }
+    } catch {
       setFallbackOpen(true);
     } finally {
       setBusy(null);
@@ -401,19 +372,13 @@ function FileUploadField({
         Alert.alert(t('common.error'), t('vendorSignup.photoPermission'));
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsEditing: false,
+      });
       if (!result.canceled && result.assets?.[0]) {
-        const asset = result.assets[0];
-        try {
-          await ensureVendorDocumentWithinLimit(asset.uri, asset.fileSize, maxMb);
-          onPicked(fileFromAsset(asset, `photo_${Date.now()}.jpg`));
-        } catch (sizeErr: unknown) {
-          if (isImageTooLargeError(sizeErr)) {
-            Alert.alert(t('common.error'), sizeErr.message);
-            return;
-          }
-          throw sizeErr;
-        }
+        onPicked(fileFromAsset(result.assets[0], `photo_${Date.now()}.jpg`));
       }
     } catch {
       Alert.alert(
@@ -432,12 +397,6 @@ function FileUploadField({
       <Text style={styles.fieldLabel}>
         {label}
         {required ? <Text style={styles.req}> *</Text> : null}
-      </Text>
-      <Text style={styles.uploadSizeHint}>
-        {t('vendorSignup.documentMaxSizeHint', {
-          defaultValue: `You can upload a file of up to ${maxMb} MB only.`,
-          maxMb,
-        })}
       </Text>
 
       {file || existingUrl ? (
@@ -487,7 +446,7 @@ function FileUploadField({
           <Text style={styles.uploadActionTitle}>
             {t('vendorSignup.chooseFile', { defaultValue: 'Choose File' })}
           </Text>
-          <Text style={styles.uploadActionHint}>PDF / Docs · max {maxMb} MB</Text>
+          <Text style={styles.uploadActionHint}>PDF / Docs</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -504,7 +463,7 @@ function FileUploadField({
           <Text style={styles.uploadActionTitle}>
             {t('vendorSignup.choosePhoto', { defaultValue: 'Choose photo' })}
           </Text>
-          <Text style={styles.uploadActionHint}>Gallery · max {maxMb} MB</Text>
+          <Text style={styles.uploadActionHint}>Gallery</Text>
         </TouchableOpacity>
       </View>
 
@@ -1057,7 +1016,6 @@ const AdminVendorFormScreen: React.FC = () => {
             <FileUploadField
               label={t('vendorSignup.companyLogo')}
               required={false}
-              maxMb={MAX_CATALOG_IMAGE_MB}
               file={companyLogo}
               existingUrl={!companyLogo ? existingLogoUrl : undefined}
               onPicked={setCompanyLogo}
@@ -1487,13 +1445,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.medium,
     color: COLORS.text,
-    marginBottom: 4,
-  },
-  uploadSizeHint: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    marginBottom: SPACING.sm,
+    marginBottom: 6,
   },
   req: { color: COLORS.error },
   optional: { color: COLORS.textSecondary, fontWeight: FONT_WEIGHTS.regular, fontSize: FONT_SIZES.xs },

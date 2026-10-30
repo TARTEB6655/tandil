@@ -3,7 +3,8 @@
  *
  * Matches mobile Postman: POST /api/shop/checkout/stripe/payment-intent
  * Body: { is_buy_now, coupon_code, shipping, optional product_id + quantity for buy-now,
- * selected_option_ids, booking_date, booking_slot, use_wallet, wallet_amount }
+ * selected_option_ids, booking_date, booking_slot, required_area, tree_quantity, palm_tree_quantity,
+ * use_wallet, wallet_amount }
  * Response: { data: { client_secret } } for card flow; wallet-only may return success + order without `client_secret`.
  *
  * - POST /shop/checkout/confirm — body: { payment_intent_id } — after Payment Sheet success (Postman: "8. POST Checkout confirm")
@@ -34,6 +35,12 @@ export interface CreatePaymentIntentBody {
   wallet_amount?: number;
   /** Applied coupon code, or empty string when none (POST /shop/checkout/stripe/payment-intent). */
   coupon_code?: string;
+  /** Required area in m² for per-m² / combined service pricing. */
+  required_area?: number;
+  /** `fixed` or `per_m2` — omitted for base/catalog buy-now. */
+  area_pricing_mode?: 'fixed' | 'per_m2' | string;
+  tree_quantity?: number;
+  palm_tree_quantity?: number;
   shipping: ShippingPayload;
 }
 

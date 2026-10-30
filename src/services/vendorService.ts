@@ -5,15 +5,7 @@ import type { ProductCustomizationConfig } from '../types/productCustomization';
 import { mapCustomizationConfigToApiPayload } from '../utils/adminProductOptions';
 import { mapAdminApiOptionGroupsToCustomization } from '../utils/adminProductOptions';
 
-function parseProductOptionItems(payload: unknown): VendorProductCategoryOption[] {
-  const root = payload as { data?: { items?: unknown[] } | unknown[]; items?: unknown[] };
-  const items = Array.isArray(root?.data)
-    ? root.data
-    : Array.isArray((root?.data as { items?: unknown[] })?.items)
-      ? (root.data as { items: unknown[] }).items
-      : Array.isArray(root?.items)
-        ? root.items
-        : [];
+function mapIdNameOptionRows(items: unknown[]): VendorProductCategoryOption[] {
   return items
     .map((row) => {
       const item = row as { id?: number | string; name?: string };
@@ -23,6 +15,39 @@ function parseProductOptionItems(payload: unknown): VendorProductCategoryOption[
       return { id, name };
     })
     .filter((item): item is VendorProductCategoryOption => item != null);
+}
+
+/** Parse vendor / admin category option lists (multiple API shapes). */
+export function parseVendorPlatformCategoryOptions(payload: unknown): VendorProductCategoryOption[] {
+  const root = payload as {
+    success?: boolean;
+    data?: unknown[] | Record<string, unknown>;
+    items?: unknown[];
+    categories?: unknown[];
+  };
+  if (root?.success === false) return [];
+
+  const candidates: unknown[] = [];
+  const data = root?.data;
+  if (Array.isArray(data)) candidates.push(data);
+  else if (data && typeof data === 'object') {
+    const block = data as Record<string, unknown>;
+    for (const key of ['items', 'categories', 'data']) {
+      if (Array.isArray(block[key])) candidates.push(block[key]);
+    }
+  }
+  if (Array.isArray(root?.items)) candidates.push(root.items);
+  if (Array.isArray(root?.categories)) candidates.push(root.categories);
+
+  for (const arr of candidates) {
+    const mapped = mapIdNameOptionRows(arr);
+    if (mapped.length > 0) return mapped;
+  }
+  return [];
+}
+
+function parseProductOptionItems(payload: unknown): VendorProductCategoryOption[] {
+  return parseVendorPlatformCategoryOptions(payload);
 }
 
 function mapCustomizationToApi(customization?: ProductCustomizationConfig | null): {
@@ -751,6 +776,125 @@ function extractProductImages(product: Record<string, unknown>): VendorProductIm
   return items;
 }
 
+function resolveScalarFromRow(row: Record<string, unknown>, key: string): string | undefined {
+  const product = (row.product ?? {}) as Record<string, unknown>;
+  for (const record of [product, row]) {
+    const value = record[key];
+    if (value != null && String(value).trim()) return String(value).trim();
+  }
+  return undefined;
+}
+
+export function extractScalarFromPayload(payload: unknown, key: string): string | undefined {
+  const queue: unknown[] = [payload];
+  const seen = new Set<unknown>();
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (node == null || typeof node !== 'object' || seen.has(node)) continue;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const item of node) queue.push(item);
+      continue;
+    }
+    const record = node as Record<string, unknown>;
+    const value = record[key];
+    if (value != null && String(value).trim()) return String(value).trim();
+    for (const child of Object.values(record)) {
+      if (child != null && typeof child === 'object') queue.push(child);
+    }
+  }
+  return undefined;
+}
+
+function resolveProductDescriptionFromRow(row: Record<string, unknown>): string {
+  const product = (row.product ?? {}) as Record<string, unknown>;
+  for (const record of [product, row]) {
+    for (const key of ['description', 'short_description', 'body', 'details'] as const) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+  }
+  return '';
+}
+
+/** Walk GET payload when description is not on the mapped product row. */
+export function extractProductDescriptionFromPayload(payload: unknown): string | undefined {
+  const queue: unknown[] = [payload];
+  const seen = new Set<unknown>();
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (node == null || typeof node !== 'object' || seen.has(node)) continue;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const item of node) queue.push(item);
+      continue;
+    }
+    const record = node as Record<string, unknown>;
+    for (const key of ['description', 'short_description'] as const) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    for (const value of Object.values(record)) {
+      if (value != null && typeof value === 'object') queue.push(value);
+    }
+  }
+  return undefined;
+}
+
+function resolveProductServiceIdFromRecord(record: Record<string, unknown>): number | undefined {
+  const raw =
+    record.service_id ??
+    (record.service as { id?: number | string } | undefined)?.id ??
+    (Array.isArray(record.service_ids) ? record.service_ids[0] : undefined);
+  if (raw == null) return undefined;
+  const serviceId = Number(raw);
+  return Number.isFinite(serviceId) && serviceId > 0 ? serviceId : undefined;
+}
+
+/** Walk GET payload for service_id when detail omits it. */
+export function extractProductServiceIdFromPayload(payload: unknown): number | undefined {
+  const queue: unknown[] = [payload];
+  const seen = new Set<unknown>();
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (node == null || typeof node !== 'object' || seen.has(node)) continue;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const item of node) queue.push(item);
+      continue;
+    }
+    const record = node as Record<string, unknown>;
+    const direct = resolveProductServiceIdFromRecord(record);
+    if (direct != null) return direct;
+    for (const value of Object.values(record)) {
+      if (value != null && typeof value === 'object') queue.push(value);
+    }
+  }
+  return undefined;
+}
+
+export function resolveVendorProductServiceFromRow(
+  row: Record<string, unknown>
+): { service_id?: number; service_name?: string } {
+  const product = (row.product ?? {}) as Record<string, unknown>;
+  const serviceId =
+    resolveProductServiceIdFromRecord(product) ?? resolveProductServiceIdFromRecord(row);
+  const serviceName =
+    resolveProductServiceName(product) ||
+    resolveProductServiceName(row) ||
+    (typeof product.service_name === 'string' && product.service_name.trim()
+      ? product.service_name.trim()
+      : undefined) ||
+    (typeof row.service_name === 'string' && row.service_name.trim()
+      ? row.service_name.trim()
+      : undefined);
+
+  return {
+    ...(serviceId != null ? { service_id: serviceId } : {}),
+    ...(serviceName ? { service_name: serviceName } : {}),
+  };
+}
+
 /** Resolve display name from category/service relation shapes used by the API. */
 function resolveRelationName(value: unknown): string | undefined {
   if (typeof value === 'string' && value.trim()) return value.trim();
@@ -813,12 +957,12 @@ function mapVendorProductListItem(row: Record<string, unknown>): VendorCatalogPr
     id: String(row.id),
     vendor_id: row.vendor_id != null ? String(row.vendor_id) : undefined,
     product_id: row.product_id != null ? String(row.product_id) : undefined,
-    name: String(product.name ?? ''),
-    description: String(product.description ?? ''),
+    name: String(product.name ?? row.name ?? ''),
+    description: resolveProductDescriptionFromRow(row),
     category: categoryName || '—',
     service: serviceName,
     service_id: Number.isFinite(serviceIdNum) && serviceIdNum > 0 ? serviceIdNum : undefined,
-    sku: product.sku != null ? String(product.sku) : undefined,
+    sku: resolveScalarFromRow(row, 'sku'),
     images,
     price: Number(currentPrice.price ?? product.price ?? 0),
     compare_at_price:
@@ -836,13 +980,7 @@ function mapVendorProductListItem(row: Record<string, unknown>): VendorCatalogPr
 }
 
 function buildVendorRowFromFlatProduct(product: Record<string, unknown>): Record<string, unknown> {
-  const category = product.category as { id?: number; name?: string } | string | undefined;
-  const categoryId =
-    product.category_id != null
-      ? product.category_id
-      : typeof category === 'object' && category?.id != null
-        ? category.id
-        : undefined;
+  const categoryId = resolveProductCategoryId(product);
 
   return {
     id: product.vendor_product_id ?? product.id,
@@ -909,17 +1047,118 @@ function extractVendorProductRowFromPayload(payload: unknown): Record<string, un
   throw new Error('Product not found.');
 }
 
-function resolveProductCategoryId(product: Record<string, unknown>): number | undefined {
-  if (product.category_id != null) {
-    const categoryId = Number(product.category_id);
-    return Number.isFinite(categoryId) ? categoryId : undefined;
+function resolveProductCategoryId(record: Record<string, unknown>): number | undefined {
+  for (const key of ['category_id', 'platform_category_id', 'shop_category_id'] as const) {
+    const raw = record[key];
+    if (raw != null && typeof raw !== 'object') {
+      const categoryId = Number(raw);
+      if (Number.isFinite(categoryId) && categoryId > 0) return categoryId;
+    }
   }
-  const category = product.category as { id?: number } | undefined;
-  if (category?.id != null) {
-    const categoryId = Number(category.id);
-    return Number.isFinite(categoryId) ? categoryId : undefined;
+
+  for (const key of ['platform_category', 'shop_category', 'category'] as const) {
+    const nested = record[key];
+    if (nested != null && typeof nested === 'object' && !Array.isArray(nested)) {
+      const categoryId = Number((nested as { id?: number | string }).id);
+      if (Number.isFinite(categoryId) && categoryId > 0) return categoryId;
+    }
   }
+
+  if (Array.isArray(record.categories) && record.categories.length > 0) {
+    const first = record.categories[0];
+    if (first != null && typeof first === 'object') {
+      const categoryId = Number((first as { id?: number | string }).id);
+      if (Number.isFinite(categoryId) && categoryId > 0) return categoryId;
+    }
+  }
+
+  const categoryScalar = record.category;
+  if (typeof categoryScalar === 'number') {
+    if (Number.isFinite(categoryScalar) && categoryScalar > 0) return categoryScalar;
+  } else if (typeof categoryScalar === 'string' && /^\d+$/.test(categoryScalar.trim())) {
+    const categoryId = Number(categoryScalar.trim());
+    if (Number.isFinite(categoryId) && categoryId > 0) return categoryId;
+  }
+
   return undefined;
+}
+
+function resolveProductCategoryIdFromVendorRow(row: Record<string, unknown>): number | undefined {
+  const product = (row.product ?? {}) as Record<string, unknown>;
+  return resolveProductCategoryId(product) ?? resolveProductCategoryId(row);
+}
+
+/** Walk full GET payload — detail responses often nest category away from the mapped row. */
+export function extractProductCategoryIdFromPayload(payload: unknown): number | undefined {
+  const prioritizedKeys = ['platform_category_id', 'shop_category_id', 'category_id'] as const;
+  const queue: unknown[] = [payload];
+  const seen = new Set<unknown>();
+  const byKey: Partial<Record<(typeof prioritizedKeys)[number], number>> = {};
+
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (node == null || typeof node !== 'object' || seen.has(node)) continue;
+    seen.add(node);
+
+    if (Array.isArray(node)) {
+      for (const item of node) queue.push(item);
+      continue;
+    }
+
+    const record = node as Record<string, unknown>;
+    for (const key of prioritizedKeys) {
+      if (byKey[key] != null) continue;
+      const raw = record[key];
+      if (raw != null && typeof raw !== 'object') {
+        const categoryId = Number(raw);
+        if (Number.isFinite(categoryId) && categoryId > 0) byKey[key] = categoryId;
+      }
+    }
+
+    for (const key of ['platform_category', 'shop_category', 'category'] as const) {
+      const nested = record[key];
+      if (nested != null && typeof nested === 'object' && !Array.isArray(nested)) {
+        const categoryId = Number((nested as { id?: number | string }).id);
+        if (!Number.isFinite(categoryId) || categoryId <= 0) continue;
+        if (key === 'platform_category' && byKey.platform_category_id == null) {
+          byKey.platform_category_id = categoryId;
+        } else if (key === 'shop_category' && byKey.shop_category_id == null) {
+          byKey.shop_category_id = categoryId;
+        } else if (key === 'category' && byKey.category_id == null) {
+          byKey.category_id = categoryId;
+        }
+      }
+    }
+
+    for (const value of Object.values(record)) {
+      if (value != null && typeof value === 'object') queue.push(value);
+    }
+  }
+
+  return byKey.platform_category_id ?? byKey.shop_category_id ?? byKey.category_id;
+}
+
+export function resolveVendorProductCategoryFromRow(
+  row: Record<string, unknown>
+): { category_id?: number; category_name?: string } {
+  const product = (row.product ?? {}) as Record<string, unknown>;
+  const categoryId = resolveProductCategoryIdFromVendorRow(row);
+  const categoryName =
+    resolveRelationName(product.category) ||
+    resolveRelationName(row.category) ||
+    resolveRelationName(product.platform_category) ||
+    resolveRelationName(row.platform_category) ||
+    (typeof product.category_name === 'string' && product.category_name.trim()
+      ? product.category_name.trim()
+      : undefined) ||
+    (typeof row.category_name === 'string' && row.category_name.trim()
+      ? row.category_name.trim()
+      : undefined);
+
+  return {
+    ...(categoryId != null && categoryId > 0 ? { category_id: categoryId } : {}),
+    ...(categoryName ? { category_name: categoryName } : {}),
+  };
 }
 
 export function parseVendorProductDetail(payload: unknown): VendorProductDetail {
@@ -930,16 +1169,19 @@ export function parseVendorProductDetail(payload: unknown): VendorProductDetail 
     ? product.service_ids.map((id) => Number(id)).filter((id) => Number.isFinite(id))
     : [];
   if (serviceIds.length === 0) {
-    const singleServiceId =
-      product.service_id != null
-        ? Number(product.service_id)
-        : (product.service as { id?: number } | undefined)?.id != null
-          ? Number((product.service as { id?: number }).id)
-          : NaN;
-    if (Number.isFinite(singleServiceId) && singleServiceId > 0) {
-      serviceIds.push(singleServiceId);
-    }
+    const fromRow = resolveVendorProductServiceFromRow(row).service_id;
+    if (fromRow != null) serviceIds.push(fromRow);
   }
+  if (serviceIds.length === 0) {
+    const deepServiceId = extractProductServiceIdFromPayload(payload);
+    if (deepServiceId != null) serviceIds.push(deepServiceId);
+  }
+
+  const description =
+    base.description?.trim() ||
+    resolveProductDescriptionFromRow(row) ||
+    extractProductDescriptionFromPayload(payload) ||
+    '';
   let customization: ProductCustomizationConfig | null = null;
   try {
     customization = mapAdminApiOptionGroupsToCustomization(product.option_groups);
@@ -951,19 +1193,41 @@ export function parseVendorProductDetail(payload: unknown): VendorProductDetail 
   const imageUris =
     productImages.length > 0 ? productImages.map((i) => i.uri) : base.images;
 
+  const serviceId = base.service_id ?? serviceIds[0];
+  const sku =
+    base.sku ?? resolveScalarFromRow(row, 'sku') ?? extractScalarFromPayload(payload, 'sku');
+  const handle =
+    resolveScalarFromRow(row, 'handle') ?? extractScalarFromPayload(payload, 'handle');
+  const weightUnit =
+    resolveScalarFromRow(row, 'weight_unit') ??
+    extractScalarFromPayload(payload, 'weight_unit');
+  const estimatedArrival =
+    resolveScalarFromRow(row, 'estimated_arrival') ??
+    extractScalarFromPayload(payload, 'estimated_arrival');
+  const jobDuration =
+    resolveScalarFromRow(row, 'job_duration') ?? extractScalarFromPayload(payload, 'job_duration');
+  const productStatus =
+    resolveScalarFromRow(row, 'status') ??
+    (product.status != null ? String(product.status) : undefined) ??
+    (row.status != null ? String(row.status) : undefined);
+
   return {
     ...base,
+    description,
+    sku,
     images: imageUris,
     product_images: productImages,
-    product_status: product.status != null ? String(product.status) : undefined,
-    category_id: resolveProductCategoryId(product),
+    product_status: productStatus,
+    category_id:
+      resolveProductCategoryIdFromVendorRow(row) ??
+      extractProductCategoryIdFromPayload(payload),
+    service_id: serviceId,
     service_ids: serviceIds,
-    weight_unit: product.weight_unit != null ? String(product.weight_unit) : undefined,
-    is_featured: Boolean(product.is_featured),
-    handle: product.handle != null ? String(product.handle) : undefined,
-    estimated_arrival:
-      product.estimated_arrival != null ? String(product.estimated_arrival) : undefined,
-    job_duration: product.job_duration != null ? String(product.job_duration) : undefined,
+    weight_unit: weightUnit,
+    is_featured: Boolean(product.is_featured ?? row.is_featured),
+    handle,
+    estimated_arrival: estimatedArrival,
+    job_duration: jobDuration,
     product_type:
       product.product_type === 'variable' || product.product_type === 'simple'
         ? product.product_type

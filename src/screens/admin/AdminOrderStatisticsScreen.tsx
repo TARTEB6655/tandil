@@ -4,12 +4,14 @@ import {
   Alert,
   FlatList,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { BORDER_RADIUS, COLORS, FONT_SIZES, FONT_WEIGHTS, SPACING } from '../../constants';
@@ -106,6 +108,13 @@ function shopOrderToDashboardItem(o: {
   updated_at?: string;
   user?: { id?: number; name?: string; email?: string };
   customer?: { id?: number; name?: string; email?: string };
+  fulfillment_types?: string[];
+  is_marketplace?: boolean;
+  is_service?: boolean;
+  vendors?: AdminDashboardOrderListItem['vendors'];
+  supervisors?: AdminDashboardOrderListItem['supervisors'];
+  contractors?: AdminDashboardOrderListItem['contractors'];
+  service_visits?: AdminDashboardOrderListItem['service_visits'];
 }): AdminDashboardOrderListItem {
   const rawAmt = (o as { total_amount?: number | string }).total_amount;
   const rawTotal =
@@ -131,16 +140,36 @@ function shopOrderToDashboardItem(o: {
     },
     created_at: o.created_at ?? '',
     updated_at: o.updated_at ?? o.created_at ?? '',
+    fulfillment_types: o.fulfillment_types,
+    is_marketplace: o.is_marketplace,
+    is_service: o.is_service,
+    vendors: o.vendors,
+    supervisors: o.supervisors,
+    contractors: o.contractors,
+    service_visits: o.service_visits,
   };
 }
 
 const SUMMARY_GAP = SPACING.sm;
+const SUMMARY_HORIZONTAL_PADDING = SPACING.lg;
+
+function summaryColumnCount(screenWidth: number): number {
+  return screenWidth >= 600 ? 3 : 2;
+}
+
+function summaryCardWidthForScreen(screenWidth: number): number {
+  const columns = summaryColumnCount(screenWidth);
+  const gaps = SUMMARY_GAP * (columns - 1);
+  const usable = screenWidth - SUMMARY_HORIZONTAL_PADDING * 2 - gaps;
+  return usable / columns;
+}
 
 const AdminOrderStatisticsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t, i18n } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
-  const summaryCardWidth = (screenWidth - SPACING.lg * 2 - SUMMARY_GAP * 2) / 3;
+  const summaryCardWidth = summaryCardWidthForScreen(screenWidth);
   const [stats, setStats] = useState<AdminDashboardOrderStatsResponse['data']>(EMPTY_STATS);
   const [allOrders, setAllOrders] = useState<AdminDashboardOrderListItem[]>([]);
   const [processingOrders, setProcessingOrders] = useState<AdminDashboardOrderListItem[]>([]);
@@ -459,6 +488,7 @@ const AdminOrderStatisticsScreen: React.FC = () => {
         onPress={() =>
           navigation.navigate('AdminOrderDetail', {
             orderId: item.id,
+            orderPreview: item,
           })
         }
       >
@@ -525,19 +555,21 @@ const AdminOrderStatisticsScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerDecor} />
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerEyebrow}>
-            {t('admin.orderStatistics.eyebrow', { defaultValue: 'Dashboard' })}
-          </Text>
-          <Text style={styles.headerTitle}>{t('admin.orders.title')}</Text>
+      <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
+        <View style={styles.header}>
+          <View style={styles.headerDecor} />
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerEyebrow}>
+              {t('admin.orderStatistics.eyebrow', { defaultValue: 'Dashboard' })}
+            </Text>
+            <Text style={styles.headerTitle}>{t('admin.orders.title')}</Text>
+          </View>
+          <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.headerSpacer} />
-      </View>
+      </SafeAreaView>
 
       <FlatList
         style={styles.list}
@@ -575,14 +607,22 @@ const AdminOrderStatisticsScreen: React.FC = () => {
               ))}
             </View>
 
-            <View style={styles.tabRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.tabScroll}
+              contentContainerStyle={styles.tabRow}
+            >
               {tabs.map((tab) => (
                 <TouchableOpacity
                   key={tab.key}
                   style={[styles.tabBtn, selectedTab === tab.key && styles.tabBtnActive]}
                   onPress={() => setSelectedTab(tab.key)}
                 >
-                  <Text style={[styles.tabText, selectedTab === tab.key && styles.tabTextActive]}>
+                  <Text
+                    style={[styles.tabText, selectedTab === tab.key && styles.tabTextActive]}
+                    numberOfLines={1}
+                  >
                     {tab.label}
                   </Text>
                   <View style={[styles.tabCount, selectedTab === tab.key && styles.tabCountActive]}>
@@ -597,7 +637,7 @@ const AdminOrderStatisticsScreen: React.FC = () => {
                   </View>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
 
             <View style={styles.listSectionHeader}>
               <Text style={styles.listSectionTitle}>
@@ -622,7 +662,10 @@ const AdminOrderStatisticsScreen: React.FC = () => {
             </Text>
           </View>
         }
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: SPACING.xl + Math.max(insets.bottom, SPACING.md) },
+        ]}
       />
     </View>
   );
@@ -639,11 +682,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: COLORS.surfaceLight,
   },
+  headerSafeArea: {
+    backgroundColor: COLORS.primary,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.lg,
+    paddingTop: SPACING.sm,
     paddingBottom: SPACING.lg,
     backgroundColor: COLORS.primary,
     overflow: 'hidden',
@@ -699,12 +745,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: SUMMARY_GAP,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SUMMARY_HORIZONTAL_PADDING,
     paddingTop: SPACING.md,
     width: '100%',
+    alignSelf: 'stretch',
   },
   summaryCard: {
     minWidth: 0,
+    flexGrow: 0,
+    flexShrink: 0,
     backgroundColor: COLORS.background,
     borderRadius: 16,
     paddingVertical: SPACING.md,
@@ -732,13 +781,17 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontWeight: FONT_WEIGHTS.bold,
   },
+  tabScroll: {
+    flexGrow: 0,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
   tabRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.sm,
     gap: SPACING.sm,
+    paddingRight: SPACING.lg + SPACING.sm,
   },
   tabBtn: {
     flexDirection: 'row',
@@ -750,6 +803,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     gap: SPACING.xs,
+    flexShrink: 0,
   },
   tabBtnActive: {
     backgroundColor: COLORS.primary,
@@ -783,7 +837,7 @@ const styles = StyleSheet.create({
   },
   listSectionHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,
@@ -803,7 +857,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   listContent: {
-    paddingBottom: SPACING.xl * 2,
     width: '100%',
   },
   orderCard: {

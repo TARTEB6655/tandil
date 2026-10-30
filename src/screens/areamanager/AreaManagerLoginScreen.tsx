@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { StaffLoginShell } from '../../components/auth/StaffLoginShell';
 import { authService } from '../../services/authService';
+import { navigateToForgotPassword } from '../../utils/navigateForgotPassword';
 import { useAppStore } from '../../store';
 
 function goToRoleSelection(navigation: any) {
@@ -98,7 +99,7 @@ const AreaManagerLoginScreen: React.FC = () => {
       passwordLabel={t('admin.areaManagerLogin.password')}
       passwordPlaceholder={t('admin.areaManagerLogin.passwordPlaceholder')}
       forgotPasswordLabel={t('admin.areaManagerLogin.forgotPassword')}
-      onForgotPassword={() => {}}
+      onForgotPassword={() => navigateToForgotPassword(navigation, 'area_manager')}
       signInLabel={t('admin.areaManagerLogin.signIn')}
       signingInLabel={t('admin.areaManagerLogin.signingIn')}
       backLabel={t('admin.areaManagerLogin.backToRoles')}

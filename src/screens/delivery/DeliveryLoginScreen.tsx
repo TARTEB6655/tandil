@@ -14,6 +14,7 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { useTranslation } from 'react-i18next';
+import { navigateToForgotPassword } from '../../utils/navigateForgotPassword';
 
 function goToRoleSelection(navigation: any) {
   let rootNavigator = navigation;
@@ -51,7 +52,7 @@ const DeliveryLoginScreen: React.FC = () => {
   };
 
   const handleForgotPassword = () => {
-    Alert.alert(t('auth.forgotPassword'), t('auth.emailPlaceholder'));
+    navigateToForgotPassword(navigation, 'delivery');
   };
 
   return (

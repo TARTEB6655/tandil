@@ -40,13 +40,6 @@ import {
   DEFAULT_VENDOR_TYPE_OPTIONS,
 } from '../../services/adminVendorMetaService';
 import type { VendorSignupOption } from '../../types/adminVendorMeta';
-import {
-  catalogImagePickerOptions,
-  compressProfileImageForUpload,
-  ensureVendorDocumentWithinLimit,
-  isImageTooLargeError,
-  MAX_VENDOR_DOCUMENT_MB,
-} from '../../utils/compressImage';
 
 function formatTimeHHMM(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
@@ -195,7 +188,6 @@ function FileUploadField({
   onPicked,
   onClear,
   required,
-  maxMb = MAX_VENDOR_DOCUMENT_MB,
 }: {
   label: string;
   file: PickedUploadFile | null;
@@ -203,7 +195,6 @@ function FileUploadField({
   onClear: () => void;
   required?: boolean;
   hint?: string;
-  maxMb?: number;
 }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState<'file' | 'photo' | null>(null);
@@ -222,8 +213,6 @@ function FileUploadField({
         setFallbackOpen(false);
         return;
       }
-      const approxBytes = Math.floor((data.base64.length * 3) / 4);
-      await ensureVendorDocumentWithinLimit('', approxBytes, maxMb);
       const picked = await savePickedBase64File({
         name: data.name,
         mimeType: data.mimeType,
@@ -232,11 +221,6 @@ function FileUploadField({
       onPicked(picked);
       setFallbackOpen(false);
     } catch (err) {
-      if (isImageTooLargeError(err)) {
-        Alert.alert(t('common.error'), err.message);
-        setFallbackOpen(false);
-        return;
-      }
       console.warn('Failed to save picked file', err);
       Alert.alert('Error', 'Could not save the selected file. Please try again.');
       setFallbackOpen(false);
@@ -255,15 +239,6 @@ function FileUploadField({
       });
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
-        try {
-          await ensureVendorDocumentWithinLimit(asset.uri, asset.size, maxMb);
-        } catch (sizeErr: unknown) {
-          if (isImageTooLargeError(sizeErr)) {
-            Alert.alert(t('common.error'), sizeErr.message);
-            return;
-          }
-          throw sizeErr;
-        }
         const name = (asset.name || asset.uri.split('/').pop() || 'document').split('?')[0];
         const mimeType =
           asset.mimeType ||
@@ -275,10 +250,6 @@ function FileUploadField({
         onPicked({ uri: asset.uri, name, mimeType });
       }
     } catch (err) {
-      if (isImageTooLargeError(err)) {
-        Alert.alert(t('common.error'), err.message);
-        return;
-      }
       console.warn('DocumentPicker unavailable, opening fallback', err);
       setFallbackOpen(true);
     } finally {
@@ -295,19 +266,13 @@ function FileUploadField({
         Alert.alert(t('common.error'), t('vendorSignup.photoPermission'));
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsEditing: false,
+      });
       if (!result.canceled && result.assets?.[0]) {
-        const asset = result.assets[0];
-        try {
-          await ensureVendorDocumentWithinLimit(asset.uri, asset.fileSize, maxMb);
-          onPicked(fileFromAsset(asset, `photo_${Date.now()}.jpg`));
-        } catch (sizeErr: unknown) {
-          if (isImageTooLargeError(sizeErr)) {
-            Alert.alert(t('common.error'), sizeErr.message);
-            return;
-          }
-          throw sizeErr;
-        }
+        onPicked(fileFromAsset(result.assets[0], `photo_${Date.now()}.jpg`));
       }
     } catch (err) {
       console.warn('Gallery picker failed', err);
@@ -327,12 +292,6 @@ function FileUploadField({
       <Text style={styles.label}>
         {label}
         {required ? <Text style={styles.required}> *</Text> : null}
-      </Text>
-      <Text style={styles.uploadSizeHint}>
-        {t('vendorSignup.documentMaxSizeHint', {
-          defaultValue: `You can upload a file of up to ${maxMb} MB only.`,
-          maxMb,
-        })}
       </Text>
 
       {file ? (
@@ -379,7 +338,7 @@ function FileUploadField({
           <Text style={styles.uploadActionTitle}>
             {t('vendorSignup.chooseFile', { defaultValue: 'Choose File' })}
           </Text>
-          <Text style={styles.uploadActionHint}>PDF / Docs · max {maxMb} MB</Text>
+          <Text style={styles.uploadActionHint}>PDF / Docs</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -396,7 +355,7 @@ function FileUploadField({
           <Text style={styles.uploadActionTitle}>
             {t('vendorSignup.choosePhoto', { defaultValue: 'Choose photo' })}
           </Text>
-          <Text style={styles.uploadActionHint}>Gallery · max {maxMb} MB</Text>
+          <Text style={styles.uploadActionHint}>Gallery</Text>
         </TouchableOpacity>
       </View>
 
@@ -546,26 +505,13 @@ const VendorSignupScreen: React.FC = () => {
       Alert.alert(t('common.error'), t('vendorSignup.photoPermission'));
       return null;
     }
-    const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+      allowsEditing: false,
+    });
     if (result.canceled || !result.assets?.[0]) return null;
-    const asset = result.assets[0];
-    try {
-      const uri = await compressProfileImageForUpload(asset.uri, asset.fileSize);
-      return fileFromAsset({ ...asset, uri }, forLogo ? 'logo.jpg' : 'upload.jpg');
-    } catch (sizeErr: unknown) {
-      if (isImageTooLargeError(sizeErr)) {
-        Alert.alert(
-          t('common.error'),
-          sizeErr.message ||
-            t('common.imageMaxSize', {
-              defaultValue:
-                'You can upload an image of up to 5 MB only. Please choose a smaller file.',
-            })
-        );
-        return null;
-      }
-      throw sizeErr;
-    }
+    return fileFromAsset(result.assets[0], forLogo ? 'logo.jpg' : 'upload.jpg');
   }, [t]);
 
   const handleMapSelect = (a: AddressFromLocation, coords?: { latitude: number; longitude: number }) => {
@@ -1288,12 +1234,6 @@ const styles = StyleSheet.create({
   chipText: { fontSize: FONT_SIZES.sm, color: COLORS.text },
   chipTextActive: { color: COLORS.background, fontWeight: FONT_WEIGHTS.semiBold },
   uploadField: { marginBottom: SPACING.xs },
-  uploadSizeHint: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    marginBottom: SPACING.sm,
-  },
   uploadSelected: {
     flexDirection: 'row',
     alignItems: 'center',

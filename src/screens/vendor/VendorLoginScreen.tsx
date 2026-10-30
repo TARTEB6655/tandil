@@ -19,6 +19,7 @@ import { Button } from '../../components/common/Button';
 import { authService } from '../../services/authService';
 import { useAppStore } from '../../store';
 import { roleMatchesPortal } from '../../utils/sessionRestore';
+import { navigateToForgotPassword } from '../../utils/navigateForgotPassword';
 
 function goToRoleSelection(navigation: any) {
   let rootNavigator = navigation;
@@ -167,6 +168,13 @@ const VendorLoginScreen: React.FC = () => {
               leftIcon="lock-closed-outline"
             />
 
+            <TouchableOpacity
+              style={styles.forgotBtn}
+              onPress={() => navigateToForgotPassword(navigation, 'vendor')}
+            >
+              <Text style={styles.forgotText}>{t('auth.forgotPassword')}</Text>
+            </TouchableOpacity>
+
             <Button title={t('auth.login')} onPress={handleLogin} loading={isLoading} />
 
             <TouchableOpacity
@@ -258,6 +266,16 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
   },
   errorText: { color: COLORS.error, fontSize: FONT_SIZES.sm },
+  forgotBtn: {
+    alignSelf: 'flex-end',
+    marginTop: -SPACING.xs,
+    paddingVertical: SPACING.xs,
+  },
+  forgotText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
   signupLink: { alignItems: 'center', marginTop: SPACING.xs },
   signupText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
   signupTextBold: { color: COLORS.primary, fontWeight: FONT_WEIGHTS.semiBold },

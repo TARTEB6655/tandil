@@ -21,6 +21,7 @@ import AdminAppNavigator from './AdminAppNavigator';
 import DeliveryAppNavigator from './DeliveryAppNavigator';
 import VendorAppNavigator from './VendorAppNavigator';
 import VendorLoginScreen from '../screens/vendor/VendorLoginScreen';
+import ForgotPasswordNavigator from './ForgotPasswordNavigator';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -52,6 +53,7 @@ export const AppNavigator: React.FC = () => {
         <Stack.Screen name="DeliveryApp" component={DeliveryAppNavigator} />
         <Stack.Screen name="VendorApp" component={VendorAppNavigator} />
         <Stack.Screen name="VendorLogin" component={VendorLoginScreen} />
+        <Stack.Screen name="ForgotPasswordFlow" component={ForgotPasswordNavigator} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -17,7 +17,11 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { buildFullImageUrl } from '../../config/api';
-import { adminService, AdminService } from '../../services/adminService';
+import { adminService, AdminCategory, AdminService } from '../../services/adminService';
+import AdminCatalogConvertRow from '../../components/admin/AdminCatalogConvertRow';
+import AdminCatalogConvertModal, {
+  AdminCatalogConvertTarget,
+} from '../../components/admin/AdminCatalogConvertModal';
 
 const PER_PAGE = 50;
 
@@ -33,6 +37,7 @@ const AdminServicesScreen: React.FC = () => {
   const [lastPage, setLastPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [convertTarget, setConvertTarget] = useState<AdminCatalogConvertTarget | null>(null);
 
   const fetchServices = useCallback(async (page = 1, isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -160,59 +165,118 @@ const AdminServicesScreen: React.FC = () => {
     [t, togglingId]
   );
 
+  const handleCatalogConverted = useCallback(
+    (result: {
+      direction: AdminCatalogConvertTarget['direction'];
+      sourceId: number;
+      category?: AdminCategory;
+      service?: AdminService;
+    }) => {
+      if (result.direction === 'service_to_category') {
+        setServices((prev) => prev.filter((s) => s.id !== result.sourceId));
+      }
+      fetchServices(1, true);
+
+      const categoryName =
+        result.category?.name ??
+        convertTarget?.name ??
+        t('admin.catalogConvert.convertedItem', { defaultValue: 'This item' });
+
+      if (result.direction === 'service_to_category') {
+        const buttons: Array<{ text: string; style?: 'cancel'; onPress?: () => void }> = [
+          { text: t('common.ok'), style: 'cancel' },
+          {
+            text: t('admin.catalogConvert.openCategoriesList'),
+            onPress: () => navigation.navigate('AdminCategories'),
+          },
+        ];
+        if (result.category) {
+          const convertedCategory = result.category;
+          buttons.push({
+            text: t('admin.catalogConvert.viewCategory'),
+            onPress: () =>
+              navigation.navigate('AdminEditCategory', { category: convertedCategory }),
+          });
+        }
+        Alert.alert(
+          t('admin.catalogConvert.successCategoryTitle'),
+          t('admin.catalogConvert.successCategoryMessageList', {
+            name: categoryName,
+            defaultValue:
+              '{{name}} is now a category and was removed from Services. You will find it under Categories.',
+          }),
+          buttons
+        );
+      }
+    },
+    [convertTarget?.name, fetchServices, navigation, t]
+  );
+
   const renderItem = ({ item }: { item: AdminService }) => {
     const imageUri = item.image_url ?? (item.image ? buildFullImageUrl(item.image) : null);
     return (
-      <View style={styles.row}>
-        <View style={styles.iconCircle}>
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.serviceThumb} contentFit="cover" />
-          ) : (
-            <Ionicons name="construct-outline" size={24} color={COLORS.primary} />
-          )}
-        </View>
-        <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
-          {item.slug ? (
-            <Text style={styles.slug} numberOfLines={1}>{item.slug}</Text>
-          ) : null}
-          {item.description ? (
-            <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
-          ) : null}
-          <View style={styles.metaRow}>
-            {item.products_count != null && (
-              <Text style={styles.meta}>{item.products_count} products</Text>
-            )}
-            {item.is_active === false && (
-              <Text style={styles.inactiveBadge}>{t('admin.services.inactive', 'Inactive')}</Text>
+      <View style={styles.rowCard}>
+        <View style={styles.row}>
+          <View style={styles.iconCircle}>
+            {imageUri ? (
+              <Image source={{ uri: imageUri }} style={styles.serviceThumb} contentFit="cover" />
+            ) : (
+              <Ionicons name="construct-outline" size={24} color={COLORS.primary} />
             )}
           </View>
-        </View>
-        <View style={styles.rowRight}>
-          <View style={styles.toggleWrap}>
-            <Switch
-              value={item.is_active !== false}
-              onValueChange={() => handleToggleStatus(item)}
-              disabled={togglingId === item.id}
-              trackColor={{ false: COLORS.border, true: COLORS.primary }}
-              thumbColor={COLORS.background}
-            />
+          <View style={styles.info}>
+            <Text style={styles.name} numberOfLines={2}>
+              {item.name}
+            </Text>
+            {item.slug ? (
+              <Text style={styles.slug} numberOfLines={1}>
+                {item.slug}
+              </Text>
+            ) : null}
+            {item.description ? (
+              <Text style={styles.description} numberOfLines={2}>
+                {item.description}
+              </Text>
+            ) : null}
+            <View style={styles.metaRow}>
+              {item.products_count != null && (
+                <Text style={styles.meta}>{item.products_count} products</Text>
+              )}
+              {item.is_active === false && (
+                <Text style={styles.inactiveBadge}>{t('admin.services.inactive', 'Inactive')}</Text>
+              )}
+            </View>
           </View>
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.smallBtn}
-              onPress={() => handleEditService(item)}
-            >
-              <Ionicons name="create-outline" size={18} color={COLORS.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.smallBtn}
-              onPress={() => handleDeleteService(item)}
-            >
-              <Ionicons name="trash-outline" size={18} color={COLORS.error} />
-            </TouchableOpacity>
+          <View style={styles.rowRight}>
+            <View style={styles.toggleWrap}>
+              <Switch
+                value={item.is_active !== false}
+                onValueChange={() => handleToggleStatus(item)}
+                disabled={togglingId === item.id}
+                trackColor={{ false: COLORS.border, true: COLORS.primary }}
+                thumbColor={COLORS.background}
+              />
+            </View>
+            <View style={styles.actions}>
+              <TouchableOpacity style={styles.smallBtn} onPress={() => handleEditService(item)}>
+                <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.smallBtn} onPress={() => handleDeleteService(item)}>
+                <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
+        <AdminCatalogConvertRow
+          direction="service_to_category"
+          onPress={() =>
+            setConvertTarget({
+              direction: 'service_to_category',
+              id: item.id,
+              name: item.name,
+            })
+          }
+        />
       </View>
     );
   };
@@ -278,6 +342,13 @@ const AdminServicesScreen: React.FC = () => {
           }
         />
       )}
+
+      <AdminCatalogConvertModal
+        visible={convertTarget != null}
+        target={convertTarget}
+        onClose={() => setConvertTarget(null)}
+        onConverted={handleCatalogConverted}
+      />
     </SafeAreaView>
   );
 };
@@ -314,6 +385,9 @@ const styles = StyleSheet.create({
   retryBtnText: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.semiBold, color: COLORS.background },
   emptyWrap: { paddingVertical: SPACING.xl * 2, alignItems: 'center' },
   emptyText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
+  rowCard: {
+    marginBottom: SPACING.sm,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -322,7 +396,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
-    marginBottom: SPACING.sm,
   },
   iconCircle: {
     width: 48,

@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { StaffLoginShell } from '../../components/auth/StaffLoginShell';
 import { authService } from '../../services/authService';
+import { navigateToForgotPassword } from '../../utils/navigateForgotPassword';
 import { useAppStore } from '../../store';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 
@@ -97,7 +98,7 @@ const TechnicianLoginScreen: React.FC = () => {
       passwordLabel={t('auth.passwordLabel')}
       passwordPlaceholder={t('auth.passwordPlaceholder')}
       forgotPasswordLabel={t('auth.forgotPassword')}
-      onForgotPassword={() => Alert.alert(t('auth.forgotPassword'), t('auth.emailPlaceholder'))}
+      onForgotPassword={() => navigateToForgotPassword(navigation, 'technician')}
       signInLabel={t('auth.login', { defaultValue: 'Sign In' })}
       signingInLabel={t('auth.login', { defaultValue: 'Signing In...' })}
       backLabel={t('splash.skip', { defaultValue: 'Back to roles' })}

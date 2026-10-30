@@ -37,6 +37,8 @@ import AdminEditServiceScreen from '../screens/admin/AdminEditServiceScreen';
 import AdminBannersScreen from '../screens/admin/AdminBannersScreen';
 import AdminVideoBannerScreen from '../screens/admin/AdminVideoBannerScreen';
 import AdminProductSettingsScreen from '../screens/admin/AdminProductSettingsScreen';
+import AdminVendorPricingListScreen from '../screens/admin/AdminVendorPricingListScreen';
+import AdminVendorPricingManageScreen from '../screens/admin/AdminVendorPricingManageScreen';
 import AdminAppContentSettingsScreen from '../screens/admin/AdminAppContentSettingsScreen';
 import AdminMaintenancePhotosScreen from '../screens/admin/AdminMaintenancePhotosScreen';
 import AdminProfileEditScreen from '../screens/admin/AdminProfileEditScreen';
@@ -207,6 +209,8 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminBanners" component={AdminBannersScreen} />
         <Stack.Screen name="AdminVideoBanner" component={AdminVideoBannerScreen} />
         <Stack.Screen name="AdminProductSettings" component={AdminProductSettingsScreen} />
+        <Stack.Screen name="AdminVendorPricingList" component={AdminVendorPricingListScreen} />
+        <Stack.Screen name="AdminVendorPricingManage" component={AdminVendorPricingManageScreen} />
         <Stack.Screen name="AdminAppContentSettings" component={AdminAppContentSettingsScreen} />
         <Stack.Screen name="AdminMaintenancePhotos" component={AdminMaintenancePhotosScreen} />
         <Stack.Screen name="AdminProfileEdit" component={AdminProfileEditScreen} />

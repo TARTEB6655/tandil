@@ -23,11 +23,6 @@ import {
   UserProfileData,
   getProfilePictureUrl,
 } from '../../services/userService';
-import {
-  catalogImagePickerOptions,
-  compressProfileImageForUpload,
-  isImageTooLargeError,
-} from '../../utils/compressImage';
 
 const PersonalInfoScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -81,32 +76,21 @@ const PersonalInfoScreen: React.FC = () => {
         Alert.alert(t('personalInfo.permissionTitle', 'Permission needed'), t('personalInfo.permissionMessage', 'Allow access to photos to change profile picture.'));
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync(catalogImagePickerOptions());
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
-        try {
-          const uri = await compressProfileImageForUpload(asset.uri, asset.fileSize);
-          const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
-          const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
-          setProfilePicture({
-            uri,
-            type: mime,
-            name: `profile.${ext === 'jpeg' ? 'jpg' : ext}`,
-          });
-        } catch (sizeErr: unknown) {
-          if (isImageTooLargeError(sizeErr)) {
-            Alert.alert(
-              t('personalInfo.error', 'Error'),
-              sizeErr.message ||
-                t('common.imageMaxSize', {
-                  defaultValue:
-                    'You can upload an image of up to 5 MB only. Please choose a smaller file.',
-                })
-            );
-            return;
-          }
-          throw sizeErr;
-        }
+        const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+        const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
+        setProfilePicture({
+          uri: asset.uri,
+          type: mime,
+          name: `profile.${ext}`,
+        });
       }
     } catch (err: any) {
       Alert.alert(t('personalInfo.error', 'Error'), err?.message ?? t('personalInfo.pickError', 'Could not open photos'));

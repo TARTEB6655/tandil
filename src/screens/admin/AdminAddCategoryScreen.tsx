@@ -19,7 +19,8 @@ import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
-import { adminService } from '../../services/adminService';
+import { adminService, AdminCategory } from '../../services/adminService';
+import { sortOrderForNewAdminCategory } from '../../utils/adminCategorySort';
 import {
   catalogImagePickerOptions,
   compressCatalogImageForUpload,
@@ -129,6 +130,16 @@ const AdminAddCategoryScreen: React.FC = () => {
 
     setLoading(true);
     try {
+      let sort_order: number | undefined;
+      try {
+        const res = await adminService.getCategories({ page: 1, per_page: 200 });
+        const isArray = Array.isArray(res.data);
+        const list = (isArray ? res.data : (res.data as { data?: AdminCategory[] })?.data ?? []) as AdminCategory[];
+        sort_order = sortOrderForNewAdminCategory(list);
+      } catch {
+        sort_order = 1;
+      }
+
       await adminService.createCategory({
         name: name.trim(),
         slug: slug.trim() || undefined,
@@ -136,6 +147,7 @@ const AdminAddCategoryScreen: React.FC = () => {
         shipping_cost: parseFloat(shippingAmount),
         tax_percentage: parseFloat(taxPercentage),
         is_active: isActive ? 1 : 0,
+        sort_order,
         image: image ?? undefined,
       });
       Alert.alert(

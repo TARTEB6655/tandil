@@ -3,6 +3,7 @@
  * Params: vendorId, vendorName?, mode?: 'add' | 'edit', productId?, listingType?: 'product' | 'service'
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -45,10 +46,60 @@ import { hasLocalOptionImageUploads, isLocalImageUri } from '../../utils/adminPr
 import ProductCustomizationBuilder from '../../components/admin/ProductCustomizationBuilder';
 import type { ProductCustomizationConfig } from '../../types/productCustomization';
 import { setProductCustomization } from '../../services/productCustomizationService';
+import {
+  writeAdminVendorListingType,
+  writeCachedProductServiceId as writeCachedProductServiceIdShared,
+  vendorProductServiceCacheKey,
+} from '../../utils/adminVendorProductListingCache';
 
 const STATUS_VALUES = ['active', 'draft', 'archived'] as const;
 const WEIGHT_UNITS = ['kg', 'g', 'lb', 'oz'] as const;
 const SCREEN_BG = COLORS.surfaceLight;
+
+const vendorProductCategoryCacheKey = (id: string) => `@admin_vendor_product_category:${id}`;
+
+function inferVendorListingType(
+  detail: VendorProductDetail,
+  fallback: 'product' | 'service'
+): 'product' | 'service' {
+  const hasService =
+    (detail.service_ids?.length ?? 0) > 0 ||
+    (detail.service_id != null && detail.service_id > 0) ||
+    Boolean(detail.service?.trim() && detail.service !== '—');
+  if (hasService) return 'service';
+  if (detail.category_id != null && detail.category_id > 0) return 'product';
+  return fallback;
+}
+
+async function readCachedProductCategoryId(productId: string): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(vendorProductCategoryCacheKey(productId));
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCachedProductCategoryId(productId: string, categoryId: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(vendorProductCategoryCacheKey(productId), String(categoryId));
+  } catch {
+    // ignore
+  }
+}
+
+async function readCachedProductServiceId(productId: string): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(vendorProductServiceCacheKey(productId));
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
 
 const AdminVendorProductFormScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -59,13 +110,19 @@ const AdminVendorProductFormScreen: React.FC = () => {
   const mode: 'add' | 'edit' = route.params?.mode === 'edit' ? 'edit' : 'add';
   const productId =
     route.params?.productId != null ? String(route.params.productId).trim() : '';
-  const initialListingType =
+  const initialCategoryIdParam = route.params?.initialCategoryId;
+  const initialCategoryNameParam = route.params?.initialCategoryName as string | undefined;
+  const initialServiceIdParam = route.params?.initialServiceId;
+  const initialServiceNameParam = route.params?.initialServiceName as string | undefined;
+  const initialSkuParam = route.params?.initialSku as string | undefined;
+  const initialHandleParam = route.params?.initialHandle as string | undefined;
+  const initialListingTypeParam =
     route.params?.listingType === 'service' ? 'service' : 'product';
 
   const isEdit = mode === 'edit' && Boolean(productId);
   const scrollRef = useRef<ScrollView>(null);
 
-  const [listingType, setListingType] = useState<'product' | 'service'>(initialListingType);
+  const [listingType, setListingType] = useState<'product' | 'service'>(initialListingTypeParam);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -101,20 +158,64 @@ const AdminVendorProductFormScreen: React.FC = () => {
 
   const isProductListing = listingType === 'product';
 
+  const alignDetailCategoryWithPlatform = (
+    detail: VendorProductDetail,
+    platformCategories: Awaited<
+      ReturnType<typeof adminVendorManagementService.getVendorPlatformCategories>
+    >
+  ): VendorProductDetail => {
+    let categoryId = detail.category_id;
+    const label = detail.category?.trim();
+    const hasLabel = Boolean(label && label !== '—');
+
+    if (hasLabel) {
+      const normalized = label!.toLowerCase();
+      const exact = platformCategories.find((c) => c.name.trim().toLowerCase() === normalized);
+      if (exact) categoryId = exact.id;
+    }
+
+    if (
+      categoryId != null &&
+      categoryId > 0 &&
+      !platformCategories.some((c) => c.id === categoryId) &&
+      hasLabel
+    ) {
+      const normalized = label!.toLowerCase();
+      const byName = platformCategories.find((c) => c.name.trim().toLowerCase() === normalized);
+      if (byName) categoryId = byName.id;
+    }
+
+    if ((categoryId == null || categoryId <= 0) && hasLabel) {
+      const normalized = label!.toLowerCase();
+      const byName = platformCategories.find((c) => c.name.trim().toLowerCase() === normalized);
+      if (byName) categoryId = byName.id;
+    }
+
+    if (categoryId != null && categoryId > 0 && categoryId !== detail.category_id) {
+      return { ...detail, category_id: categoryId };
+    }
+    if ((categoryId == null || categoryId <= 0) && detail.category_id == null) {
+      return detail;
+    }
+    if (categoryId != null && categoryId > 0) {
+      return { ...detail, category_id: categoryId };
+    }
+    return detail;
+  };
+
+  /** Vendor marketplace products require platform category ids (not GET /admin/categories). */
   const fetchCategories = useCallback(async () => {
     try {
-      const res = await adminService.getCategories({ page: 1, per_page: 100 });
-      const list = Array.isArray(res.data) ? res.data : (res.data as { data?: AdminCategory[] })?.data ?? [];
-      setCategories(Array.isArray(list) ? list : []);
+      const list = await adminVendorManagementService.getVendorPlatformCategories(vendorId);
+      const next = list.map((c) => ({ id: c.id, name: c.name } as AdminCategory));
+      setCategories((prev) => {
+        const extras = prev.filter((p) => !next.some((n) => n.id === p.id));
+        return [...next, ...extras];
+      });
     } catch {
-      try {
-        const list = await vendorService.getProductCategories();
-        setCategories(list.map((c) => ({ id: c.id, name: c.name } as AdminCategory)));
-      } catch {
-        setCategories([]);
-      }
+      setCategories((prev) => (prev.length > 0 ? prev : []));
     }
-  }, []);
+  }, [vendorId]);
 
   const fetchServices = useCallback(async () => {
     try {
@@ -131,25 +232,52 @@ const AdminVendorProductFormScreen: React.FC = () => {
     }
   }, []);
 
-  const applyDetailToForm = useCallback((detail: VendorProductDetail) => {
-    const hasService =
-      (detail.service_ids?.length ?? 0) > 0 ||
-      detail.service_id != null ||
-      Boolean(detail.service?.trim());
-    setListingType(hasService && !detail.category_id ? 'service' : 'product');
+  const applyDetailToForm = useCallback(
+    (detail: VendorProductDetail, listingFallback: 'product' | 'service' = 'product') => {
+    const listing = inferVendorListingType(detail, listingFallback);
+    setListingType(listing);
     setName(detail.name);
     setDescription(detail.description ?? '');
     setPrice(String(detail.price ?? ''));
     setStock(String(detail.stock_quantity ?? ''));
     setStatus(detail.product_status ?? 'active');
-    setCategoryId(detail.category_id != null ? String(detail.category_id) : '');
-    setServiceId(
-      detail.service_ids?.[0] != null
-        ? String(detail.service_ids[0])
-        : detail.service_id != null
-          ? String(detail.service_id)
-          : ''
-    );
+
+    const resolvedServiceId =
+      detail.service_ids?.[0] != null && detail.service_ids[0] > 0
+        ? detail.service_ids[0]
+        : detail.service_id != null && detail.service_id > 0
+          ? detail.service_id
+          : null;
+
+    if (listing === 'service') {
+      setCategoryId('');
+      if (resolvedServiceId != null) {
+        const serviceLabel =
+          detail.service && detail.service.trim() && detail.service !== '—'
+            ? detail.service.trim()
+            : `Service #${resolvedServiceId}`;
+        setServices((prev) => {
+          if (prev.some((s) => s.id === resolvedServiceId)) return prev;
+          return [...prev, { id: resolvedServiceId, name: serviceLabel } as AdminService];
+        });
+      }
+      setServiceId(resolvedServiceId != null ? String(resolvedServiceId) : '');
+    } else {
+      setServiceId('');
+      const resolvedCategoryId =
+        detail.category_id != null && detail.category_id > 0 ? detail.category_id : null;
+      setCategoryId(resolvedCategoryId != null ? String(resolvedCategoryId) : '');
+      if (resolvedCategoryId != null) {
+        const label =
+          detail.category && detail.category.trim() && detail.category !== '—'
+            ? detail.category.trim()
+            : `Category #${resolvedCategoryId}`;
+        setCategories((prev) => {
+          if (prev.some((c) => c.id === resolvedCategoryId)) return prev;
+          return [...prev, { id: resolvedCategoryId, name: label, slug: '' } as AdminCategory];
+        });
+      }
+    }
     setWeightUnit(detail.weight_unit ?? 'kg');
     setIsFeatured(Boolean(detail.is_featured));
     setSku(detail.sku ?? '');
@@ -169,7 +297,9 @@ const AdminVendorProductFormScreen: React.FC = () => {
     setRemoveMainImageFlag(false);
     setCustomizationConfig(detail.customization ?? { groups: [] });
     setErrors({});
-  }, []);
+  },
+  []
+  );
 
   const loadProductDetail = useCallback(async () => {
     if (!isEdit || !vendorId || !productId) {
@@ -179,8 +309,107 @@ const AdminVendorProductFormScreen: React.FC = () => {
     setLoadingDetail(true);
     setLoadError(null);
     try {
-      const detail = await adminVendorManagementService.getVendorProduct(vendorId, productId);
-      applyDetailToForm(detail);
+      try {
+        const res = await adminService.getServices({ page: 1, per_page: 100 });
+        const list = Array.isArray(res.data) ? res.data : (res as { data?: AdminService[] })?.data ?? [];
+        setServices(Array.isArray(list) ? list : []);
+      } catch {
+        try {
+          const list = await vendorService.getProductServices();
+          setServices(list.map((s) => ({ id: s.id, name: s.name } as AdminService)));
+        } catch {
+          setServices([]);
+        }
+      }
+
+      const platformCategories =
+        await adminVendorManagementService.getVendorPlatformCategories(vendorId);
+      setCategories((prev) => {
+        const next = platformCategories.map(
+          (c) => ({ id: c.id, name: c.name }) as AdminCategory
+        );
+        const extras = prev.filter((p) => !next.some((n) => n.id === p.id));
+        return [...next, ...extras];
+      });
+
+      let detail = await adminVendorManagementService.getVendorProduct(vendorId, productId);
+
+      if (!detail.sku?.trim() && initialSkuParam?.trim()) {
+        detail = { ...detail, sku: initialSkuParam.trim() };
+      }
+      if (!detail.handle?.trim() && initialHandleParam?.trim()) {
+        detail = { ...detail, handle: initialHandleParam.trim() };
+      }
+
+      const routeServiceId =
+        initialServiceIdParam != null ? Number(initialServiceIdParam) : NaN;
+      if (
+        (detail.service_id == null || detail.service_id <= 0) &&
+        !(detail.service_ids?.length ?? 0) &&
+        Number.isFinite(routeServiceId) &&
+        routeServiceId > 0
+      ) {
+        detail = {
+          ...detail,
+          service_id: routeServiceId,
+          service_ids: [routeServiceId],
+          service:
+            initialServiceNameParam?.trim() ||
+            detail.service ||
+            `Service #${routeServiceId}`,
+        };
+      }
+
+      if (
+        (detail.service_id == null || detail.service_id <= 0) &&
+        !(detail.service_ids?.length ?? 0)
+      ) {
+        const cachedServiceId = await readCachedProductServiceId(productId);
+        if (cachedServiceId != null) {
+          detail = {
+            ...detail,
+            service_id: cachedServiceId,
+            service_ids: [cachedServiceId],
+          };
+        }
+      }
+
+      let listingHint = inferVendorListingType(detail, initialListingTypeParam);
+
+      if (listingHint === 'product') {
+        if (detail.category_id == null || detail.category_id <= 0) {
+          const cachedCategoryId = await readCachedProductCategoryId(productId);
+          if (cachedCategoryId != null) {
+            detail = { ...detail, category_id: cachedCategoryId };
+          }
+        }
+
+        const routeCategoryId =
+          initialCategoryIdParam != null ? Number(initialCategoryIdParam) : NaN;
+        if (
+          (detail.category_id == null || detail.category_id <= 0) &&
+          Number.isFinite(routeCategoryId) &&
+          routeCategoryId > 0
+        ) {
+          detail = {
+            ...detail,
+            category_id: routeCategoryId,
+            category:
+              initialCategoryNameParam?.trim() ||
+              detail.category ||
+              `Category #${routeCategoryId}`,
+          };
+        }
+
+        detail = alignDetailCategoryWithPlatform(detail, platformCategories);
+        listingHint = inferVendorListingType(detail, initialListingTypeParam);
+      }
+
+      if (listingHint === 'service') {
+        detail = { ...detail, category_id: undefined };
+      }
+
+      applyDetailToForm(detail, initialListingTypeParam);
     } catch (err: unknown) {
       setLoadError(
         err instanceof Error
@@ -190,23 +419,47 @@ const AdminVendorProductFormScreen: React.FC = () => {
     } finally {
       setLoadingDetail(false);
     }
-  }, [isEdit, vendorId, productId, applyDetailToForm, t]);
+  }, [
+    isEdit,
+    vendorId,
+    productId,
+    applyDetailToForm,
+    initialCategoryIdParam,
+    initialCategoryNameParam,
+    initialServiceIdParam,
+    initialServiceNameParam,
+    initialListingTypeParam,
+    initialSkuParam,
+    initialHandleParam,
+    t,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchCategories();
+      let cancelled = false;
+      (async () => {
+        if (isEdit) {
+          if (!cancelled) {
+            await loadProductDetail();
+          }
+        } else {
+          await fetchCategories();
+        }
+      })();
       fetchServices();
-      if (isEdit) loadProductDetail();
+      return () => {
+        cancelled = true;
+      };
     }, [fetchCategories, fetchServices, isEdit, loadProductDetail])
   );
 
-  const categoryOptions = useMemo(
-    () => [
-      { value: '', label: t('admin.addProduct.noCategory') },
-      ...categories.map((c) => ({ value: String(c.id), label: c.name })),
-    ],
-    [categories, t]
-  );
+  const categoryOptions = useMemo(() => {
+    const opts = categories.map((c) => ({ value: String(c.id), label: c.name }));
+    if (isProductListing) {
+      return opts;
+    }
+    return [{ value: '', label: t('admin.addProduct.noCategory') }, ...opts];
+  }, [categories, isProductListing, t]);
 
   const serviceOptions = useMemo(
     () => [
@@ -239,7 +492,15 @@ const AdminVendorProductFormScreen: React.FC = () => {
     setListingType(next);
     setShowCategoryDropdown(false);
     setShowServiceDropdown(false);
-    if (next === 'product') setServiceId('');
+    setErrors((prev) => {
+      const { category_id: _c, service_id: _s, ...rest } = prev;
+      return rest;
+    });
+    if (next === 'product') {
+      setServiceId('');
+    } else {
+      setCategoryId('');
+    }
   };
 
   const pickMainImageFromDevice = async () => {
@@ -360,7 +621,7 @@ const AdminVendorProductFormScreen: React.FC = () => {
     if (!status) newErrors.status = t('admin.addProduct.errorStatusRequired');
     if (!sku.trim()) newErrors.sku = t('admin.addProduct.errorSkuRequired');
     if (!handle.trim()) newErrors.handle = t('admin.addProduct.errorHandleRequired');
-    if (!categoryId.trim()) {
+    if (isProductListing && !categoryId.trim()) {
       newErrors.category_id = t('adminVendorManagement.productForm.categoryRequired', {
         defaultValue: 'Category is required',
       });
@@ -390,8 +651,14 @@ const AdminVendorProductFormScreen: React.FC = () => {
       price: parseFloat(price),
       stock: parseInt(stock, 10),
       status,
-      category_id: Number.isFinite(categoryIdNum) ? categoryIdNum : null,
-      service_id: Number.isFinite(serviceIdNum) && serviceIdNum > 0 ? serviceIdNum : null,
+      category_id:
+        isProductListing && Number.isFinite(categoryIdNum) && categoryIdNum > 0
+          ? categoryIdNum
+          : null,
+      service_id:
+        !isProductListing && Number.isFinite(serviceIdNum) && serviceIdNum > 0
+          ? serviceIdNum
+          : null,
       weight_unit: weightUnit,
       is_featured: isFeatured ? 1 : 0,
       sku: sku.trim(),
@@ -470,6 +737,31 @@ const AdminVendorProductFormScreen: React.FC = () => {
         result.product?.vendor_product_id ||
         result.product?.id ||
         (isEdit ? productId : undefined);
+      const savedCategoryId = parseInt(categoryId, 10);
+      const savedServiceId = parseInt(serviceId, 10);
+      if (
+        savedId &&
+        isProductListing &&
+        Number.isFinite(savedCategoryId) &&
+        savedCategoryId > 0
+      ) {
+        void writeCachedProductCategoryId(String(savedId), savedCategoryId);
+      }
+      if (savedId) {
+        void writeAdminVendorListingType(
+          String(savedId),
+          isProductListing ? 'product' : 'service'
+        );
+      }
+      if (
+        savedId &&
+        !isProductListing &&
+        Number.isFinite(savedServiceId) &&
+        savedServiceId > 0
+      ) {
+        const serviceLabel = services.find((s) => s.id === savedServiceId)?.name;
+        void writeCachedProductServiceIdShared(String(savedId), savedServiceId, serviceLabel);
+      }
       if (savedId && hasLocalOptionImageUploads(customizationConfig)) {
         try {
           await setProductCustomization(savedId, customizationConfig);
@@ -523,7 +815,8 @@ const AdminVendorProductFormScreen: React.FC = () => {
         activeOpacity={0.85}
       >
         <Text style={[styles.dropdownText, !value && styles.dropdownPlaceholder]} numberOfLines={1}>
-          {options.find((o) => o.value === value)?.label || t('admin.addUser.selectStatus')}
+          {options.find((o) => o.value === value)?.label ||
+            (value ? `#${value}` : t('admin.addProduct.selectCategory', { defaultValue: 'Select category' }))}
         </Text>
         <Ionicons name={show ? 'chevron-up' : 'chevron-down'} size={18} color={COLORS.textSecondary} />
       </TouchableOpacity>
@@ -559,7 +852,9 @@ const AdminVendorProductFormScreen: React.FC = () => {
   );
 
   const screenTitle = isEdit
-    ? t('adminVendorManagement.productForm.editTitle', { defaultValue: 'Edit product' })
+    ? isProductListing
+      ? t('adminVendorManagement.productForm.editTitle', { defaultValue: 'Edit product' })
+      : t('adminVendorManagement.productForm.editServiceTitle', { defaultValue: 'Edit service' })
     : isProductListing
       ? t('adminVendorManagement.productForm.addProductTitle', { defaultValue: 'Add product' })
       : t('adminVendorManagement.productForm.addServiceTitle', { defaultValue: 'Add service' });
@@ -577,7 +872,7 @@ const AdminVendorProductFormScreen: React.FC = () => {
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>
-          {t('adminVendorManagement.productForm.loadingDetail', { defaultValue: 'Loading product…' })}
+          {t('adminVendorManagement.productForm.loadingDetail', { defaultValue: 'Loading…' })}
         </Text>
       </View>
     );
@@ -624,6 +919,25 @@ const AdminVendorProductFormScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {isEdit ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                {t('adminVendorManagement.productForm.listingType', { defaultValue: 'Listing type' })}
+              </Text>
+              <View style={styles.listingTypeReadonly}>
+                <Ionicons
+                  name={isProductListing ? 'cube-outline' : 'construct-outline'}
+                  size={18}
+                  color={COLORS.primary}
+                />
+                <Text style={styles.listingTypeReadonlyText}>
+                  {isProductListing
+                    ? t('adminVendorManagement.productForm.product', { defaultValue: 'Product' })
+                    : t('adminVendorManagement.productForm.service', { defaultValue: 'Service' })}
+                </Text>
+              </View>
+            </View>
+          ) : null}
           {!isEdit ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>
@@ -738,15 +1052,17 @@ const AdminVendorProductFormScreen: React.FC = () => {
               () => setShowWeightUnitDropdown((v) => !v),
               setWeightUnit
             )}
-            {renderDropdown(
-              t('admin.addProduct.categoryLabel'),
-              categoryId,
-              categoryOptions,
-              showCategoryDropdown,
-              () => setShowCategoryDropdown((v) => !v),
-              setCategoryId,
-              errors.category_id
-            )}
+            {isProductListing
+              ? renderDropdown(
+                  t('admin.addProduct.categoryLabel'),
+                  categoryId,
+                  categoryOptions,
+                  showCategoryDropdown,
+                  () => setShowCategoryDropdown((v) => !v),
+                  setCategoryId,
+                  errors.category_id
+                )
+              : null}
             {!isProductListing
               ? renderDropdown(
                   t('admin.addProduct.serviceLabel'),
@@ -897,6 +1213,22 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
     marginBottom: SPACING.md,
+  },
+  listingTypeReadonly: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  listingTypeReadonlyText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
   },
   listingTypeRow: { flexDirection: 'row', gap: SPACING.sm },
   listingTypeBtn: {

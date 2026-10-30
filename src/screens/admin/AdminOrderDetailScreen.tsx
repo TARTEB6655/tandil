@@ -14,7 +14,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
-import { adminService, type ShopOrderDetail } from '../../services/adminService';
+import {
+  adminService,
+  type AdminDashboardOrderListItem,
+  type ShopOrderDetail,
+  type ShopOrderParty,
+  type ShopOrderServiceVisit,
+  type ShopOrderVendorRow,
+} from '../../services/adminService';
 import { buildFullImageUrl } from '../../config/api';
 
 function money(value: unknown, currency = 'AED'): string {
@@ -46,15 +53,52 @@ function statusColor(status?: string): string {
   return COLORS.textSecondary;
 }
 
+function dedupeParties(parties: ShopOrderParty[]): ShopOrderParty[] {
+  const seen = new Set<number>();
+  const out: ShopOrderParty[] = [];
+  for (const party of parties) {
+    if (party.id != null) {
+      if (seen.has(party.id)) continue;
+      seen.add(party.id);
+    }
+    out.push(party);
+  }
+  return out;
+}
+
+function mergeOrderDetail(
+  fetched: ShopOrderDetail,
+  fallback?: ShopOrderDetail | null
+): ShopOrderDetail {
+  if (!fallback) return fetched;
+  const pickArray = <T,>(primary?: T[], secondary?: T[]) =>
+    Array.isArray(primary) && primary.length > 0 ? primary : secondary;
+  return {
+    ...fallback,
+    ...fetched,
+    vendors: pickArray(fetched.vendors, fallback.vendors),
+    contractors: pickArray(fetched.contractors, fallback.contractors),
+    supervisors: pickArray(fetched.supervisors, fallback.supervisors),
+    service_visits: pickArray(fetched.service_visits, fallback.service_visits),
+    fulfillment_types: pickArray(fetched.fulfillment_types, fallback.fulfillment_types),
+  };
+}
+
 const AdminOrderDetailScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { t, i18n } = useTranslation();
   const orderId = route.params?.orderId;
+  const orderPreview = route.params?.orderPreview as AdminDashboardOrderListItem | undefined;
   const locale =
     i18n.language === 'ar' ? 'ar-EG' : i18n.language === 'ur' ? 'ur-PK' : 'en-US';
 
-  const [order, setOrder] = useState<ShopOrderDetail | null>(null);
+  const initialOrder =
+    orderPreview != null && String(orderPreview.id) === String(orderId)
+      ? (orderPreview as ShopOrderDetail)
+      : null;
+
+  const [order, setOrder] = useState<ShopOrderDetail | null>(initialOrder);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +116,7 @@ const AdminOrderDetailScreen: React.FC = () => {
       setError(null);
       try {
         const data = await adminService.getShopOrderDetail(orderId);
-        setOrder(data);
+        setOrder((prev) => mergeOrderDetail(data, prev ?? initialOrder));
       } catch (e: unknown) {
         const msg =
           (e as { response?: { data?: { message?: string } } })?.response?.data?.message ||
@@ -85,7 +129,7 @@ const AdminOrderDetailScreen: React.FC = () => {
         setRefreshing(false);
       }
     },
-    [orderId, t]
+    [initialOrder, orderId, t]
   );
 
   useFocusEffect(
@@ -149,6 +193,22 @@ const AdminOrderDetailScreen: React.FC = () => {
     (order as { user?: { phone?: string } })?.user?.phone ||
     '—';
   const items = Array.isArray(order?.items) ? order!.items! : [];
+  const vendors: ShopOrderVendorRow[] = Array.isArray(order?.vendors) ? order.vendors : [];
+  const contractorParties = dedupeParties(
+    Array.isArray(order?.contractors) && order.contractors.length > 0
+      ? order.contractors
+      : Array.isArray(order?.supervisors)
+        ? order.supervisors
+        : []
+  );
+  const serviceVisits: ShopOrderServiceVisit[] = Array.isArray(order?.service_visits)
+    ? order.service_visits
+    : [];
+  const fulfillmentTypes = Array.isArray(order?.fulfillment_types)
+    ? order.fulfillment_types
+    : order?.fulfillment_type
+      ? [order.fulfillment_type]
+      : [];
   const address = order?.shipping_address;
   const addressLine = address
     ? [
@@ -270,6 +330,96 @@ const AdminOrderDetailScreen: React.FC = () => {
             />
           </View>
 
+          {vendors.length > 0 ? (
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionIconWrap}>
+                  <Ionicons name="storefront" size={16} color={COLORS.primary} />
+                </View>
+                <Text style={styles.sectionTitle}>
+                  {t('admin.orderDetail.vendors', { defaultValue: 'Vendors' })}
+                </Text>
+              </View>
+              {vendors.map((row, index) => (
+                <View
+                  key={`vendor-${row.vendor_order_mapping_id ?? row.vendor_id ?? index}`}
+                  style={[styles.partyRow, index > 0 && styles.partyRowBorder]}
+                >
+                  <Text style={styles.partyName}>{row.vendor_name || '—'}</Text>
+                  {row.product_title ? (
+                    <Text style={styles.partySub}>
+                      {t('admin.orderDetail.vendorProduct', { defaultValue: 'Product' })}:{' '}
+                      {row.product_title}
+                    </Text>
+                  ) : null}
+                  {row.vendor_order_status ? (
+                    <Text style={styles.partySub}>
+                      {t('admin.orderDetail.vendorStatus', { defaultValue: 'Vendor order status' })}
+                      : {row.vendor_order_status}
+                    </Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {contractorParties.length > 0 ? (
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionIconWrap}>
+                  <Ionicons name="construct" size={16} color={COLORS.primary} />
+                </View>
+                <Text style={styles.sectionTitle}>
+                  {t('admin.orderDetail.contractors', { defaultValue: 'Contractors' })}
+                </Text>
+              </View>
+              {contractorParties.map((party, index) => (
+                <PartyRow
+                  key={`contractor-${party.id ?? index}`}
+                  party={party}
+                  bordered={index > 0}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          {serviceVisits.length > 0 ? (
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionIconWrap}>
+                  <Ionicons name="calendar" size={16} color={COLORS.primary} />
+                </View>
+                <Text style={styles.sectionTitle}>
+                  {t('admin.orderDetail.serviceVisits', { defaultValue: 'Service visits' })}
+                </Text>
+              </View>
+              {serviceVisits.map((visit, index) => (
+                <View
+                  key={`visit-${visit.visit_id ?? index}`}
+                  style={[styles.partyRow, index > 0 && styles.partyRowBorder]}
+                >
+                  <Text style={styles.partyName}>
+                    {t('admin.orderDetail.scheduledAt', { defaultValue: 'Scheduled' })}:{' '}
+                    {[visit.scheduled_date, visit.scheduled_time].filter(Boolean).join(' · ') ||
+                      '—'}
+                  </Text>
+                  {visit.status ? (
+                    <Text style={styles.partySub}>
+                      {t('admin.orderDetail.visitStatus', { defaultValue: 'Visit status' })}:{' '}
+                      {visit.status}
+                    </Text>
+                  ) : null}
+                  {visit.technician?.name ? (
+                    <Text style={styles.partySub}>
+                      {t('admin.orderDetail.technician', { defaultValue: 'Technician' })}:{' '}
+                      {visit.technician.name}
+                    </Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionIconWrap}>
@@ -292,12 +442,28 @@ const AdminOrderDetailScreen: React.FC = () => {
                 </Text>
                 <Text style={styles.metaChipValue}>{order?.payment_status || '—'}</Text>
               </View>
-              {order?.fulfillment_type ? (
-                <View style={styles.metaChip}>
+              {fulfillmentTypes.map((ft) => (
+                <View key={String(ft)} style={styles.metaChip}>
                   <Text style={styles.metaChipLabel}>
                     {t('admin.orderDetail.fulfillment', { defaultValue: 'Fulfillment' })}
                   </Text>
-                  <Text style={styles.metaChipValue}>{order.fulfillment_type}</Text>
+                  <Text style={styles.metaChipValue}>{ft}</Text>
+                </View>
+              ))}
+              {order?.is_marketplace ? (
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaChipLabel}>
+                    {t('admin.orderDetail.marketplace', { defaultValue: 'Marketplace' })}
+                  </Text>
+                  <Text style={styles.metaChipValue}>Yes</Text>
+                </View>
+              ) : null}
+              {order?.is_service ? (
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaChipLabel}>
+                    {t('admin.orderDetail.serviceOrder', { defaultValue: 'Service order' })}
+                  </Text>
+                  <Text style={styles.metaChipValue}>Yes</Text>
                 </View>
               ) : null}
             </View>
@@ -440,6 +606,29 @@ const AdminOrderDetailScreen: React.FC = () => {
     </View>
   );
 };
+
+function PartyRow({
+  party,
+  bordered,
+  roleLabel,
+}: {
+  party: ShopOrderParty;
+  bordered?: boolean;
+  roleLabel?: string;
+}) {
+  return (
+    <View style={[styles.partyRow, bordered && styles.partyRowBorder]}>
+      <Text style={styles.partyName}>{party.name || '—'}</Text>
+      {roleLabel && party.role ? (
+        <Text style={styles.partySub}>
+          {roleLabel} · {party.role}
+        </Text>
+      ) : null}
+      {party.email ? <Text style={styles.partySub}>{party.email}</Text> : null}
+      {party.phone ? <Text style={styles.partySub}>{party.phone}</Text> : null}
+    </View>
+  );
+}
 
 function InfoRow({
   icon,
@@ -688,6 +877,25 @@ const styles = StyleSheet.create({
   },
   customerSub: {
     marginTop: 2,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+  },
+  partyRow: {
+    paddingVertical: SPACING.sm,
+  },
+  partyRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.md,
+  },
+  partyName: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.text,
+  },
+  partySub: {
+    marginTop: 4,
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
   },

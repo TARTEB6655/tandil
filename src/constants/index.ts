@@ -101,6 +101,7 @@ export const API_ENDPOINTS = {
     register: '/auth/register',
     forgotPassword: '/auth/forgot-password',
     verifyOTP: '/auth/verify-otp',
+    resetPassword: '/auth/reset-password',
   },
   services: {
     categories: '/services/categories',

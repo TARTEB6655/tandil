@@ -2,10 +2,19 @@ import apiClient from './api';
 import { buildFullImageUrl } from '../config/api';
 import {
   buildVendorProductFormData,
+  extractProductCategoryIdFromPayload,
+  extractProductDescriptionFromPayload,
+  extractProductServiceIdFromPayload,
+  extractScalarFromPayload,
+  parseVendorPlatformCategoryOptions,
   parseVendorProductDetail,
+  resolveVendorProductCategoryFromRow,
+  resolveVendorProductServiceFromRow,
   type CreateVendorProductParams,
+  type VendorProductCategoryOption,
   type VendorProductDetail,
 } from './vendorService';
+import { shopService } from './shopService';
 
 export interface AdminManagedVendor {
   id: string;
@@ -101,6 +110,14 @@ export interface AdminManagedVendorProduct {
   can_delete?: boolean;
   delete_endpoint?: string;
   revenue?: number;
+  /** When present on management list rows — used to pre-fill edit form. */
+  category_id?: number;
+  category_name?: string;
+  service_id?: number;
+  service_name?: string;
+  sku?: string;
+  handle?: string;
+  listing_type: 'product' | 'service';
 }
 
 export interface AdminVendorDetailSummary {
@@ -451,6 +468,46 @@ function normalizeApiPath(endpoint?: string): string | undefined {
   return path;
 }
 
+function pickTruthyFlag(...values: unknown[]): boolean {
+  for (const v of values) {
+    if (v === true || v === 1 || v === '1' || v === 'true') return true;
+  }
+  return false;
+}
+
+function inferManagedProductListingType(
+  row: Record<string, unknown>,
+  product: Record<string, unknown>,
+  serviceFields: ReturnType<typeof resolveVendorProductServiceFromRow>
+): 'product' | 'service' {
+  if (serviceFields.service_id != null && serviceFields.service_id > 0) return 'service';
+  if (serviceFields.service_name?.trim()) return 'service';
+
+  if (
+    pickTruthyFlag(
+      row.is_service,
+      product.is_service,
+      row.service_listing,
+      product.service_listing,
+      row.is_service_listing,
+      product.is_service_listing
+    )
+  ) {
+    return 'service';
+  }
+
+  const raw = pickString(
+    row.listing_type,
+    product.listing_type,
+    row.listing_kind,
+    product.listing_kind,
+    row.type,
+    product.type
+  ).toLowerCase();
+  if (raw === 'service' || raw === 'services') return 'service';
+  return 'product';
+}
+
 /** Map product from GET /admin/vendors/{id}/management → products.items */
 function mapProduct(row: Record<string, unknown>): AdminManagedVendorProduct {
   const product = asRecord(row.product) ?? {};
@@ -468,6 +525,17 @@ function mapProduct(row: Record<string, unknown>): AdminManagedVendorProduct {
     status === 'active';
 
   const deleteEndpoint = normalizeApiPath(pickString(del.endpoint));
+  const categoryFields = resolveVendorProductCategoryFromRow(row);
+  const serviceFields = resolveVendorProductServiceFromRow(row);
+  const deepServiceId = extractProductServiceIdFromPayload({ success: true, data: row });
+  const service_id =
+    serviceFields.service_id ??
+    (deepServiceId != null && deepServiceId > 0 ? deepServiceId : undefined);
+  const service_name = serviceFields.service_name;
+  const mergedServiceFields = {
+    ...(service_id != null ? { service_id } : {}),
+    ...(service_name ? { service_name } : {}),
+  };
 
   return {
     id: pickString(row.vendor_product_id, row.id, row.product_id, product.id),
@@ -494,6 +562,13 @@ function mapProduct(row: Record<string, unknown>): AdminManagedVendorProduct {
     can_delete: row.can_delete !== false,
     delete_endpoint: deleteEndpoint || undefined,
     revenue: pickNumber(row.revenue, row.total_revenue),
+    category_id: categoryFields.category_id,
+    category_name: categoryFields.category_name,
+    service_id,
+    service_name,
+    sku: pickString(product.sku, row.sku) || undefined,
+    handle: pickString(product.handle, row.handle) || undefined,
+    listing_type: inferManagedProductListingType(row, product, mergedServiceFields),
   };
 }
 
@@ -982,6 +1057,74 @@ export const adminVendorManagementService = {
     });
   },
 
+  async findProductRowInManagementList(
+    vendorId: string,
+    productId: string
+  ): Promise<{
+    category_id?: number;
+    category_name?: string;
+    service_id?: number;
+    service_name?: string;
+    description?: string;
+    sku?: string;
+    handle?: string;
+  } | null> {
+    const targetId = productId.trim();
+    if (!vendorId?.trim() || !targetId) return null;
+
+    for (let page = 1; page <= 10; page++) {
+      try {
+        const response = await apiClient.get(
+          `/admin/vendors/${encodeURIComponent(vendorId)}/management`,
+          { params: { per_page: 50, page }, timeout: 20000 }
+        );
+        const body = asRecord(response.data) ?? {};
+        const data = asRecord(body.data) ?? body;
+        const productsBlock = asRecord(data.products) ?? {};
+        const items = Array.isArray(productsBlock.items)
+          ? (productsBlock.items
+              .map((row) => asRecord(row))
+              .filter(Boolean) as Record<string, unknown>[])
+          : Array.isArray(data.products)
+            ? (data.products
+                .map((row) => asRecord(row))
+                .filter(Boolean) as Record<string, unknown>[])
+            : [];
+        if (items.length === 0) break;
+
+        for (const row of items) {
+          const rowId = pickString(row.vendor_product_id, row.id, asRecord(row.product)?.id);
+          if (rowId !== targetId) continue;
+          const categoryFields = resolveVendorProductCategoryFromRow(row);
+          const serviceFields = resolveVendorProductServiceFromRow(row);
+          const description =
+            extractProductDescriptionFromPayload({ success: true, data: row }) ||
+            undefined;
+          const sku =
+            extractScalarFromPayload({ success: true, data: row }, 'sku') ||
+            undefined;
+          const handle =
+            extractScalarFromPayload({ success: true, data: row }, 'handle') ||
+            undefined;
+          return {
+            ...categoryFields,
+            ...serviceFields,
+            ...(description ? { description } : {}),
+            ...(sku ? { sku } : {}),
+            ...(handle ? { handle } : {}),
+          };
+        }
+
+        const pagination = asRecord(productsBlock.pagination) ?? asRecord(data.pagination);
+        const lastPage = pickNumber(pagination?.last_page, pagination?.total_pages) ?? 1;
+        if (page >= lastPage) break;
+      } catch {
+        break;
+      }
+    }
+    return null;
+  },
+
   /**
    * GET /admin/vendors/{vendor_id}/products/{vendor_product_id}
    */
@@ -997,10 +1140,85 @@ export const adminVendorManagementService = {
       if (body.success === false) {
         throw new Error(pickString(body.message) || 'Failed to load product.');
       }
-      const detail = parseVendorProductDetail(response.data);
+      let detail = parseVendorProductDetail(response.data);
       if (!detail.name?.trim()) {
         throw new Error('Product data is incomplete.');
       }
+
+      if (detail.category_id == null || detail.category_id <= 0) {
+        const deepId = extractProductCategoryIdFromPayload(response.data);
+        if (deepId != null && deepId > 0) {
+          detail = { ...detail, category_id: deepId };
+        }
+      }
+
+      const fromList = await this.findProductRowInManagementList(vendorId, productId);
+      if (fromList) {
+        if (!detail.sku?.trim() && fromList.sku?.trim()) {
+          detail = { ...detail, sku: fromList.sku.trim() };
+        }
+        if (!detail.handle?.trim() && fromList.handle?.trim()) {
+          detail = { ...detail, handle: fromList.handle.trim() };
+        }
+        if (!detail.description?.trim() && fromList.description?.trim()) {
+          detail = { ...detail, description: fromList.description.trim() };
+        }
+        if (
+          (detail.service_id == null || detail.service_id <= 0) &&
+          !(detail.service_ids?.length ?? 0) &&
+          fromList.service_id != null &&
+          fromList.service_id > 0
+        ) {
+          detail = {
+            ...detail,
+            service_id: fromList.service_id,
+            service_ids: [fromList.service_id],
+            service: fromList.service_name || detail.service,
+          };
+        }
+        if (detail.category_id == null || detail.category_id <= 0) {
+          if (fromList.category_id != null && fromList.category_id > 0) {
+            detail = {
+              ...detail,
+              category_id: fromList.category_id,
+              category: fromList.category_name || detail.category,
+            };
+          } else if (fromList.category_name && (!detail.category || detail.category === '—')) {
+            detail = { ...detail, category: fromList.category_name };
+          }
+        }
+      }
+
+      if (!detail.description?.trim()) {
+        const deepDescription = extractProductDescriptionFromPayload(response.data);
+        if (deepDescription?.trim()) {
+          detail = { ...detail, description: deepDescription.trim() };
+        }
+      }
+
+      if (!detail.sku?.trim()) {
+        const deepSku = extractScalarFromPayload(response.data, 'sku');
+        if (deepSku?.trim()) detail = { ...detail, sku: deepSku.trim() };
+      }
+      if (!detail.handle?.trim()) {
+        const deepHandle = extractScalarFromPayload(response.data, 'handle');
+        if (deepHandle?.trim()) detail = { ...detail, handle: deepHandle.trim() };
+      }
+
+      if (
+        (detail.service_id == null || detail.service_id <= 0) &&
+        !(detail.service_ids?.length ?? 0)
+      ) {
+        const deepServiceId = extractProductServiceIdFromPayload(response.data);
+        if (deepServiceId != null && deepServiceId > 0) {
+          detail = {
+            ...detail,
+            service_id: deepServiceId,
+            service_ids: [deepServiceId],
+          };
+        }
+      }
+
       return detail;
     } catch (error: unknown) {
       throwVendorMutationError(error, 'Failed to load product.');
@@ -1020,8 +1238,11 @@ export const adminVendorManagementService = {
     if (!vendorId?.trim()) {
       throw new Error('Vendor id is required.');
     }
-    if (params.category_id == null || Number(params.category_id) <= 0) {
-      throw new Error('Category is required.');
+    const hasCategory =
+      params.category_id != null && Number(params.category_id) > 0;
+    const hasService = params.service_id != null && Number(params.service_id) > 0;
+    if (!hasCategory && !hasService) {
+      throw new Error('Category or service is required.');
     }
 
     const formData = buildVendorProductFormData(params, {
@@ -1072,8 +1293,11 @@ export const adminVendorManagementService = {
     if (!vendorId?.trim() || !productId?.trim()) {
       throw new Error('Missing vendor or product id.');
     }
-    if (params.category_id == null || Number(params.category_id) <= 0) {
-      throw new Error('Category is required.');
+    const hasCategory =
+      params.category_id != null && Number(params.category_id) > 0;
+    const hasService = params.service_id != null && Number(params.service_id) > 0;
+    if (!hasCategory && !hasService) {
+      throw new Error('Category or service is required.');
     }
 
     const formData = buildVendorProductFormData(params, {
@@ -1107,5 +1331,53 @@ export const adminVendorManagementService = {
     } catch (error: unknown) {
       throwVendorMutationError(error, 'Failed to update product.');
     }
+  },
+
+  /**
+   * Marketplace category ids for POST /admin/vendors/{id}/products.
+   * Tries admin/vendor auth routes, then public GET /shop/products/categories (same platform ids).
+   */
+  async getVendorPlatformCategories(vendorId?: string): Promise<VendorProductCategoryOption[]> {
+    const paths: string[] = [];
+    const id = vendorId?.trim();
+    if (id) {
+      paths.push(`/admin/vendors/${encodeURIComponent(id)}/product-options/categories`);
+    }
+    paths.push(
+      '/admin/vendors/product-options/categories',
+      '/admin/vendor/product-options/categories',
+      '/vendor/categories',
+      '/vendor/product-options/categories'
+    );
+
+    for (const path of paths) {
+      try {
+        const response = await apiClient.get(path, { timeout: 20000 });
+        const parsed = parseVendorPlatformCategoryOptions(response.data);
+        if (parsed.length > 0) return parsed;
+      } catch {
+        // try next route
+      }
+    }
+
+    try {
+      const shopCategories = await shopService.getProductCategories();
+      const fromShop = shopCategories
+        .map((c) => {
+          const categoryId = Number(c.id);
+          const name = c.name != null ? String(c.name).trim() : '';
+          if (!Number.isFinite(categoryId) || categoryId <= 0 || !name) return null;
+          if (c.coming_soon === true) return null;
+          const active = (c as { is_active?: boolean | number }).is_active;
+          if (active === false || active === 0) return null;
+          return { id: categoryId, name };
+        })
+        .filter((row): row is VendorProductCategoryOption => row != null);
+      if (fromShop.length > 0) return fromShop;
+    } catch {
+      // ignore
+    }
+
+    return [];
   },
 };

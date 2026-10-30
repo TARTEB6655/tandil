@@ -15,6 +15,9 @@ export interface AddCartItemRequest {
   booking_slot?: string;
   /** Required area in m² for area-based (per_m2) pricing */
   area_m2?: number;
+  area_pricing_mode?: 'base' | 'fixed' | 'per_m2' | string;
+  tree_quantity?: number;
+  palm_tree_quantity?: number;
 }
 
 export interface AddCartItemResponse {
@@ -160,6 +163,9 @@ export async function getBuyNowSummary(
     selected_option_ids?: number[];
     coupon_code?: string;
     area_m2?: number;
+    area_pricing_mode?: 'base' | 'fixed' | 'per_m2' | string;
+    tree_quantity?: number;
+    palm_tree_quantity?: number;
   }
 ): Promise<BuyNowSummaryData | null> {
   const selectedOptionIds = options?.selected_option_ids?.filter(
@@ -178,6 +184,13 @@ export async function getBuyNowSummary(
       ...(typeof options?.area_m2 === 'number' && options.area_m2 > 0
         ? { area_m2: options.area_m2 }
         : {}),
+      ...(options?.area_pricing_mode ? { area_pricing_mode: options.area_pricing_mode } : {}),
+      ...(typeof options?.tree_quantity === 'number' && options.tree_quantity > 0
+        ? { tree_quantity: options.tree_quantity }
+        : {}),
+      ...(typeof options?.palm_tree_quantity === 'number' && options.palm_tree_quantity > 0
+        ? { palm_tree_quantity: options.palm_tree_quantity }
+        : {}),
     },
     { timeout: 15000 }
   );
@@ -194,13 +207,28 @@ export async function addCartItem(
   productId: number,
   quantity: number,
   selectedOptionIds?: number[],
-  booking?: { booking_date?: string; booking_slot?: string; area_m2?: number }
+  booking?: {
+    booking_date?: string;
+    booking_slot?: string;
+    area_m2?: number;
+    area_pricing_mode?: 'base' | 'fixed' | 'per_m2' | string;
+    tree_quantity?: number;
+    palm_tree_quantity?: number;
+  }
 ): Promise<AddCartItemResponse> {
   const optionIds = selectedOptionIds?.filter((id) => Number.isFinite(id) && id > 0);
   const bookingDate = booking?.booking_date?.trim();
   const bookingSlot = booking?.booking_slot?.trim();
   const areaM2 =
     typeof booking?.area_m2 === 'number' && booking.area_m2 > 0 ? booking.area_m2 : undefined;
+  const treeQty =
+    typeof booking?.tree_quantity === 'number' && booking.tree_quantity > 0
+      ? booking.tree_quantity
+      : undefined;
+  const palmQty =
+    typeof booking?.palm_tree_quantity === 'number' && booking.palm_tree_quantity > 0
+      ? booking.palm_tree_quantity
+      : undefined;
   const response = await apiClient.post<AddCartItemResponse>(
     '/shop/cart/add',
     {
@@ -210,6 +238,9 @@ export async function addCartItem(
       ...(bookingDate ? { booking_date: bookingDate } : {}),
       ...(bookingSlot ? { booking_slot: bookingSlot } : {}),
       ...(areaM2 != null ? { area_m2: areaM2 } : {}),
+      ...(booking?.area_pricing_mode ? { area_pricing_mode: booking.area_pricing_mode } : {}),
+      ...(treeQty != null ? { tree_quantity: treeQty } : {}),
+      ...(palmQty != null ? { palm_tree_quantity: palmQty } : {}),
     } as AddCartItemRequest,
     {
       timeout: 15000,

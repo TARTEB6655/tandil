@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, BORDER_RADIUS } from '../../constants';
 import { useTranslation } from 'react-i18next';
 import { setAppLanguage } from '../../i18n';
+import { safeGoBack } from '../../utils/safeNavigationBack';
 
 interface HeaderProps {
   title: string;
@@ -52,7 +53,7 @@ const Header: React.FC<HeaderProps> = ({
     if (onBackPress) {
       onBackPress();
     } else {
-      navigation.goBack();
+      safeGoBack(navigation);
     }
   };
 

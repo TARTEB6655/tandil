@@ -17,9 +17,14 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import { buildFullImageUrl } from '../../config/api';
-import { adminService, AdminCategory } from '../../services/adminService';
+import { adminService, AdminCategory, AdminService } from '../../services/adminService';
 import { getCategoryShippingCost, getCategoryTaxPercentage } from '../../utils/categoryPricing';
+import { sortAdminCategoriesForDisplay } from '../../utils/adminCategorySort';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
+import AdminCatalogConvertRow from '../../components/admin/AdminCatalogConvertRow';
+import AdminCatalogConvertModal, {
+  AdminCatalogConvertTarget,
+} from '../../components/admin/AdminCatalogConvertModal';
 
 const PER_PAGE = 10;
 
@@ -109,6 +114,7 @@ const AdminCategoriesScreen: React.FC = () => {
   const [reorderLoading, setReorderLoading] = useState(false);
   const [reorderSaving, setReorderSaving] = useState(false);
   const [reorderCategories, setReorderCategories] = useState<AdminCategory[]>([]);
+  const [convertTarget, setConvertTarget] = useState<AdminCatalogConvertTarget | null>(null);
 
   const fetchCategories = useCallback(async (page = 1, isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -126,10 +132,11 @@ const AdminCategoriesScreen: React.FC = () => {
       const pagination = response.pagination ?? (!isArray ? (response.data as any) : null);
       const current = pagination?.current_page ?? 1;
       const last = pagination?.last_page ?? 1;
+      const nextChunk = Array.isArray(list) ? list : [];
       if (page === 1) {
-        setCategories(Array.isArray(list) ? list : []);
+        setCategories(sortAdminCategoriesForDisplay(nextChunk));
       } else {
-        setCategories((prev) => [...prev, ...(Array.isArray(list) ? list : [])]);
+        setCategories((prev) => sortAdminCategoriesForDisplay([...prev, ...nextChunk]));
       }
       setCurrentPage(current);
       setLastPage(last);
@@ -157,13 +164,7 @@ const AdminCategoriesScreen: React.FC = () => {
       const response = await adminService.getCategories({ page: 1, per_page: 200 });
       const isArray = Array.isArray(response.data);
       const list = isArray ? response.data : (response.data as any)?.data ?? [];
-      const sorted = [...(Array.isArray(list) ? list : [])].sort((a: AdminCategory, b: AdminCategory) => {
-        if (a.sort_order == null && b.sort_order == null) return 0;
-        if (a.sort_order == null) return 1;
-        if (b.sort_order == null) return -1;
-        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
-      });
-      setReorderCategories(sorted);
+      setReorderCategories(sortAdminCategoriesForDisplay(Array.isArray(list) ? list : []));
     } catch (err: any) {
       Alert.alert(
         t('admin.users.error', 'Error'),
@@ -282,6 +283,53 @@ const AdminCategoriesScreen: React.FC = () => {
     [navigation]
   );
 
+  const handleCatalogConverted = useCallback(
+    (result: {
+      direction: AdminCatalogConvertTarget['direction'];
+      sourceId: number;
+      category?: AdminCategory;
+      service?: AdminService;
+    }) => {
+      if (result.direction === 'category_to_service') {
+        setCategories((prev) => prev.filter((c) => c.id !== result.sourceId));
+        setReorderCategories((prev) => prev.filter((c) => c.id !== result.sourceId));
+      }
+      fetchCategories(1, true);
+
+      const serviceName =
+        result.service?.name ??
+        convertTarget?.name ??
+        t('admin.catalogConvert.convertedItem', { defaultValue: 'This item' });
+
+      if (result.direction === 'category_to_service') {
+        const buttons: Array<{ text: string; style?: 'cancel'; onPress?: () => void }> = [
+          { text: t('common.ok'), style: 'cancel' },
+          {
+            text: t('admin.catalogConvert.openServicesList'),
+            onPress: () => navigation.navigate('AdminServices'),
+          },
+        ];
+        if (result.service) {
+          const convertedService = result.service;
+          buttons.push({
+            text: t('admin.catalogConvert.viewService'),
+            onPress: () => navigation.navigate('AdminEditService', { service: convertedService }),
+          });
+        }
+        Alert.alert(
+          t('admin.catalogConvert.successServiceTitle'),
+          t('admin.catalogConvert.successServiceMessageList', {
+            name: serviceName,
+            defaultValue:
+              '{{name}} is now a service and was removed from Categories. You will find it under Services.',
+          }),
+          buttons
+        );
+      }
+    },
+    [convertTarget?.name, fetchCategories, navigation, t]
+  );
+
   const renderItem = ({ item }: { item: AdminCategory }) => {
     const imageUri = item.image_url ?? (item.image ? buildFullImageUrl(item.image) : null);
     const shippingCost = getCategoryShippingCost(item);
@@ -373,6 +421,17 @@ const AdminCategoriesScreen: React.FC = () => {
           </View>
           <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
         </TouchableOpacity>
+
+        <AdminCatalogConvertRow
+          direction="category_to_service"
+          onPress={() =>
+            setConvertTarget({
+              direction: 'category_to_service',
+              id: item.id,
+              name: item.name,
+            })
+          }
+        />
       </View>
     );
   };
@@ -552,6 +611,13 @@ const AdminCategoriesScreen: React.FC = () => {
           }
         />
       )}
+
+      <AdminCatalogConvertModal
+        visible={convertTarget != null}
+        target={convertTarget}
+        onClose={() => setConvertTarget(null)}
+        onConverted={handleCatalogConverted}
+      />
     </SafeAreaView>
   );
 };

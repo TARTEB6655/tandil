@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,14 @@ import { publicServiceService, PublicServiceProduct } from '../../services/publi
 import { buildFullImageUrl } from '../../config/api';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { isShopProductInStock } from '../../utils/shopProductStock';
+import {
+  getEffectiveServicePrice,
+  getServicePricingSettings,
+  isPerM2ServicePricing,
+  isUnitQuantityServicePricing,
+  parseServicePricingType,
+  ServicePricingSettings,
+} from '../../services/servicePricingService';
 
 /** Shape expected by ProductDetail screen */
 interface ProductDetailDisplay {
@@ -50,6 +58,43 @@ const ServiceProductsScreen: React.FC = () => {
   const [products, setProducts] = useState<PublicServiceProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [comingSoonShown, setComingSoonShown] = useState(false);
+  const [servicePricing, setServicePricing] = useState<ServicePricingSettings | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getServicePricingSettings()
+      .then((settings) => {
+        if (!cancelled) setServicePricing(settings);
+      })
+      .catch(() => {
+        if (!cancelled) setServicePricing(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const pricingSuffix = useMemo(() => {
+    const type = parseServicePricingType(servicePricing?.pricing_type ?? 'fixed');
+    if (isPerM2ServicePricing(type)) {
+      return t('product.perM2', { defaultValue: '/ m²' });
+    }
+    if (type === 'per_tree') {
+      return t('product.perTree', { defaultValue: '/ tree' });
+    }
+    if (type === 'per_palm') {
+      return t('product.perPalm', { defaultValue: '/ palm' });
+    }
+    return '';
+  }, [servicePricing?.pricing_type, t]);
+
+  const listUnitPrice = useMemo(() => {
+    const type = parseServicePricingType(servicePricing?.pricing_type ?? 'fixed');
+    if (isPerM2ServicePricing(type) || isUnitQuantityServicePricing(type)) {
+      return getEffectiveServicePrice(servicePricing);
+    }
+    return null;
+  }, [servicePricing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,12 +158,19 @@ const ServiceProductsScreen: React.FC = () => {
   const renderProductCard = ({ item }: { item: PublicServiceProduct }) => {
     const detail = toDetailProduct(item);
     const imageUri = getProductImage(item);
-    const priceNum = typeof item.price === 'string' ? parseFloat(item.price) || 0 : (item.price ?? 0);
+    const catalogPrice =
+      typeof item.price === 'string' ? parseFloat(item.price) || 0 : (item.price ?? 0);
+    const priceNum = listUnitPrice ?? catalogPrice;
     const inStock = isShopProductInStock(item);
     return (
       <TouchableOpacity
         style={styles.productCard}
-        onPress={() => navigation.navigate('ProductDetail', { product: detail })}
+        onPress={() =>
+          navigation.navigate('ProductDetail', {
+            product: detail,
+            fromServiceCatalog: true,
+          })
+        }
       >
         <View style={styles.productImageContainer}>
           <Image source={{ uri: imageUri }} style={styles.productImage} contentFit="cover" />
@@ -131,7 +183,10 @@ const ServiceProductsScreen: React.FC = () => {
         <View style={styles.productInfo}>
           <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
           <View style={styles.priceContainer}>
-            <Text style={styles.currentPrice}>{t('orders.currency', { defaultValue: 'AED' })} {priceNum}</Text>
+            <Text style={styles.currentPrice}>
+              {t('orders.currency', { defaultValue: 'AED' })} {priceNum}
+              {pricingSuffix}
+            </Text>
           </View>
         </View>
       </TouchableOpacity>

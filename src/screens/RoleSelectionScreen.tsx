@@ -157,9 +157,7 @@ const RoleSelectionScreen: React.FC = () => {
             <Image source={require('../../assets/logo.png')} style={styles.logoImage} />
           </View>
           <Text style={styles.heroTitle}>{t('roleSelection.chooseRole')}</Text>
-          <Text style={styles.heroSubtitle}>
-            Select how you want to continue. You can switch roles anytime from logout.
-          </Text>
+          <Text style={styles.heroSubtitle}>{t('roleSelection.chooseRoleSubtitle')}</Text>
         </View>
 
         <View style={styles.roleList}>

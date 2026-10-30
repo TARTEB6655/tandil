@@ -21,7 +21,7 @@ import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
 import { authService, LoginResponse } from '../services/authService';
 import ClientSocialLogin from '../components/auth/ClientSocialLogin';
-import { navigateToGuestUserApp } from '../navigation/clientAuthNavigation';
+import { navigateToForgotPassword } from '../utils/navigateForgotPassword';
 
 const AuthScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -326,6 +326,16 @@ const AuthScreen: React.FC = () => {
               leftIcon="lock-closed-outline"
             />
 
+            {isLogin && selectedRole === 'client' ? (
+              <TouchableOpacity
+                style={styles.forgotPasswordBtn}
+                onPress={() => navigateToForgotPassword(navigation, 'client')}
+                disabled={loading}
+              >
+                <Text style={styles.forgotPasswordText}>{t('auth.forgotPassword')}</Text>
+              </TouchableOpacity>
+            ) : null}
+
             {!isLogin ? (
               <Input
                 label={t('auth.confirmPasswordLabel')}
@@ -358,20 +368,6 @@ const AuthScreen: React.FC = () => {
               style={styles.authButton}
               textStyle={styles.authButtonText}
             />
-
-            {selectedRole === 'client' ? (
-              <TouchableOpacity
-                style={styles.guestButton}
-                onPress={() => navigateToGuestUserApp(navigation)}
-                disabled={loading}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="storefront-outline" size={20} color={COLORS.primary} />
-                <Text style={styles.guestButtonText}>
-                  {t('auth.continueAsGuest', 'Continue without signing in')}
-                </Text>
-              </TouchableOpacity>
-            ) : null}
 
             {selectedRole === 'client' ? (
               <>
@@ -550,6 +546,17 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     lineHeight: 20,
   },
+  forgotPasswordBtn: {
+    alignSelf: 'flex-end',
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.xs,
+    paddingVertical: SPACING.xs,
+  },
+  forgotPasswordText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
   authButton: {
     marginTop: SPACING.sm,
     minHeight: 44,
@@ -559,25 +566,6 @@ const styles = StyleSheet.create({
   authButtonText: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semiBold,
-  },
-  guestButton: {
-    marginTop: SPACING.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-    minHeight: 44,
-    paddingVertical: SPACING.sm + 2,
-    paddingHorizontal: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.surfaceLight,
-  },
-  guestButtonText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.semiBold,
-    color: COLORS.primary,
   },
   dividerRow: {
     flexDirection: 'row',

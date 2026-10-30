@@ -12,6 +12,7 @@ import {
 
 // Screens
 import SupervisorLoginScreen from '../screens/supervisor/SupervisorLoginScreen';
+import SupervisorSignupScreen from '../screens/supervisor/SupervisorSignupScreen';
 import SupervisorDashboardScreen from '../screens/supervisor/SupervisorDashboardScreen';
 import SupervisorReportScreen from '../screens/technician/SupervisorReportScreen';
 import PendingReportsListScreen from '../screens/supervisor/PendingReportsListScreen';
@@ -108,6 +109,7 @@ const SupervisorAppNavigator = () => {
         }}
       >
         <Stack.Screen name="Login" component={SupervisorLoginScreen} />
+        <Stack.Screen name="SupervisorSignup" component={SupervisorSignupScreen} />
         <Stack.Screen name="Main" component={TabNavigator} />
         <Stack.Screen name="AssignTasks" component={AssignTasksScreen} />
         <Stack.Screen name="TeamStats" component={TeamStatsScreen} />

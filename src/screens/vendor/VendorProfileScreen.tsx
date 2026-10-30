@@ -89,6 +89,8 @@ function menuLabelKey(id: string): string | null {
       return 'vendorProfile.analytics';
     case 'support_team':
       return 'vendorProfile.supportTeam';
+    case 'product_settings':
+      return 'vendorProfile.productSettings';
     default:
       return null;
   }
@@ -107,6 +109,8 @@ function menuAction(id: string): string | null {
       return 'analytics';
     case 'support_team':
       return 'support';
+    case 'product_settings':
+      return 'productSettings';
     default:
       return id;
   }
@@ -221,6 +225,14 @@ const VendorProfileScreen: React.FC = () => {
       title: t('vendorProfile.preferences', { defaultValue: 'Preferences' }),
       items: [
         {
+          icon: 'options-outline',
+          label: t('vendorProfile.productSettings', { defaultValue: 'Product Settings' }),
+          subtitle: t('vendorProfile.productSettingsSubtitle', {
+            defaultValue: 'Area pricing, tree & palm prices',
+          }),
+          action: 'productSettings',
+        },
+        {
           icon: 'language-outline',
           label: t('settings.items.language.title', { defaultValue: 'Language' }),
           subtitle: languageLabel(i18n.language),
@@ -271,6 +283,9 @@ const VendorProfileScreen: React.FC = () => {
         break;
       case 'language':
         setLanguageModalVisible(true);
+        break;
+      case 'productSettings':
+        navigation.navigate('VendorProductSettings');
         break;
       case 'support':
         Alert.alert(

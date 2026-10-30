@@ -22,8 +22,21 @@ import {
   AdminManagedVendorProduct,
   AdminVendorDetailSummary,
 } from '../../services/adminVendorManagementService';
+import {
+  enrichAdminManagedProducts,
+  reconcileAdminManagedProductListingTypes,
+} from '../../utils/adminVendorProductListingCache';
+import {
+  adminVendorPricingService,
+  type AdminVendorPricingDetail,
+} from '../../services/adminVendorPricingService';
 
 const SCREEN_BG = COLORS.surfaceLight;
+
+function formatPricingAmount(currency: string, value: number | null | undefined): string | null {
+  if (value == null || !Number.isFinite(value) || value <= 0) return null;
+  return `${currency} ${value.toFixed(2)}`;
+}
 
 function ProductThumb({ uri, style }: { uri?: string; style: object }) {
   const [failed, setFailed] = useState(false);
@@ -84,6 +97,17 @@ function ProductRow({
   onPress: () => void;
   t: (key: string, options?: { defaultValue?: string }) => string;
 }) {
+  const isService = item.listing_type === 'service';
+  const catalogLabel = isService
+    ? item.service_name?.trim() ||
+      (item.service_id != null
+        ? `${t('adminVendorManagement.service', { defaultValue: 'Service' })} #${item.service_id}`
+        : '')
+    : item.category_name?.trim() ||
+      (item.category_id != null
+        ? `${t('adminVendorManagement.category', { defaultValue: 'Category' })} #${item.category_id}`
+        : '');
+
   return (
     <View style={styles.productCard}>
       <TouchableOpacity
@@ -91,15 +115,54 @@ function ProductRow({
         onPress={onPress}
         activeOpacity={0.88}
         accessibilityRole="button"
-        accessibilityLabel={t('adminVendorManagement.productForm.editProduct', {
-          defaultValue: 'Edit product',
-        })}
+        accessibilityLabel={
+          isService
+            ? t('adminVendorManagement.productForm.editService', { defaultValue: 'Edit service' })
+            : t('adminVendorManagement.productForm.editProduct', { defaultValue: 'Edit product' })
+        }
       >
         <ProductThumb uri={item.image_url} style={styles.productImage} />
         <View style={styles.productMeta}>
+          <View style={styles.listingBadgeRow}>
+            <View
+              style={[
+                styles.listingTypeBadge,
+                isService ? styles.listingTypeBadgeService : styles.listingTypeBadgeProduct,
+              ]}
+            >
+              <Ionicons
+                name={isService ? 'construct-outline' : 'cube-outline'}
+                size={11}
+                color={isService ? '#0D6E4F' : COLORS.primary}
+              />
+              <Text
+                style={[
+                  styles.listingTypeBadgeText,
+                  isService ? styles.listingTypeBadgeTextService : styles.listingTypeBadgeTextProduct,
+                ]}
+              >
+                {isService
+                  ? t('adminVendorManagement.listingService', { defaultValue: 'Service' })
+                  : t('adminVendorManagement.listingProduct', { defaultValue: 'Product' })}
+              </Text>
+            </View>
+          </View>
           <Text style={[styles.productName, !enabled && styles.mutedText]} numberOfLines={2}>
             {item.name}
           </Text>
+          {catalogLabel ? (
+            <Text style={styles.catalogLinkLabel} numberOfLines={1}>
+              {isService
+                ? t('adminVendorManagement.linkedService', {
+                    defaultValue: 'Service: {{name}}',
+                    name: catalogLabel,
+                  })
+                : t('adminVendorManagement.linkedCategory', {
+                    defaultValue: 'Category: {{name}}',
+                    name: catalogLabel,
+                  })}
+            </Text>
+          ) : null}
           <Text style={styles.productPrice}>
             {item.price_formatted || `${item.currency} ${item.price.toFixed(2)}`}
           </Text>
@@ -175,6 +238,8 @@ const AdminVendorProductsScreen: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [suspending, setSuspending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [vendorPricing, setVendorPricing] = useState<AdminVendorPricingDetail | null>(null);
+  const [pricingLoading, setPricingLoading] = useState(false);
 
   const load = useCallback(
     async (pageNum = 1, isRefresh = false) => {
@@ -188,16 +253,31 @@ const AdminVendorProductsScreen: React.FC = () => {
       else setLoadingMore(true);
       setError(null);
       try {
+        const pricingPromise =
+          pageNum === 1
+            ? adminVendorPricingService.getVendorPricing(vendorId).catch(() => null)
+            : Promise.resolve(null);
+        if (pageNum === 1) setPricingLoading(true);
+
         const detail = await adminVendorManagementService.getVendorDetail(vendorId, {
           page: pageNum,
           per_page: 20,
         });
+        const pricingDetail = await pricingPromise;
+        let enrichedProducts = await enrichAdminManagedProducts(detail.products);
+        if (pageNum === 1) {
+          enrichedProducts = await reconcileAdminManagedProductListingTypes(
+            vendorId,
+            enrichedProducts
+          );
+        }
         if (pageNum === 1) {
           setVendor(detail.vendor);
           setSummary(detail.summary);
-          setProducts(detail.products);
+          setProducts(enrichedProducts);
+          setVendorPricing(pricingDetail);
         } else {
-          setProducts((prev) => [...prev, ...detail.products]);
+          setProducts((prev) => [...prev, ...enrichedProducts]);
         }
         setPage(detail.pagination.current_page);
         setHasMore(detail.pagination.current_page < detail.pagination.last_page);
@@ -214,11 +294,13 @@ const AdminVendorProductsScreen: React.FC = () => {
           setProducts([]);
           setVendor(null);
           setSummary(null);
+          setVendorPricing(null);
         }
       } finally {
         setLoading(false);
         setRefreshing(false);
         setLoadingMore(false);
+        setPricingLoading(false);
       }
     },
     [vendorId, t]
@@ -514,6 +596,67 @@ const AdminVendorProductsScreen: React.FC = () => {
     summary?.total_revenue_formatted ||
     `${summary?.currency || 'AED'} ${Math.round(summary?.total_revenue ?? 0)}`;
 
+  const pricingCurrency =
+    vendorPricing?.currency || summary?.currency || vendor?.currency || 'AED';
+
+  const pricingNotSetLabel = t('admin.settings.productSettings.vendorPricing.chipNotSet', {
+    defaultValue: 'Not set',
+  });
+
+  const renderPricingChip = (
+    label: string,
+    value: string | null,
+    accent?: boolean
+  ) => {
+    const unset = !value;
+    return (
+      <View
+        style={[
+          styles.priceChip,
+          !unset && accent && styles.priceChipAccent,
+          unset && styles.priceChipMuted,
+        ]}
+      >
+        <Text
+          style={[styles.priceChipLabel, !unset && accent && styles.priceChipLabelAccent]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+        <Text
+          style={[
+            styles.priceChipValue,
+            !unset && accent && styles.priceChipValueAccent,
+            unset && styles.priceChipValueMuted,
+          ]}
+          numberOfLines={1}
+        >
+          {value ?? pricingNotSetLabel}
+        </Text>
+      </View>
+    );
+  };
+
+  const vendorPricingLines = React.useMemo(
+    () => ({
+      fixed: formatPricingAmount(pricingCurrency, vendorPricing?.fixedPrice ?? null),
+      perM2: formatPricingAmount(pricingCurrency, vendorPricing?.pricePerM2 ?? null),
+      perTree: formatPricingAmount(pricingCurrency, vendorPricing?.pricePerTree ?? null),
+      perPalm: formatPricingAmount(pricingCurrency, vendorPricing?.pricePerPalm ?? null),
+    }),
+    [vendorPricing, pricingCurrency]
+  );
+
+  const listingCounts = React.useMemo(() => {
+    let productsCount = 0;
+    let servicesCount = 0;
+    for (const row of products) {
+      if (row.listing_type === 'service') servicesCount += 1;
+      else productsCount += 1;
+    }
+    return { productsCount, servicesCount };
+  }, [products]);
+
   const openAddProduct = () => {
     navigation.navigate('AdminVendorProductForm', {
       vendorId,
@@ -528,6 +671,13 @@ const AdminVendorProductsScreen: React.FC = () => {
       vendorName: title,
       mode: 'edit',
       productId: product.vendor_product_id || product.id,
+      initialCategoryId: product.category_id,
+      initialCategoryName: product.category_name,
+      initialServiceId: product.service_id,
+      initialServiceName: product.service_name,
+      listingType: product.listing_type === 'service' ? 'service' : 'product',
+      initialSku: product.sku,
+      initialHandle: product.handle,
     });
   };
 
@@ -686,6 +836,28 @@ const AdminVendorProductsScreen: React.FC = () => {
                     </>
                   )}
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.vendorPricingBtn}
+                  onPress={() =>
+                    navigation.navigate('AdminVendorPricingManage', {
+                      vendorId,
+                      businessName: vendor?.business_name || title,
+                      contactName: vendor?.contact_name,
+                      logoUrl: vendor?.logo_url,
+                      currency: summary?.currency || vendor?.currency || 'AED',
+                    })
+                  }
+                  activeOpacity={0.88}
+                >
+                  <Ionicons name="pricetag-outline" size={18} color={COLORS.primary} />
+                  <Text style={styles.vendorPricingBtnText}>
+                    {t('adminVendorManagement.vendorPricing', {
+                      defaultValue: 'Check vendor pricing',
+                    })}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+                </TouchableOpacity>
               </View>
 
               <View style={styles.metricsRow}>
@@ -729,10 +901,78 @@ const AdminVendorProductsScreen: React.FC = () => {
                 </View>
               </View>
 
+              <TouchableOpacity
+                style={styles.pricingSummaryCard}
+                activeOpacity={0.88}
+                onPress={() =>
+                  navigation.navigate('AdminVendorPricingManage', {
+                    vendorId,
+                    businessName: vendor?.business_name || title,
+                    contactName: vendor?.contact_name,
+                    logoUrl: vendor?.logo_url,
+                    currency: pricingCurrency,
+                  })
+                }
+              >
+                <View style={styles.pricingSummaryHeader}>
+                  <Text style={styles.pricingSummaryTitle}>
+                    {t('adminVendorManagement.vendorPricingSummary', {
+                      defaultValue: 'Check vendor pricing for all services & products',
+                    })}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+                </View>
+                {pricingLoading ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} style={styles.pricingLoader} />
+                ) : (
+                  <View style={styles.pricingChipRow}>
+                    {renderPricingChip(
+                      t('admin.settings.productSettings.vendorPricing.chipFixed', {
+                        defaultValue: 'Fixed',
+                      }),
+                      vendorPricingLines.fixed,
+                      Boolean(vendorPricingLines.fixed)
+                    )}
+                    {renderPricingChip(
+                      t('admin.settings.productSettings.areaBasedPricing.aedPerM2', {
+                        defaultValue: 'AED / m²',
+                      }),
+                      vendorPricingLines.perM2,
+                      !vendorPricingLines.fixed && Boolean(vendorPricingLines.perM2)
+                    )}
+                    {renderPricingChip(
+                      t('admin.settings.productSettings.areaBasedPricing.aedPerTree', {
+                        defaultValue: 'AED / tree',
+                      }),
+                      vendorPricingLines.perTree,
+                      Boolean(vendorPricingLines.perTree)
+                    )}
+                    {renderPricingChip(
+                      t('admin.settings.productSettings.areaBasedPricing.aedPerPalm', {
+                        defaultValue: 'AED / palm',
+                      }),
+                      vendorPricingLines.perPalm,
+                      Boolean(vendorPricingLines.perPalm)
+                    )}
+                  </View>
+                )}
+              </TouchableOpacity>
+
               <View style={styles.sectionRow}>
-                <Text style={styles.sectionTitle}>
-                  {t('adminVendorManagement.productsList', { defaultValue: 'Products' })}
-                </Text>
+                <View style={styles.sectionTitleWrap}>
+                  <Text style={styles.sectionTitle}>
+                    {t('adminVendorManagement.productsAndServicesList', {
+                      defaultValue: 'Products & services',
+                    })}
+                  </Text>
+                  <Text style={styles.sectionSubtitle} numberOfLines={2}>
+                    {t('adminVendorManagement.listingCounts', {
+                      defaultValue: '{{products}} products · {{services}} services',
+                      products: listingCounts.productsCount,
+                      services: listingCounts.servicesCount,
+                    })}
+                  </Text>
+                </View>
                 <View style={styles.sectionRowRight}>
                   <Text style={styles.sectionCount}>
                     {summary?.total_products ?? products.length}
@@ -824,6 +1064,27 @@ const styles = StyleSheet.create({
   },
   accountActionBtnReactivate: {
     borderColor: 'rgba(255,255,255,0.55)',
+  },
+  vendorPricingBtn: {
+    marginTop: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    minHeight: 44,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.55)',
+  },
+  vendorPricingBtnText: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.primary,
+    textAlign: 'center',
   },
   accountActionBtnDisabled: {
     opacity: 0.7,
@@ -956,6 +1217,70 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   secondaryLabel: { fontSize: 10, color: COLORS.textSecondary, marginTop: 2 },
+  pricingSummaryCard: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.background,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  pricingSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  pricingSummaryTitle: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+  },
+  pricingLoader: { alignSelf: 'flex-start' },
+  pricingChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  priceChip: {
+    maxWidth: '100%',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.surfaceLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  priceChipAccent: {
+    backgroundColor: COLORS.primary + '12',
+    borderColor: COLORS.primary + '40',
+  },
+  priceChipLabel: {
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.semiBold,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+  },
+  priceChipLabelAccent: { color: COLORS.primary },
+  priceChipValue: {
+    marginTop: 2,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.text,
+  },
+  priceChipValueAccent: { color: COLORS.primary },
+  priceChipMuted: {
+    backgroundColor: COLORS.surfaceLight,
+    borderColor: COLORS.border,
+  },
+  priceChipValueMuted: {
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHTS.medium,
+    fontSize: FONT_SIZES.xs,
+  },
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -993,10 +1318,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: SPACING.xs,
   },
+  sectionTitleWrap: { flex: 1, minWidth: 0, paddingRight: SPACING.sm },
   sectionTitle: {
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
+  },
+  sectionSubtitle: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  listingBadgeRow: { flexDirection: 'row', marginBottom: 4 },
+  listingTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  listingTypeBadgeProduct: {
+    backgroundColor: COLORS.primary + '14',
+  },
+  listingTypeBadgeService: {
+    backgroundColor: '#0D6E4F18',
+  },
+  listingTypeBadgeText: {
+    fontSize: 10,
+    fontWeight: FONT_WEIGHTS.semiBold,
+  },
+  listingTypeBadgeTextProduct: { color: COLORS.primary },
+  listingTypeBadgeTextService: { color: '#0D6E4F' },
+  catalogLinkLabel: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginBottom: 2,
   },
   sectionCount: {
     fontSize: FONT_SIZES.sm,
