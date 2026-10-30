@@ -42,7 +42,10 @@ interface CartItemDisplay {
   id: string;
   productId: string;
   name: string;
+  /** Effective unit price (line total ÷ qty when API sends addons/area/trees). */
   price: number;
+  /** Line total from GET /shop/cart — includes tree/palm, area, fixed mode, etc. */
+  lineTotal: number;
   originalPrice?: number;
   image: string;
   category?: string;
@@ -53,6 +56,21 @@ interface CartItemDisplay {
   areaM2?: number;
   unitPrice?: number;
   pricingType?: string;
+  treeQuantity?: number;
+  palmTreeQuantity?: number;
+}
+
+function parseCartNumber(raw: unknown): number | undefined {
+  if (raw == null || raw === '') return undefined;
+  const n = typeof raw === 'number' ? raw : parseFloat(String(raw));
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function resolveCartItemLineTotal(item: CartApiItem): number {
+  const qty = item.quantity > 0 ? item.quantity : 1;
+  const fromApi = parseCartNumber(item.line_total);
+  if (fromApi != null && fromApi >= 0) return fromApi;
+  return item.current_price * qty;
 }
 
 function mapApiItemToDisplay(item: CartApiItem): CartItemDisplay {
@@ -70,21 +88,29 @@ function mapApiItemToDisplay(item: CartApiItem): CartItemDisplay {
       : typeof unitRaw === 'number'
         ? unitRaw
         : parseFloat(String(unitRaw));
+  const quantity = item.quantity > 0 ? item.quantity : 1;
+  const lineTotal = resolveCartItemLineTotal(item);
+  const effectiveUnitPrice = lineTotal / quantity;
+  const treeQty = parseCartNumber(item.tree_quantity);
+  const palmQty = parseCartNumber(item.palm_tree_quantity);
   return {
     id: String(item.id),
     productId: String(item.product_id),
     name: item.name,
-    price: item.current_price,
+    price: effectiveUnitPrice,
+    lineTotal,
     originalPrice: item.original_price ?? undefined,
     image: item.image_url || 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=400&q=60',
     category: item.category ?? undefined,
     categoryId: item.category_id ?? undefined,
     serviceId: item.service_id ?? undefined,
     brand: item.brand ?? undefined,
-    quantity: item.quantity,
+    quantity,
     areaM2: Number.isFinite(areaNum as number) && (areaNum as number) > 0 ? (areaNum as number) : undefined,
     unitPrice: Number.isFinite(unitNum as number) ? (unitNum as number) : undefined,
     pricingType: item.pricing_type ?? undefined,
+    treeQuantity: treeQty != null && treeQty > 0 ? treeQty : undefined,
+    palmTreeQuantity: palmQty != null && palmQty > 0 ? palmQty : undefined,
   };
 }
 
@@ -227,7 +253,10 @@ const CartScreen: React.FC = () => {
   };
 
   const useApiSummary = orderSummaryApi != null;
-  const subtotal = useApiSummary ? orderSummaryApi.subtotal : (orderSummary?.subtotal ?? cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0));
+  const subtotal = useApiSummary
+    ? orderSummaryApi.subtotal
+    : orderSummary?.subtotal ??
+      cartItems.reduce((sum, item) => sum + item.lineTotal, 0);
   const discount = useApiSummary ? orderSummaryApi.discount : (orderSummary?.discount ?? 0);
   const shippingBase = useApiSummary ? orderSummaryApi.shipping : (orderSummary?.shipping ?? shopSettings?.shipping_amount ?? 0);
   const taxPercent = useApiSummary
@@ -270,7 +299,7 @@ const CartScreen: React.FC = () => {
   };
 
   const renderCartItem = (item: CartItemDisplay) => {
-    const lineTotal = item.price * item.quantity;
+    const lineTotal = item.lineTotal;
     return (
       <View key={item.id} style={styles.cartItem}>
         <FallbackImage uri={item.image} style={styles.itemImage} />
@@ -318,6 +347,27 @@ const CartScreen: React.FC = () => {
             </View>
           ) : null}
 
+          {item.treeQuantity != null || item.palmTreeQuantity != null ? (
+            <View style={styles.areaMeta}>
+              {item.treeQuantity != null ? (
+                <Text style={styles.areaMetaText}>
+                  {t('cart.treesCount', {
+                    defaultValue: 'Trees: {{count}}',
+                    count: item.treeQuantity,
+                  })}
+                </Text>
+              ) : null}
+              {item.palmTreeQuantity != null ? (
+                <Text style={styles.areaMetaText}>
+                  {t('cart.palmTreesCount', {
+                    defaultValue: 'Palm trees: {{count}}',
+                    count: item.palmTreeQuantity,
+                  })}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
           <View style={styles.itemBottomRow}>
             <View style={styles.quantityControls}>
               <TouchableOpacity
@@ -355,14 +405,23 @@ const CartScreen: React.FC = () => {
             </View>
 
             <View style={styles.itemPrice}>
-              {item.originalPrice != null && item.originalPrice > item.price ? (
+              {item.originalPrice != null && item.originalPrice * item.quantity > lineTotal ? (
                 <Text style={styles.originalPrice}>
-                  {currency} {(item.originalPrice * item.quantity).toFixed(0)}
+                  {currency} {(item.originalPrice * item.quantity).toFixed(2)}
                 </Text>
               ) : null}
               <Text style={styles.currentPrice}>
                 {currency} {lineTotal.toFixed(2)}
               </Text>
+              {item.quantity > 1 ? (
+                <Text style={styles.unitPriceHint}>
+                  {t('cart.lineUnitPrice', {
+                    defaultValue: '{{currency}} {{price}} each',
+                    currency,
+                    price: item.price.toFixed(2),
+                  })}
+                </Text>
+              ) : null}
             </View>
           </View>
         </View>
@@ -740,6 +799,12 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.primary,
+  },
+  unitPriceHint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    textAlign: 'right',
   },
   originalPrice: {
     fontSize: FONT_SIZES.xs,

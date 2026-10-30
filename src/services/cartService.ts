@@ -46,6 +46,8 @@ export interface CartApiItem {
   unit_price?: number | string | null;
   pricing_type?: string | null;
   price_per_m2?: number | string | null;
+  tree_quantity?: number | string | null;
+  palm_tree_quantity?: number | string | null;
 }
 
 /** Order summary from GET /shop/cart response data.order_summary */
