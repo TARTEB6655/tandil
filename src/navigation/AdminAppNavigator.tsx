@@ -84,6 +84,8 @@ import AdminVendorManagementScreen from '../screens/admin/AdminVendorManagementS
 import AdminVendorFormScreen from '../screens/admin/AdminVendorFormScreen';
 import AdminVendorProductsScreen from '../screens/admin/AdminVendorProductsScreen';
 import AdminVendorProductFormScreen from '../screens/admin/AdminVendorProductFormScreen';
+import ServiceAreaPricingListScreen from '../screens/shared/ServiceAreaPricingListScreen';
+import ServiceAreaPricingManageScreen from '../screens/shared/ServiceAreaPricingManageScreen';
 import AdminVendorTypesEmiratesScreen from '../screens/admin/AdminVendorTypesEmiratesScreen';
 import AdminSchedulingScreen from '../screens/admin/AdminSchedulingScreen';
 import AdminSchedulingSettingsScreen from '../screens/admin/AdminSchedulingSettingsScreen';
@@ -255,6 +257,8 @@ const AdminAppNavigator = () => {
         <Stack.Screen name="AdminVendorForm" component={AdminVendorFormScreen} />
         <Stack.Screen name="AdminVendorProducts" component={AdminVendorProductsScreen} />
         <Stack.Screen name="AdminVendorProductForm" component={AdminVendorProductFormScreen} />
+        <Stack.Screen name="ServiceAreaPricingList" component={ServiceAreaPricingListScreen} />
+        <Stack.Screen name="ServiceAreaPricingManage" component={ServiceAreaPricingManageScreen} />
         <Stack.Screen name="AdminVendorTypesEmirates" component={AdminVendorTypesEmiratesScreen} />
         <Stack.Screen name="AdminScheduling" component={AdminSchedulingScreen} />
         <Stack.Screen name="AdminSchedulingSettings" component={AdminSchedulingSettingsScreen} />

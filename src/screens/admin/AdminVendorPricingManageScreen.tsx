@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -21,13 +21,10 @@ import type { ServicePriceIncludes } from '../../services/servicePricingService'
 import {
   DEFAULT_ADMIN_VENDOR_PRICE_INCLUDES,
   getAdminVendorPricingDraft,
-  type AdminVendorAreaPricingType,
 } from '../../services/adminVendorPricingStore';
 import {
   adminVendorPricingService,
-  buildAdminVendorServicePricingSaveBody,
   buildAdminVendorTreePalmPricingSaveBody,
-  type AdminVendorPricingDetail,
 } from '../../services/adminVendorPricingService';
 
 type RouteParams = {
@@ -48,8 +45,6 @@ const PRICE_INCLUSIONS: { key: PriceInclusionKey; icon: keyof typeof Ionicons.gl
   { key: 'delivery', icon: 'bicycle-outline' },
 ];
 
-const EXAMPLE_AREA_M2 = 100;
-
 function onDecimalPriceChange(text: string, setter: (v: string) => void) {
   setter(text.replace(/[^0-9.,]/g, ''));
 }
@@ -67,15 +62,6 @@ const AdminVendorPricingManageScreen: React.FC = () => {
   const { t } = useTranslation();
   const params = (route.params ?? {}) as RouteParams;
   const vendorId = String(params.vendorId ?? '');
-  const currency = params.currency || 'AED';
-
-  const [areaShowOnClient, setAreaShowOnClient] = useState(true);
-  const [areaPricingType, setAreaPricingType] = useState<AdminVendorAreaPricingType>('per_m2');
-  const [fixedPrice, setFixedPrice] = useState('');
-  const [pricePerM2, setPricePerM2] = useState('');
-  const [areaInclusions, setAreaInclusions] = useState<ServicePriceIncludes>(
-    DEFAULT_ADMIN_VENDOR_PRICE_INCLUDES
-  );
   const [treePalmEnabled, setTreePalmEnabled] = useState(false);
   const [pricePerTree, setPricePerTree] = useState('');
   const [pricePerPalm, setPricePerPalm] = useState('');
@@ -83,34 +69,15 @@ const AdminVendorPricingManageScreen: React.FC = () => {
     DEFAULT_ADMIN_VENDOR_PRICE_INCLUDES
   );
   const [loading, setLoading] = useState(true);
-  const [savingAreaPricing, setSavingAreaPricing] = useState(false);
   const [savingTreePalm, setSavingTreePalm] = useState(false);
 
-  const areaSectionBusy = loading || savingAreaPricing;
   const treePalmSectionBusy = loading || savingTreePalm;
   /** Ignore stale GET responses that finish after a newer load or save. */
   const pricingLoadSeqRef = useRef(0);
 
-  const applyDetailToForm = useCallback((detail: AdminVendorPricingDetail) => {
-    setAreaShowOnClient(detail.areaShowOnClient);
-    setAreaPricingType(detail.areaPricingType);
-    setFixedPrice(detail.fixedPrice != null ? String(detail.fixedPrice) : '');
-    setPricePerM2(detail.pricePerM2 != null ? String(detail.pricePerM2) : '');
-    setAreaInclusions(detail.areaPriceIncludes);
-    setTreePalmEnabled(detail.treePalmShowOnClient);
-    setPricePerTree(detail.pricePerTree != null ? String(detail.pricePerTree) : '');
-    setPricePerPalm(detail.pricePerPalm != null ? String(detail.pricePerPalm) : '');
-    setTreeInclusions(detail.treePalmPriceIncludes);
-  }, []);
-
   const applyDraftFallback = useCallback(() => {
     const draft = getAdminVendorPricingDraft(vendorId);
     if (!draft) return;
-    setAreaShowOnClient(draft.areaShowOnClient !== false);
-    setAreaPricingType(draft.areaPricingType);
-    setFixedPrice(draft.fixedPrice);
-    setPricePerM2(draft.pricePerM2);
-    setAreaInclusions(draft.areaPriceIncludes ?? DEFAULT_ADMIN_VENDOR_PRICE_INCLUDES);
     setTreePalmEnabled(draft.treePalmEnabled);
     setPricePerTree(draft.pricePerTree);
     setPricePerPalm(draft.pricePerPalm);
@@ -122,9 +89,12 @@ const AdminVendorPricingManageScreen: React.FC = () => {
     const seq = ++pricingLoadSeqRef.current;
     setLoading(true);
     try {
-      const detail = await adminVendorPricingService.getVendorPricing(vendorId);
+      const treePart = await adminVendorPricingService.getVendorTreePalmPricing(vendorId);
       if (seq !== pricingLoadSeqRef.current) return;
-      applyDetailToForm(detail);
+      setTreePalmEnabled(treePart.treePalmShowOnClient);
+      setPricePerTree(treePart.pricePerTree != null ? String(treePart.pricePerTree) : '');
+      setPricePerPalm(treePart.pricePerPalm != null ? String(treePart.pricePerPalm) : '');
+      setTreeInclusions(treePart.treePalmPriceIncludes);
     } catch {
       if (seq !== pricingLoadSeqRef.current) return;
       applyDraftFallback();
@@ -133,7 +103,7 @@ const AdminVendorPricingManageScreen: React.FC = () => {
         setLoading(false);
       }
     }
-  }, [vendorId, applyDetailToForm, applyDraftFallback]);
+  }, [vendorId, applyDraftFallback]);
 
   useFocusEffect(
     useCallback(() => {
@@ -143,12 +113,6 @@ const AdminVendorPricingManageScreen: React.FC = () => {
       };
     }, [loadPricing])
   );
-
-  const parsedPricePerM2 = parseDecimalInput(pricePerM2);
-  const exampleAreaTotal = useMemo(() => {
-    if (parsedPricePerM2 == null) return null;
-    return parsedPricePerM2 * EXAMPLE_AREA_M2;
-  }, [parsedPricePerM2]);
 
   const logoUri = params.logoUrl
     ? params.logoUrl.startsWith('http')
@@ -205,64 +169,6 @@ const AdminVendorPricingManageScreen: React.FC = () => {
     </View>
   );
 
-  const handleSaveAreaPricing = async () => {
-    const parsedFixed = parseDecimalInput(fixedPrice);
-    const parsedM2 = parseDecimalInput(pricePerM2);
-
-    if (areaShowOnClient && parsedFixed == null && parsedM2 == null) {
-      Alert.alert(
-        t('common.error', { defaultValue: 'Error' }),
-        t('vendorProfile.productSettingsNeedFixedOrM2', {
-          defaultValue: 'Enter a fixed price and/or a price per m² (at least one).',
-        })
-      );
-      return;
-    }
-
-    const savedAreaShowOnClient = areaShowOnClient;
-    pricingLoadSeqRef.current += 1;
-
-    setSavingAreaPricing(true);
-    try {
-      const serviceRes = await adminVendorPricingService.updateServicePricing(
-        vendorId,
-        buildAdminVendorServicePricingSaveBody({
-          show_on_client_products_services: savedAreaShowOnClient,
-          areaPricingType,
-          fixedPrice: parsedFixed,
-          pricePerM2: parsedM2,
-          price_includes: areaInclusions,
-        })
-      );
-
-      const detail = await adminVendorPricingService.getVendorPricing(vendorId);
-      applyDetailToForm({
-        ...detail,
-        areaShowOnClient: savedAreaShowOnClient,
-        fixedPrice: parsedFixed ?? detail.fixedPrice,
-        pricePerM2: parsedM2 ?? detail.pricePerM2,
-      });
-
-      Alert.alert(
-        t('common.success', { defaultValue: 'Success' }),
-        serviceRes.message ||
-          t('admin.settings.productSettings.areaBasedPricing.saved', {
-            defaultValue: 'Service pricing saved.',
-          })
-      );
-    } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        (err instanceof Error ? err.message : null) ||
-        t('admin.settings.productSettings.areaBasedPricing.saveFailed', {
-          defaultValue: 'Failed to save service pricing.',
-        });
-      Alert.alert(t('common.error', { defaultValue: 'Error' }), message);
-    } finally {
-      setSavingAreaPricing(false);
-    }
-  };
-
   const handleSaveTreePalmPricing = async () => {
     const parsedTree = parseDecimalInput(pricePerTree);
     const parsedPalm = parseDecimalInput(pricePerPalm);
@@ -293,11 +199,11 @@ const AdminVendorPricingManageScreen: React.FC = () => {
         })
       );
 
-      const detail = await adminVendorPricingService.getVendorPricing(vendorId);
-      applyDetailToForm({
-        ...detail,
-        treePalmShowOnClient: savedShowOnClient,
-      });
+      const treePart = await adminVendorPricingService.getVendorTreePalmPricing(vendorId);
+      setTreePalmEnabled(savedShowOnClient);
+      setPricePerTree(treePart.pricePerTree != null ? String(treePart.pricePerTree) : '');
+      setPricePerPalm(treePart.pricePerPalm != null ? String(treePart.pricePerPalm) : '');
+      setTreeInclusions(treePart.treePalmPriceIncludes);
 
       Alert.alert(
         t('common.success', { defaultValue: 'Success' }),
@@ -384,161 +290,6 @@ const AdminVendorPricingManageScreen: React.FC = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {t('admin.settings.productSettings.areaBasedPricing.section')}
-          </Text>
-          <Text style={styles.sectionHint}>
-            {t('admin.settings.productSettings.areaBasedPricing.hint', {
-              defaultValue:
-                'Fixed price or price per m² for this vendor. Save this section separately from tree & palm.',
-            })}
-          </Text>
-          <View style={styles.sectionCard}>
-            <View style={styles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>
-                  {t('vendorProfile.productSettingsShowOnClientTitle', {
-                    defaultValue: 'Show on client products & services',
-                  })}
-                </Text>
-                <Text style={styles.fieldHint}>
-                  {t('vendorProfile.productSettingsShowOnClientSubtitle', {
-                    defaultValue:
-                      'When off, customers do not see this pricing on the shop app. You can still save prices for later.',
-                  })}
-                </Text>
-              </View>
-              <Switch
-                value={areaShowOnClient}
-                onValueChange={setAreaShowOnClient}
-                trackColor={{ false: COLORS.border, true: COLORS.primary + '40' }}
-                thumbColor={areaShowOnClient ? COLORS.primary : COLORS.background}
-                disabled={areaSectionBusy}
-              />
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={areaSectionBusy ? styles.blockDisabled : undefined}>
-              <Text style={styles.fieldLabel}>
-                {t('admin.settings.productSettings.areaBasedPricing.pricingType')}
-              </Text>
-              <Text style={styles.fieldHint}>
-                {t('vendorProfile.productSettingsTabBothSavedHint', {
-                  defaultValue:
-                    'Use each tab to set that price. Switch tabs anytime — both values are saved together.',
-                })}
-              </Text>
-              <View style={styles.pricingTypeRow}>
-                {(
-                  [
-                    ['fixed', 'pricetag-outline', 'admin.settings.productSettings.areaBasedPricing.fixedPrice'] as const,
-                    ['per_m2', 'resize-outline', 'admin.settings.productSettings.areaBasedPricing.pricePerM2'] as const,
-                  ] as const
-                ).map(([type, icon, labelKey]) => {
-                  const hasFixed = parseDecimalInput(fixedPrice) != null;
-                  const hasM2 = parseDecimalInput(pricePerM2) != null;
-                  const showCheck = type === 'fixed' ? hasFixed : hasM2;
-                  return (
-                    <TouchableOpacity
-                      key={type}
-                      style={[
-                        styles.pricingTypeOption,
-                        areaPricingType === type && styles.pricingTypeOptionActive,
-                      ]}
-                      onPress={() => setAreaPricingType(type)}
-                      disabled={areaSectionBusy}
-                    >
-                      <Ionicons
-                        name={icon}
-                        size={18}
-                        color={areaPricingType === type ? COLORS.primary : COLORS.textSecondary}
-                      />
-                      <Text
-                        style={[
-                          styles.pricingTypeText,
-                          areaPricingType === type && styles.pricingTypeTextActive,
-                        ]}
-                      >
-                        {t(labelKey)}
-                      </Text>
-                      {showCheck ? (
-                        <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-                      ) : null}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <View style={styles.divider} />
-
-              {areaPricingType === 'fixed' ? (
-                <>
-                  <Text style={styles.fieldLabel}>
-                    {t('admin.settings.productSettings.areaBasedPricing.fixedPriceLabel')}
-                  </Text>
-                  <View style={styles.priceInputRow}>
-                    <TextInput
-                      style={styles.priceInput}
-                      value={fixedPrice}
-                      onChangeText={(text) => onDecimalPriceChange(text, setFixedPrice)}
-                      keyboardType="decimal-pad"
-                      placeholder="800"
-                      placeholderTextColor={COLORS.textSecondary}
-                      editable={!areaSectionBusy}
-                    />
-                    <Text style={styles.priceSuffix}>{currency}</Text>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.fieldLabel}>
-                    {t('admin.settings.productSettings.areaBasedPricing.pricePerM2Label')}
-                  </Text>
-                  <View style={styles.priceInputRow}>
-                    <TextInput
-                      style={styles.priceInput}
-                      value={pricePerM2}
-                      onChangeText={(text) => onDecimalPriceChange(text, setPricePerM2)}
-                      keyboardType="decimal-pad"
-                      placeholder="70"
-                      placeholderTextColor={COLORS.textSecondary}
-                      editable={!areaSectionBusy}
-                    />
-                    <Text style={styles.priceSuffix}>
-                      {t('admin.settings.productSettings.areaBasedPricing.aedPerM2')}
-                    </Text>
-                  </View>
-                  {exampleAreaTotal != null ? (
-                    <Text style={styles.exampleLine}>
-                      {t('admin.settings.productSettings.areaBasedPricing.exampleTotal', {
-                        total: exampleAreaTotal.toFixed(2),
-                      })}
-                    </Text>
-                  ) : null}
-                </>
-              )}
-
-              <View style={styles.divider} />
-
-              {renderInclusions(
-                areaInclusions,
-                (key) => toggleInclusion(key, setAreaInclusions),
-                areaSectionBusy
-              )}
-
-              <View style={styles.divider} />
-
-              {renderSaveButton(
-                () => void handleSaveAreaPricing(),
-                areaSectionBusy,
-                savingAreaPricing
-              )}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
             {t('admin.settings.productSettings.treePalmPricing.section', {
               defaultValue: 'Price per Tree & Palm',
             })}
@@ -546,7 +297,7 @@ const AdminVendorPricingManageScreen: React.FC = () => {
           <Text style={styles.sectionHint}>
             {t('admin.settings.productSettings.treePalmPricing.hint', {
               defaultValue:
-                'Tree and palm unit prices for this vendor. Save separately from fixed / m² pricing.',
+                'Tree and palm unit prices for this vendor. Fixed and m² rates are set per service listing.',
             })}
           </Text>
           <View style={styles.sectionCard}>
@@ -726,35 +477,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: SPACING.sm,
   },
-  pricingTypeRow: { flexDirection: 'row', gap: SPACING.sm },
-  pricingTypeOption: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.xs,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.sm,
-    borderRadius: BORDER_RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
-  },
-  pricingTypeOptionActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '12',
-  },
-  pricingTypeText: {
-    flexShrink: 1,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: FONT_WEIGHTS.medium,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  pricingTypeTextActive: {
-    color: COLORS.primary,
-    fontWeight: FONT_WEIGHTS.semiBold,
-  },
   divider: {
     height: 1,
     backgroundColor: COLORS.border,
@@ -782,11 +504,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semiBold,
     color: COLORS.text,
-  },
-  exampleLine: {
-    marginTop: SPACING.sm,
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
   },
   toggleRow: {
     flexDirection: 'row',

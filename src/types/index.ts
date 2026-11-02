@@ -386,7 +386,7 @@ export type VendorStackParamList = {
   Profile: undefined;
   ProductDetail: { productId: string };
   AddProduct: undefined;
-  EditProduct: { productId: string };
+  EditProduct: { productId: string; listingKind?: 'product' | 'service' };
   OrderDetail: { orderId: string };
   OrderContact: { orderId: string };
   Analytics: undefined;
@@ -399,4 +399,14 @@ export type VendorStackParamList = {
   ContactUs: undefined;
   LegalDocument: { document: 'terms' | 'privacy' };
   Notifications: undefined;
+  VendorProductSettings: undefined;
+  ServiceAreaPricingList: { portal?: 'admin' | 'vendor'; vendorId?: string; vendorName?: string; currency?: string };
+  ServiceAreaPricingManage: {
+    portal: 'admin' | 'vendor';
+    vendorId?: string;
+    vendorProductId: string;
+    listingName?: string;
+    serviceName?: string;
+    currency?: string;
+  };
 }; 

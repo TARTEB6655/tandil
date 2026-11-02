@@ -16,7 +16,11 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
-import { publicServiceService, PublicServiceProduct } from '../../services/publicServiceService';
+import {
+  publicServiceService,
+  PublicServiceProduct,
+  resolvePublicServiceProductShopId,
+} from '../../services/publicServiceService';
 import { buildFullImageUrl } from '../../config/api';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { isShopProductInStock } from '../../utils/shopProductStock';
@@ -141,7 +145,7 @@ const ServiceProductsScreen: React.FC = () => {
   const toDetailProduct = useCallback((p: PublicServiceProduct): ProductDetailDisplay => {
     const priceNum = typeof p.price === 'string' ? parseFloat(p.price) || 0 : (p.price ?? 0);
     return {
-      id: String(p.id),
+      id: String(resolvePublicServiceProductShopId(p) || p.id),
       name: p.name,
       price: priceNum,
       originalPrice: priceNum,
@@ -169,6 +173,7 @@ const ServiceProductsScreen: React.FC = () => {
           navigation.navigate('ProductDetail', {
             product: detail,
             fromServiceCatalog: true,
+            serviceCatalogItem: item,
           })
         }
       >

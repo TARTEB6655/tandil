@@ -129,22 +129,16 @@ const AdminVendorPricingListScreen: React.FC = () => {
     const { pricing } = item;
     const currency = item.currency || 'AED';
 
-    const fixedValue =
-      pricing.fixedPrice != null ? `${currency} ${pricing.fixedPrice.toFixed(2)}` : null;
-    const m2Value =
-      pricing.pricePerM2 != null ? `${currency} ${pricing.pricePerM2.toFixed(2)}` : null;
-
     const treeValue =
       pricing.pricePerTree != null ? `${currency} ${pricing.pricePerTree.toFixed(2)}` : null;
     const palmValue =
       pricing.pricePerPalm != null ? `${currency} ${pricing.pricePerPalm.toFixed(2)}` : null;
 
     const hasAnyPrice =
-      pricing.hasAnyConfigured ||
-      fixedValue != null ||
-      m2Value != null ||
       treeValue != null ||
-      palmValue != null;
+      palmValue != null ||
+      pricing.pricePerTree != null ||
+      pricing.pricePerPalm != null;
 
     const logoUri = item.logoUrl
       ? item.logoUrl.startsWith('http')
@@ -195,20 +189,6 @@ const AdminVendorPricingListScreen: React.FC = () => {
         <View style={styles.chipRow}>
           {hasAnyPrice ? (
             <>
-              {renderPriceChip(
-                t('admin.settings.productSettings.vendorPricing.chipFixed', {
-                  defaultValue: 'Fixed',
-                }),
-                fixedValue,
-                true
-              )}
-              {renderPriceChip(
-                t('admin.settings.productSettings.areaBasedPricing.aedPerM2', {
-                  defaultValue: 'AED / m²',
-                }),
-                m2Value,
-                !fixedValue && Boolean(m2Value)
-              )}
               {renderPriceChip(
                 t('admin.settings.productSettings.areaBasedPricing.aedPerTree', {
                   defaultValue: 'AED / tree',

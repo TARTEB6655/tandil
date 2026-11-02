@@ -3,6 +3,7 @@
  * GET /api/services?per_page=12 - list services for user dashboard.
  */
 import { publicApiClient } from './api';
+import type { ShopProduct } from './shopService';
 
 export interface PublicService {
   id: number;
@@ -30,7 +31,10 @@ export interface PublicServicesResponse {
 
 /** Product returned by GET /services/:service_id/products or GET /services/products */
 export interface PublicServiceProduct {
+  /** Shop catalog id for GET /shop/products/:id (resolved in normalize). */
   id: number;
+  shop_product_id?: number;
+  vendor_product_id?: number;
   name: string;
   description?: string | null;
   price?: string | number;
@@ -51,6 +55,88 @@ export interface PublicServiceProduct {
 }
 
 const PER_PAGE = 12;
+
+function pickPositiveInt(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (value == null || value === '') continue;
+    const n = typeof value === 'number' ? value : parseInt(String(value), 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+/** Services list APIs may send vendor listing id separately from shop product id. */
+export function resolvePublicServiceProductShopId(
+  raw: PublicServiceProduct | Record<string, unknown>
+): number {
+  const row = raw as Record<string, unknown>;
+  const shopNested = row.shop_product;
+  const nestedShopId =
+    shopNested && typeof shopNested === 'object'
+      ? (shopNested as Record<string, unknown>).id
+      : undefined;
+  return (
+    pickPositiveInt(
+      row.shop_product_id,
+      nestedShopId,
+      row.catalog_product_id,
+      row.product_id,
+      row.id
+    ) ?? 0
+  );
+}
+
+function normalizePublicServiceProduct(raw: unknown): PublicServiceProduct | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const shopId = resolvePublicServiceProductShopId(row);
+  if (!shopId) return null;
+  const vendorId = pickPositiveInt(row.vendor_product_id, row.vendor_product?.id);
+  const name = String(row.name ?? row.title ?? '').trim();
+  if (!name) return null;
+  return {
+    ...(row as PublicServiceProduct),
+    id: shopId,
+    shop_product_id: shopId,
+    vendor_product_id: vendorId ?? undefined,
+    name,
+  };
+}
+
+/**
+ * Services list rows include full pricing UI fields; map to shop product shape when
+ * GET /shop/products/:id returns a different row (id/sku mismatch).
+ */
+export function mapPublicServiceCatalogItemToShopProduct(
+  raw: PublicServiceProduct | Record<string, unknown>
+): ShopProduct {
+  const row = raw as Record<string, unknown>;
+  const id = resolvePublicServiceProductShopId(row);
+  const price = row.price ?? row.catalog_price ?? 0;
+  const stockRaw = row.stock ?? row.stock_quantity ?? 100;
+  const stock =
+    typeof stockRaw === 'number' ? stockRaw : parseInt(String(stockRaw), 10) || 100;
+  return {
+    ...(row as ShopProduct),
+    id,
+    name: String(row.name ?? ''),
+    price: price as string | number,
+    catalog_price: (row.catalog_price ?? price) as string | number,
+    base_price: (row.base_price ?? row.catalog_price ?? price) as string | number,
+    status: String(row.status ?? 'active'),
+    stock,
+    product_type: String(row.type ?? row.product_type ?? 'service'),
+    type: String(row.type ?? 'service'),
+    is_service: true,
+  };
+}
+
+function normalizePublicServiceProductList(raw: unknown): PublicServiceProduct[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(normalizePublicServiceProduct)
+    .filter((p): p is PublicServiceProduct => p != null);
+}
 
 export const publicServiceService = {
   /**
@@ -82,9 +168,9 @@ export const publicServiceService = {
     }>(`/services/${serviceId}/products`, { timeout: 15000 });
     const data = response.data?.data;
     if (data && typeof data === 'object' && Array.isArray((data as any).products)) {
-      return (data as any).products;
+      return normalizePublicServiceProductList((data as any).products);
     }
-    if (Array.isArray(data)) return data;
+    if (Array.isArray(data)) return normalizePublicServiceProductList(data);
     return [];
   },
 
@@ -113,9 +199,9 @@ export const publicServiceService = {
       data?: { data?: PublicServiceProduct[] } | PublicServiceProduct[];
     }>('/services/products', { params: requestParams, timeout: 15000 });
     const data = response.data?.data;
-    if (Array.isArray(data)) return data;
+    if (Array.isArray(data)) return normalizePublicServiceProductList(data);
     if (data && typeof data === 'object' && Array.isArray((data as any).data)) {
-      return (data as any).data;
+      return normalizePublicServiceProductList((data as any).data);
     }
     return [];
   },

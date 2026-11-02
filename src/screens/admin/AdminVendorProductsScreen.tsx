@@ -28,7 +28,6 @@ import {
 } from '../../utils/adminVendorProductListingCache';
 import {
   adminVendorPricingService,
-  type AdminVendorPricingDetail,
 } from '../../services/adminVendorPricingService';
 
 const SCREEN_BG = COLORS.surfaceLight;
@@ -238,7 +237,10 @@ const AdminVendorProductsScreen: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [suspending, setSuspending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [vendorPricing, setVendorPricing] = useState<AdminVendorPricingDetail | null>(null);
+  const [vendorTreePalmPricing, setVendorTreePalmPricing] = useState<{
+    pricePerTree: number | null;
+    pricePerPalm: number | null;
+  } | null>(null);
   const [pricingLoading, setPricingLoading] = useState(false);
 
   const load = useCallback(
@@ -255,7 +257,7 @@ const AdminVendorProductsScreen: React.FC = () => {
       try {
         const pricingPromise =
           pageNum === 1
-            ? adminVendorPricingService.getVendorPricing(vendorId).catch(() => null)
+            ? adminVendorPricingService.getVendorTreePalmPricing(vendorId).catch(() => null)
             : Promise.resolve(null);
         if (pageNum === 1) setPricingLoading(true);
 
@@ -275,7 +277,14 @@ const AdminVendorProductsScreen: React.FC = () => {
           setVendor(detail.vendor);
           setSummary(detail.summary);
           setProducts(enrichedProducts);
-          setVendorPricing(pricingDetail);
+          setVendorTreePalmPricing(
+            pricingDetail
+              ? {
+                  pricePerTree: pricingDetail.pricePerTree ?? null,
+                  pricePerPalm: pricingDetail.pricePerPalm ?? null,
+                }
+              : null
+          );
         } else {
           setProducts((prev) => [...prev, ...enrichedProducts]);
         }
@@ -294,7 +303,7 @@ const AdminVendorProductsScreen: React.FC = () => {
           setProducts([]);
           setVendor(null);
           setSummary(null);
-          setVendorPricing(null);
+          setVendorTreePalmPricing(null);
         }
       } finally {
         setLoading(false);
@@ -597,7 +606,7 @@ const AdminVendorProductsScreen: React.FC = () => {
     `${summary?.currency || 'AED'} ${Math.round(summary?.total_revenue ?? 0)}`;
 
   const pricingCurrency =
-    vendorPricing?.currency || summary?.currency || vendor?.currency || 'AED';
+    summary?.currency || vendor?.currency || 'AED';
 
   const pricingNotSetLabel = t('admin.settings.productSettings.vendorPricing.chipNotSet', {
     defaultValue: 'Not set',
@@ -639,12 +648,10 @@ const AdminVendorProductsScreen: React.FC = () => {
 
   const vendorPricingLines = React.useMemo(
     () => ({
-      fixed: formatPricingAmount(pricingCurrency, vendorPricing?.fixedPrice ?? null),
-      perM2: formatPricingAmount(pricingCurrency, vendorPricing?.pricePerM2 ?? null),
-      perTree: formatPricingAmount(pricingCurrency, vendorPricing?.pricePerTree ?? null),
-      perPalm: formatPricingAmount(pricingCurrency, vendorPricing?.pricePerPalm ?? null),
+      perTree: formatPricingAmount(pricingCurrency, vendorTreePalmPricing?.pricePerTree ?? null),
+      perPalm: formatPricingAmount(pricingCurrency, vendorTreePalmPricing?.pricePerPalm ?? null),
     }),
-    [vendorPricing, pricingCurrency]
+    [vendorTreePalmPricing, pricingCurrency]
   );
 
   const listingCounts = React.useMemo(() => {
@@ -858,6 +865,27 @@ const AdminVendorProductsScreen: React.FC = () => {
                   </Text>
                   <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.vendorPricingBtn}
+                  onPress={() =>
+                    navigation.navigate('ServiceAreaPricingList', {
+                      portal: 'admin',
+                      vendorId,
+                      vendorName: vendor?.business_name || title,
+                      currency: pricingCurrency,
+                    })
+                  }
+                  activeOpacity={0.88}
+                >
+                  <Ionicons name="resize-outline" size={18} color={COLORS.primary} />
+                  <Text style={styles.vendorPricingBtnText}>
+                    {t('adminVendorManagement.perServiceM2Pricing', {
+                      defaultValue: 'Per-service m² pricing',
+                    })}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+                </TouchableOpacity>
               </View>
 
               <View style={styles.metricsRow}>
@@ -926,20 +954,6 @@ const AdminVendorProductsScreen: React.FC = () => {
                   <ActivityIndicator size="small" color={COLORS.primary} style={styles.pricingLoader} />
                 ) : (
                   <View style={styles.pricingChipRow}>
-                    {renderPricingChip(
-                      t('admin.settings.productSettings.vendorPricing.chipFixed', {
-                        defaultValue: 'Fixed',
-                      }),
-                      vendorPricingLines.fixed,
-                      Boolean(vendorPricingLines.fixed)
-                    )}
-                    {renderPricingChip(
-                      t('admin.settings.productSettings.areaBasedPricing.aedPerM2', {
-                        defaultValue: 'AED / m²',
-                      }),
-                      vendorPricingLines.perM2,
-                      !vendorPricingLines.fixed && Boolean(vendorPricingLines.perM2)
-                    )}
                     {renderPricingChip(
                       t('admin.settings.productSettings.areaBasedPricing.aedPerTree', {
                         defaultValue: 'AED / tree',

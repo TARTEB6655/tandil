@@ -19,6 +19,31 @@ export async function writeAdminVendorListingType(
   }
 }
 
+export async function readVendorProductListingMeta(productId: string): Promise<{
+  listingType?: 'product' | 'service';
+  serviceId?: number;
+  serviceName?: string;
+}> {
+  const id = String(productId).trim();
+  if (!id) return {};
+  try {
+    const [listingRaw, serviceRaw, serviceNameRaw] = await Promise.all([
+      AsyncStorage.getItem(listingTypeKey(id)),
+      AsyncStorage.getItem(vendorProductServiceCacheKey(id)),
+      AsyncStorage.getItem(vendorProductServiceNameCacheKey(id)),
+    ]);
+    const serviceIdNum = serviceRaw != null ? Number(serviceRaw) : NaN;
+    return {
+      listingType:
+        listingRaw === 'product' || listingRaw === 'service' ? listingRaw : undefined,
+      serviceId: Number.isFinite(serviceIdNum) && serviceIdNum > 0 ? serviceIdNum : undefined,
+      serviceName: serviceNameRaw?.trim() || undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export async function writeCachedProductServiceId(
   productId: string,
   serviceId: number,

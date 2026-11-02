@@ -14,7 +14,12 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../constants';
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
-import { publicServiceService, PublicService, PublicServiceProduct } from '../../services/publicServiceService';
+import {
+  publicServiceService,
+  PublicService,
+  PublicServiceProduct,
+  resolvePublicServiceProductShopId,
+} from '../../services/publicServiceService';
 import { buildFullImageUrl } from '../../config/api';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { isShopProductInStock } from '../../utils/shopProductStock';
@@ -98,7 +103,7 @@ const ServicesScreen: React.FC = () => {
   };
 
   const toDetailProduct = (p: PublicServiceProduct) => ({
-    id: String(p.id),
+    id: String(resolvePublicServiceProductShopId(p) || p.id),
     name: p.name,
     price: typeof p.price === 'string' ? parseFloat(p.price) || 0 : (p.price ?? 0),
     originalPrice: typeof p.price === 'string' ? parseFloat(p.price) || 0 : (p.price ?? 0),
@@ -183,6 +188,7 @@ const ServicesScreen: React.FC = () => {
           navigation.navigate('ProductDetail', {
             product: detail,
             fromServiceCatalog: true,
+            serviceCatalogItem: item,
           })
         }
       >
@@ -268,7 +274,9 @@ const ServicesScreen: React.FC = () => {
           <FlatList
             data={filteredProducts}
             renderItem={renderProductItem}
-            keyExtractor={(item) => String(item.id)}
+            keyExtractor={(item) =>
+              String(resolvePublicServiceProductShopId(item) || item.id)
+            }
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.servicesList}
             ListEmptyComponent={

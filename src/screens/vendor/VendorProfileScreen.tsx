@@ -228,9 +228,19 @@ const VendorProfileScreen: React.FC = () => {
           icon: 'options-outline',
           label: t('vendorProfile.productSettings', { defaultValue: 'Product Settings' }),
           subtitle: t('vendorProfile.productSettingsSubtitle', {
-            defaultValue: 'Area pricing, tree & palm prices',
+            defaultValue: 'Tree & palm unit pricing defaults',
           }),
           action: 'productSettings',
+        },
+        {
+          icon: 'resize-outline',
+          label: t('vendorProfile.serviceAreaPricing', {
+            defaultValue: 'Service m² pricing',
+          }),
+          subtitle: t('vendorProfile.serviceAreaPricingSubtitle', {
+            defaultValue: 'Set price per m² for each of your services',
+          }),
+          action: 'serviceAreaPricing',
         },
         {
           icon: 'language-outline',
@@ -286,6 +296,9 @@ const VendorProfileScreen: React.FC = () => {
         break;
       case 'productSettings':
         navigation.navigate('VendorProductSettings');
+        break;
+      case 'serviceAreaPricing':
+        navigation.navigate('ServiceAreaPricingList', { portal: 'vendor' });
         break;
       case 'support':
         Alert.alert(

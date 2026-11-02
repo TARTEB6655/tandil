@@ -120,6 +120,10 @@ const VendorEditProductScreen: React.FC = () => {
   const route = useRoute<any>();
   const productId =
     route.params?.productId != null ? String(route.params.productId).trim() : undefined;
+  const listingKindHint =
+    route.params?.listingKind === 'service' || route.params?.listingKind === 'product'
+      ? route.params.listingKind
+      : undefined;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -154,6 +158,9 @@ const VendorEditProductScreen: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [customizationConfig, setCustomizationConfig] = useState<ProductCustomizationConfig>({ groups: [] });
+  const [listingKind, setListingKind] = useState<'product' | 'service'>(
+    listingKindHint ?? 'product'
+  );
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -180,7 +187,9 @@ const VendorEditProductScreen: React.FC = () => {
     setStock(String(detail.stock_quantity));
     setStatus(detail.product_status ?? 'active');
     setCategoryId(detail.category_id != null ? String(detail.category_id) : '');
-    setServiceId(detail.service_ids?.[0] != null ? String(detail.service_ids[0]) : '');
+    const resolvedServiceId =
+      detail.service_ids?.[0] ?? detail.service_id ?? undefined;
+    setServiceId(resolvedServiceId != null && resolvedServiceId > 0 ? String(resolvedServiceId) : '');
     setWeightUnit(detail.weight_unit ?? 'kg');
     setIsFeatured(Boolean(detail.is_featured));
     setSku(detail.sku ?? '');
@@ -202,8 +211,12 @@ const VendorEditProductScreen: React.FC = () => {
     setRemovedImageIds([]);
     setRemoveMainImageFlag(false);
     setCustomizationConfig(detail.customization ?? { groups: [] });
+    const hasService =
+      (resolvedServiceId != null && resolvedServiceId > 0) ||
+      Boolean(detail.service?.trim());
+    setListingKind(hasService ? 'service' : (listingKindHint ?? 'product'));
     setErrors({});
-  }, []);
+  }, [listingKindHint]);
 
   const loadProductDetail = useCallback(async () => {
     if (!productId) {
@@ -249,11 +262,13 @@ const VendorEditProductScreen: React.FC = () => {
 
   const serviceOptions = useMemo(
     () => [
-      { value: '', label: t('admin.addProduct.noService') },
+      { value: '', label: t('vendorAddProduct.selectService', { defaultValue: 'Select service' }) },
       ...services.map((s) => ({ value: String(s.id), label: s.name })),
     ],
     [services, t]
   );
+
+  const isServiceListing = listingKind === 'service';
 
   const statusOptions = useMemo(
     () =>
@@ -407,7 +422,13 @@ const VendorEditProductScreen: React.FC = () => {
     if (!status) newErrors.status = t('admin.addProduct.errorStatusRequired');
     if (!sku.trim()) newErrors.sku = t('admin.addProduct.errorSkuRequired');
     if (!handle.trim()) newErrors.handle = t('admin.addProduct.errorHandleRequired');
-    if (!categoryId.trim()) {
+    if (isServiceListing) {
+      if (!serviceId.trim()) {
+        newErrors.service_id = t('vendorAddProduct.errorServiceRequired', {
+          defaultValue: 'Please select a service',
+        });
+      }
+    } else if (!categoryId.trim()) {
       newErrors.category_id = t('vendorAddProduct.errorCategoryRequired', {
         defaultValue: 'Please select a category',
       });
@@ -432,8 +453,24 @@ const VendorEditProductScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      const categoryIdNum = parseInt(categoryId, 10);
-      if (!Number.isFinite(categoryIdNum) || categoryIdNum <= 0) {
+      const categoryIdNum = categoryId.trim() ? parseInt(categoryId, 10) : NaN;
+      const serviceIdNum = serviceId.trim() ? parseInt(serviceId, 10) : NaN;
+
+      if (isServiceListing) {
+        if (!Number.isFinite(serviceIdNum) || serviceIdNum <= 0) {
+          setErrors((prev) => ({
+            ...prev,
+            service_id: t('vendorAddProduct.errorServiceRequired', {
+              defaultValue: 'Please select a service',
+            }),
+          }));
+          Alert.alert(
+            t('admin.addProduct.missingFieldsTitle'),
+            t('vendorAddProduct.errorServiceRequired', { defaultValue: 'Please select a service' })
+          );
+          return;
+        }
+      } else if (!Number.isFinite(categoryIdNum) || categoryIdNum <= 0) {
         setErrors((prev) => ({
           ...prev,
           category_id: t('vendorAddProduct.errorCategoryRequired', {
@@ -446,8 +483,6 @@ const VendorEditProductScreen: React.FC = () => {
         );
         return;
       }
-
-      const serviceIdNum = serviceId.trim() ? parseInt(serviceId, 10) : undefined;
       const timingFields = {
         ...(estimatedArrival.trim() ? { estimated_arrival: estimatedArrival.trim() } : {}),
         ...(jobDuration.trim() ? { job_duration: jobDuration.trim() } : {}),
@@ -462,8 +497,8 @@ const VendorEditProductScreen: React.FC = () => {
         price: parseFloat(price),
         stock: parseInt(stock, 10),
         status,
-        category_id: categoryIdNum,
-        service_id: serviceIdNum ?? null,
+        category_id: isServiceListing ? null : categoryIdNum,
+        service_id: isServiceListing ? serviceIdNum : null,
         weight_unit: weightUnit,
         is_featured: isFeatured ? 1 : 0,
         sku: sku.trim(),
@@ -639,8 +674,18 @@ const VendorEditProductScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <VendorPageHeader
-        title={t('vendorEditProduct.title', { defaultValue: 'Edit Product' })}
-        subtitle={t('vendorEditProduct.subtitle', { defaultValue: 'View and update your product details' })}
+        title={
+          isServiceListing
+            ? t('vendorEditProduct.serviceTitle', { defaultValue: 'Edit Service' })
+            : t('vendorEditProduct.title', { defaultValue: 'Edit Product' })
+        }
+        subtitle={
+          isServiceListing
+            ? t('vendorEditProduct.serviceSubtitle', {
+                defaultValue: 'View and update your service listing',
+              })
+            : t('vendorEditProduct.subtitle', { defaultValue: 'View and update your product details' })
+        }
         onBack={() => navigation.goBack()}
       />
 
@@ -648,7 +693,7 @@ const VendorEditProductScreen: React.FC = () => {
         <View style={styles.centerState}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.centerStateText}>
-            {t('vendorEditProduct.loading', { defaultValue: 'Loading product…' })}
+            {t('vendorEditProduct.loading', { defaultValue: 'Loading listing…' })}
           </Text>
         </View>
       ) : loadError ? (
@@ -677,11 +722,26 @@ const VendorEditProductScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
         >
           <VendorHeroBanner
-            badge={t('vendorEditProduct.badge', { defaultValue: 'Product details' })}
-            title={name || t('vendorEditProduct.title', { defaultValue: 'Edit Product' })}
-            subtitle={t('vendorEditProduct.heroSubtitle', {
-              defaultValue: 'Review listing, pricing, and inventory',
-            })}
+            badge={
+              isServiceListing
+                ? t('vendorEditProduct.serviceBadge', { defaultValue: 'Service details' })
+                : t('vendorEditProduct.badge', { defaultValue: 'Product details' })
+            }
+            title={
+              name ||
+              (isServiceListing
+                ? t('vendorEditProduct.serviceTitle', { defaultValue: 'Edit Service' })
+                : t('vendorEditProduct.title', { defaultValue: 'Edit Product' }))
+            }
+            subtitle={
+              isServiceListing
+                ? t('vendorEditProduct.serviceHeroSubtitle', {
+                    defaultValue: 'Review service info, pricing, and availability',
+                  })
+                : t('vendorEditProduct.heroSubtitle', {
+                    defaultValue: 'Review listing, pricing, and inventory',
+                  })
+            }
           />
 
           {(approvalStatus || listingStatus) ? (
@@ -715,8 +775,12 @@ const VendorEditProductScreen: React.FC = () => {
 
           <VendorCard style={styles.formCard}>
             <SectionHeader
-              icon="cube-outline"
-              title={t('admin.addProduct.productDetails')}
+              icon={isServiceListing ? 'construct-outline' : 'cube-outline'}
+              title={
+                isServiceListing
+                  ? t('vendorEditProduct.serviceDetailsSection', { defaultValue: 'Service details' })
+                  : t('admin.addProduct.productDetails')
+              }
               subtitle={t('vendorAddProduct.detailsHint', { defaultValue: 'Basic info customers will see' })}
             />
 
@@ -790,27 +854,27 @@ const VendorEditProductScreen: React.FC = () => {
               </View>
             </View>
 
-            {renderDropdown(
-              t('vendorAddProduct.categoryLabel', { defaultValue: 'Category *' }),
-              categoryId,
-              categoryOptions,
-              showCategoryDropdown,
-              () => setShowCategoryDropdown((v) => !v),
-              (v) => { setCategoryId(v); if (errors.category_id) setErrors({ ...errors, category_id: '' }); },
-              'grid-outline',
-              errors.category_id
-            )}
-
-            {renderDropdown(
-              t('admin.addProduct.serviceLabel'),
-              serviceId,
-              serviceOptions,
-              showServiceDropdown,
-              () => setShowServiceDropdown((v) => !v),
-              (v) => { setServiceId(v); if (errors.service_id) setErrors({ ...errors, service_id: '' }); },
-              'construct-outline',
-              errors.service_id
-            )}
+            {isServiceListing
+              ? renderDropdown(
+                  t('vendorAddProduct.serviceLabel', { defaultValue: 'Service *' }),
+                  serviceId,
+                  serviceOptions,
+                  showServiceDropdown,
+                  () => setShowServiceDropdown((v) => !v),
+                  (v) => { setServiceId(v); if (errors.service_id) setErrors({ ...errors, service_id: '' }); },
+                  'construct-outline',
+                  errors.service_id
+                )
+              : renderDropdown(
+                  t('vendorAddProduct.categoryLabel', { defaultValue: 'Category *' }),
+                  categoryId,
+                  categoryOptions,
+                  showCategoryDropdown,
+                  () => setShowCategoryDropdown((v) => !v),
+                  (v) => { setCategoryId(v); if (errors.category_id) setErrors({ ...errors, category_id: '' }); },
+                  'grid-outline',
+                  errors.category_id
+                )}
 
             <View style={styles.featuredCard}>
               <View style={styles.featuredLeft}>
@@ -1016,7 +1080,9 @@ const VendorEditProductScreen: React.FC = () => {
               <>
                 <Ionicons name="trash-outline" size={18} color={COLORS.error} />
                 <Text style={styles.deleteButtonText}>
-                  {t('vendorEditProduct.deleteButton', { defaultValue: 'Delete Product' })}
+                  {isServiceListing
+                    ? t('vendorEditProduct.deleteServiceButton', { defaultValue: 'Delete Service' })
+                    : t('vendorEditProduct.deleteButton', { defaultValue: 'Delete Product' })}
                 </Text>
               </>
             )}

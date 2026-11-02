@@ -20,6 +20,10 @@ import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, FONT_WEIGHTS } from '../../
 import Header from '../../components/common/Header';
 import { useTranslation } from 'react-i18next';
 import { shopService, ShopProduct, isShopProductInStock, resolveShopProductStock } from '../../services/shopService';
+import {
+  mapPublicServiceCatalogItemToShopProduct,
+  type PublicServiceProduct,
+} from '../../services/publicServiceService';
 import { addCartItem, getBuyNowSummary } from '../../services/cartService';
 import { getShopSettings, ShopSettings } from '../../services/shopSettingsService';
 import {
@@ -102,6 +106,10 @@ interface ProductDetailScreenProps {
   route: {
     params: {
       product: ProductDetailDisplay;
+      /** Opened from Services / service products list (not Store). */
+      fromServiceCatalog?: boolean;
+      /** Full row from GET /services/.../products — used when shop GET id mismatches. */
+      serviceCatalogItem?: PublicServiceProduct | Record<string, unknown>;
     };
   };
 }
@@ -133,7 +141,11 @@ function shopProductToDisplay(p: ShopProduct | null): ProductDetailDisplay | nul
 const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
-  const { product: initialProduct } = route.params;
+  const {
+    product: initialProduct,
+    fromServiceCatalog: fromServiceCatalogRoute,
+    serviceCatalogItem,
+  } = route.params ?? {};
   const [quantity, setQuantity] = useState(1);
   const [apiProduct, setApiProduct] = useState<ShopProduct | null>(null);
   const [loading, setLoading] = useState(true);
@@ -239,11 +251,19 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     }
     let cancelled = false;
     setLoading(true);
+    setApiProduct(null);
     shopService
       .getProductById(id)
       .then(async (data) => {
         if (cancelled) return;
-        const enriched = data ? await enrichShopProductWithClientVendorPricing(data) : null;
+        let shopRow: ShopProduct | null = data;
+        if (shopRow && String(shopRow.id) !== String(id)) {
+          shopRow = null;
+        }
+        if (!shopRow && serviceCatalogItem) {
+          shopRow = mapPublicServiceCatalogItemToShopProduct(serviceCatalogItem);
+        }
+        const enriched = shopRow ? await enrichShopProductWithClientVendorPricing(shopRow) : null;
         if (cancelled) return;
         setApiProduct(enriched);
         const b = enriched?.booking;
@@ -266,12 +286,16 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     return () => {
       cancelled = true;
     };
-  }, [initialProduct?.id]);
+  }, [initialProduct?.id, serviceCatalogItem]);
 
   const product = useMemo(() => {
-    const fromApi = shopProductToDisplay(apiProduct);
+    const expectedId = String(initialProduct?.id ?? '').trim();
+    const apiMatches =
+      apiProduct != null &&
+      expectedId.length > 0 &&
+      String(apiProduct.id) === expectedId;
+    const fromApi = apiMatches ? shopProductToDisplay(apiProduct) : null;
     if (fromApi) return fromApi;
-    // Ensure route product id is a numeric catalog id string
     const rid = Number(initialProduct?.id);
     if (initialProduct && Number.isFinite(rid) && rid > 0) {
       return { ...initialProduct, id: String(rid) };
@@ -357,9 +381,10 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   );
 
   const isServiceCatalogProduct = useMemo(() => {
+    if (fromServiceCatalogRoute) return true;
     const type = String(apiProduct?.product_type ?? apiProduct?.type ?? '').toLowerCase();
     return type === 'service' || apiProduct?.is_service === true;
-  }, [apiProduct]);
+  }, [apiProduct, fromServiceCatalogRoute]);
 
   const areaPricing = useMemo(
     () =>
@@ -454,6 +479,13 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         return catalogBasePrice;
       }
     }
+    const apiMatches =
+      apiProduct != null && String(apiProduct.id) === String(initialProduct?.id);
+    if (apiMatches) {
+      const fromCatalog = resolveShopProductCatalogBase(apiProduct);
+      if (fromCatalog != null) return fromCatalog;
+    }
+    if (product.price > 0) return product.price;
     if (effectiveServicePricing?.pricing_type === 'fixed' && effectiveServicePricing.price != null) {
       return effectiveServicePricing.price;
     }
@@ -463,6 +495,8 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     activeClientPricingMode,
     vendorFixedCheckout,
     catalogBasePrice,
+    apiProduct,
+    initialProduct?.id,
     effectiveServicePricing,
     product.price,
   ]);
@@ -629,6 +663,12 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     catalogBasePrice,
     treePalmExtras,
   ]);
+
+  /** Same line unit price for hero + Add to cart (excludes quantity multiplier). */
+  const displayLineUnitPrice = useMemo(
+    () => addToCartSubtotal / Math.max(quantity, 1),
+    [addToCartSubtotal, quantity]
+  );
 
   const hasAreaTotal = isPerM2Pricing && parsedAreaM2 != null;
 
@@ -1023,10 +1063,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
               <View style={styles.priceBlock}>
                 <Text style={styles.currentPrice}>
                   {currency}{' '}
-                  {(showVendorPricingCard || hasAreaTotal
-                    ? addToCartSubtotal / quantity
-                    : product.price
-                  ).toLocaleString(undefined, {
+                  {displayLineUnitPrice.toLocaleString(undefined, {
                     maximumFractionDigits: 2,
                   })}
                 </Text>
@@ -1051,7 +1088,10 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
               </View>
             ) : (
               <Text style={styles.currentPrice}>
-                {currency} {product.price}
+                {currency}{' '}
+                {displayLineUnitPrice.toLocaleString(undefined, {
+                  maximumFractionDigits: 2,
+                })}
               </Text>
             )}
             {!showVendorPricingCard && !isPerM2Pricing && product.originalPrice > product.price && (

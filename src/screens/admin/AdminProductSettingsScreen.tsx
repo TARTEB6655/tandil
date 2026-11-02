@@ -172,35 +172,6 @@ const AdminProductSettingsScreen: React.FC = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionEyebrow}>
-            {t('admin.settings.productSettings.vendorPricing.section')}
-          </Text>
-          <Text style={styles.sectionHint}>
-            {t('admin.settings.productSettings.vendorPricing.sectionHint')}
-          </Text>
-          <View style={styles.sectionContent}>
-            <TouchableOpacity
-              style={[styles.settingItem, styles.settingItemLast]}
-              onPress={() => navigation.navigate('AdminVendorPricingList')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.settingIcon}>
-                <Ionicons name="home-outline" size={24} color={COLORS.primary} />
-              </View>
-              <View style={styles.settingContent}>
-                <Text style={styles.settingTitle}>
-                  {t('admin.settings.productSettings.vendorPricing.rowTitle')}
-                </Text>
-                <Text style={styles.settingSubtitle}>
-                  {t('admin.settings.productSettings.vendorPricing.rowSubtitle')}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionEyebrow}>
             {t('admin.settings.productSettings.instantOrderFee.section')}
           </Text>
           <Text style={styles.sectionHint}>

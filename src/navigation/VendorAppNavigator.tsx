@@ -34,6 +34,8 @@ import VendorContactUsScreen from '../screens/vendor/VendorContactUsScreen';
 import VendorLegalDocumentScreen from '../screens/vendor/VendorLegalDocumentScreen';
 import VendorNotificationsScreen from '../screens/vendor/VendorNotificationsScreen';
 import VendorProductSettingsScreen from '../screens/vendor/VendorProductSettingsScreen';
+import ServiceAreaPricingListScreen from '../screens/shared/ServiceAreaPricingListScreen';
+import ServiceAreaPricingManageScreen from '../screens/shared/ServiceAreaPricingManageScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator<VendorStackParamList>();
@@ -128,6 +130,8 @@ const VendorAppNavigator = () => {
       <Stack.Screen name="LegalDocument" component={VendorLegalDocumentScreen} />
       <Stack.Screen name="Notifications" component={VendorNotificationsScreen} />
       <Stack.Screen name="VendorProductSettings" component={VendorProductSettingsScreen} />
+      <Stack.Screen name="ServiceAreaPricingList" component={ServiceAreaPricingListScreen} />
+      <Stack.Screen name="ServiceAreaPricingManage" component={ServiceAreaPricingManageScreen} />
     </Stack.Navigator>
   );
 };

@@ -92,8 +92,14 @@ const VendorProductsScreen: React.FC = () => {
     navigation.navigate('AddProduct');
   };
 
-  const handleEditProduct = (productId: string) => {
-    navigation.navigate('EditProduct', { productId });
+  const handleEditProduct = (item: VendorCatalogProduct) => {
+    const isServiceListing =
+      Boolean(item.service?.trim()) ||
+      (item.service_id != null && item.service_id > 0);
+    navigation.navigate('EditProduct', {
+      productId: item.id,
+      listingKind: isServiceListing ? 'service' : 'product',
+    });
   };
 
   // Vendor flow does not need a product detail page
@@ -217,7 +223,7 @@ const VendorProductsScreen: React.FC = () => {
       </View>
 
       <View style={styles.productActions}>
-        <TouchableOpacity style={styles.actionButton} onPress={() => handleEditProduct(item.id)}>
+        <TouchableOpacity style={styles.actionButton} onPress={() => handleEditProduct(item)}>
           <Ionicons name="create-outline" size={20} color={COLORS.warning} />
           <Text style={styles.actionText}>{t('vendorProducts.edit')}</Text>
         </TouchableOpacity>

@@ -373,6 +373,10 @@ export const shopService = {
       const data = (response?.data as any)?.data ?? null;
       if (!data) return null;
       const normalized = normalizeShopProduct(data);
+      /** Reject SKU/handle collisions where URL id ≠ catalog row id (e.g. GET /shop/products/317 → id 244). */
+      if (String(normalized.id) !== String(productId)) {
+        return null;
+      }
       const { applyShopProductAreaRateFields } = await import('./servicePricingService');
       /** Return immediately; product detail enriches per-m² in background if needed. */
       return applyShopProductAreaRateFields(normalized);

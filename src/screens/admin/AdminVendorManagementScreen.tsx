@@ -185,6 +185,23 @@ const AdminVendorManagementScreen: React.FC = () => {
             <TouchableOpacity
               style={styles.editBtn}
               onPress={() =>
+                navigation.navigate('ServiceAreaPricingList', {
+                  portal: 'admin',
+                  vendorId: String(item.vendor_id || item.id),
+                  vendorName: item.business_name,
+                  currency: item.currency || currency,
+                })
+              }
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel={t('adminVendorManagement.perServiceM2Pricing', {
+                defaultValue: 'Per-service m² pricing',
+              })}
+            >
+              <Ionicons name="resize-outline" size={18} color={COLORS.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() =>
                 navigation.navigate('AdminVendorForm', {
                   mode: 'edit',
                   vendorId: item.vendor_id || item.id,
@@ -241,7 +258,7 @@ const AdminVendorManagementScreen: React.FC = () => {
       </TouchableOpacity>
     </View>
     ),
-    [navigation, t]
+    [currency, navigation, t]
   );
 
   const listHeader = (
