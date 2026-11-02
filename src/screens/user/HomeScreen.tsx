@@ -942,18 +942,28 @@ const HomeScreen: React.FC = () => {
       {/* Loyalty Points */}
       <View style={styles.loyaltyCard}>
         <View style={styles.loyaltyDecor} />
-        <View style={styles.loyaltyContent}>
-          <View style={styles.loyaltyLeft}>
+        <View
+          style={[
+            styles.loyaltyContent,
+            Platform.OS === 'android' && styles.loyaltyContentAndroid,
+          ]}
+        >
+          <View
+            style={[
+              styles.loyaltyLeft,
+              Platform.OS === 'android' && styles.loyaltyLeftAndroid,
+            ]}
+          >
             <View style={styles.loyaltyIconWrap}>
               <Ionicons name="gift-outline" size={22} color="#fff" />
             </View>
-            <View>
+            <View style={styles.loyaltyTextBlock}>
               <Text style={styles.loyaltyTitle}>{t('home.loyaltyPoints')}</Text>
-              <Text style={styles.loyaltyPoints}>
-                {loyaltyPoints} {t('common.points')}
+              <Text style={styles.loyaltyPoints} numberOfLines={1} adjustsFontSizeToFit>
+                {loyaltyPoints.toLocaleString()} {t('common.points')}
               </Text>
               {loyaltyBoostLabel ? (
-                <Text style={styles.loyaltyBoost}>
+                <Text style={styles.loyaltyBoost} numberOfLines={1}>
                   {t('home.loyaltyBoostLive', {
                     defaultValue: '{{boost}} live',
                     boost: loyaltyBoostLabel,
@@ -963,7 +973,10 @@ const HomeScreen: React.FC = () => {
             </View>
           </View>
           <TouchableOpacity
-            style={styles.loyaltyButton}
+            style={[
+              styles.loyaltyButton,
+              Platform.OS === 'android' && styles.loyaltyButtonAndroid,
+            ]}
             onPress={() => navigation.navigate('LoyaltyPoints')}
             activeOpacity={0.88}
           >
@@ -1480,12 +1493,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  loyaltyContentAndroid: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
   },
   loyaltyLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.md,
     flex: 1,
+    minWidth: 0,
+  },
+  loyaltyTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  loyaltyLeftAndroid: {
+    flex: 0,
+    width: '100%',
   },
   loyaltyIconWrap: {
     width: 44,
@@ -1519,6 +1546,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: 10,
     borderRadius: BORDER_RADIUS.round,
+    flexShrink: 0,
+  },
+  loyaltyButtonAndroid: {
+    alignSelf: 'flex-end',
+    marginTop: SPACING.xs,
   },
   loyaltyButtonText: {
     fontSize: FONT_SIZES.sm,

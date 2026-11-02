@@ -8,6 +8,7 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -253,9 +254,18 @@ const OrdersScreen: React.FC = () => {
         }
       />
 
-      <View style={styles.quickActions}>
+      <View
+        style={[
+          styles.quickActions,
+          Platform.OS === 'android' && styles.quickActionsAndroid,
+        ]}
+      >
         <TouchableOpacity
-          style={[styles.quickAction, styles.quickActionPrimary]}
+          style={[
+            styles.quickAction,
+            styles.quickActionPrimary,
+            Platform.OS === 'android' && styles.quickActionAndroid,
+          ]}
           onPress={() => navigation.navigate('Main' as never, { screen: 'Store' } as never)}
           activeOpacity={0.88}
         >
@@ -263,13 +273,22 @@ const OrdersScreen: React.FC = () => {
             <Ionicons name="bag-handle" size={20} color="#fff" />
           </View>
           <View style={styles.quickActionTextCol}>
-            <Text style={styles.quickActionText}>{t('home.shopProducts', 'Shop')}</Text>
-            <Text style={styles.quickActionHint}>{t('orders.shopHint', 'Browse products')}</Text>
+            <Text style={styles.quickActionText} numberOfLines={2}>
+              {t('orders.footerShopTitle', { defaultValue: 'Shop products' })}
+            </Text>
+            <Text style={styles.quickActionHint} numberOfLines={1}>
+              {t('orders.shopHint', 'Browse products')}
+            </Text>
           </View>
+          <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.quickAction, styles.quickActionHelp]}
+          style={[
+            styles.quickAction,
+            styles.quickActionHelp,
+            Platform.OS === 'android' && styles.quickActionAndroid,
+          ]}
           onPress={() => navigation.navigate('HelpCenter')}
           activeOpacity={0.88}
         >
@@ -277,9 +296,14 @@ const OrdersScreen: React.FC = () => {
             <Ionicons name="help-buoy" size={20} color="#fff" />
           </View>
           <View style={styles.quickActionTextCol}>
-            <Text style={styles.quickActionText}>{t('helpCenter.title', 'Help')}</Text>
-            <Text style={styles.quickActionHint}>{t('orders.helpHint', 'Get support')}</Text>
+            <Text style={styles.quickActionText} numberOfLines={2}>
+              {t('orders.footerHelpTitle', { defaultValue: 'Help center' })}
+            </Text>
+            <Text style={styles.quickActionHint} numberOfLines={1}>
+              {t('orders.helpHint', 'Get support')}
+            </Text>
           </View>
+          <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
         </TouchableOpacity>
       </View>
     </View>
@@ -433,18 +457,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: SPACING.sm,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.lg,
+  },
+  quickActionsAndroid: {
+    flexDirection: 'column',
+    gap: SPACING.md,
   },
   quickAction: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: SPACING.sm,
     borderRadius: 16,
-    padding: 12,
+    paddingVertical: 12,
+    paddingHorizontal: SPACING.md,
     borderWidth: 1,
+    minWidth: 0,
+  },
+  quickActionAndroid: {
+    flex: 0,
+    width: '100%',
   },
   quickActionPrimary: {
     backgroundColor: '#E8F2EA',
@@ -463,16 +496,25 @@ const styles = StyleSheet.create({
   },
   quickActionTextCol: {
     flex: 1,
+    minWidth: 0,
   },
   quickActionText: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.text,
+    flexShrink: 1,
+    ...Platform.select({
+      android: { includeFontPadding: false },
+    }),
   },
   quickActionHint: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
+    flexShrink: 1,
+    ...Platform.select({
+      android: { includeFontPadding: false },
+    }),
   },
 });
 

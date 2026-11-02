@@ -29,15 +29,18 @@ import { getShopSettings, ShopSettings } from '../../services/shopSettingsServic
 import {
   ClientProductPricingMode,
   clientPricingModeToApiType,
+  applyShopProductAreaRateFields,
   enrichShopProductWithClientVendorPricing,
   formatAreaM2,
   getEffectiveServicePrice,
   getServicePricingSettings,
+  peekServicePricingSettingsCache,
   isPositiveUnitPrice,
   isProductTreePalmEnabled,
   mergeShopProductWithServicePricing,
   parseAreaM2,
   parseShopProductDisplayBreakdownForMode,
+  ShopProductPriceBreakdownLine,
   resolveProductPalmUnitPrice,
   resolveProductTreeUnitPrice,
   resolveProductUnitPricePerM2,
@@ -84,6 +87,61 @@ function parseProductUnitPrice(p: ShopProduct | null, fallback: number): number 
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
+function breakdownLineDisplayAmount(line: ShopProductPriceBreakdownLine): string {
+  if (line.amount != null && Number.isFinite(line.amount)) {
+    return line.amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+  const fromLabel = line.amountLabel.replace(/^[^\d\-+]*\s*/, '').trim();
+  return fromLabel.length > 0 ? fromLabel : line.amountLabel;
+}
+
+function localizeShopBreakdownLine(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  line: ShopProductPriceBreakdownLine,
+  currency: string
+): string {
+  const price = breakdownLineDisplayAmount(line);
+  const key = line.key.toLowerCase();
+  const label = line.label.toLowerCase();
+
+  if (key.includes('fixed') || label.includes('fixed')) {
+    return t('product.fixedCheckoutLine', {
+      currency,
+      price,
+      defaultValue: 'Fixed price: {{currency}} {{price}}',
+    });
+  }
+  if (
+    key.includes('catalog') ||
+    key.includes('base') ||
+    key.includes('product') ||
+    label.includes('catalog') ||
+    label.includes('product price') ||
+    label.includes('base price')
+  ) {
+    return t('product.catalogPriceLine', {
+      currency,
+      price,
+      defaultValue: 'Product price: {{currency}} {{price}}',
+    });
+  }
+  if (key.includes('per_m') || key.includes('m2') || label.includes('m²') || label.includes('per m')) {
+    return t('product.perM2ReferenceLine', {
+      currency,
+      price,
+      defaultValue: 'Price per m²: {{currency}} {{price}} / m²',
+    });
+  }
+
+  const i18nKey = `product.breakdownLines.${key.replace(/[^a-z0-9_]/g, '_')}`;
+  return t(i18nKey, {
+    currency,
+    price,
+    label: line.label,
+    defaultValue: `${line.label}: ${currency} ${price}`,
+  });
+}
+
 export type ProductDetailDisplay = {
   id: string;
   name: string;
@@ -110,6 +168,8 @@ interface ProductDetailScreenProps {
       fromServiceCatalog?: boolean;
       /** Full row from GET /services/.../products — used when shop GET id mismatches. */
       serviceCatalogItem?: PublicServiceProduct | Record<string, unknown>;
+      /** From list screen when global pricing was already loaded. */
+      prefetchedServicePricing?: ServicePricingSettings | null;
     };
   };
 }
@@ -145,6 +205,7 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
     product: initialProduct,
     fromServiceCatalog: fromServiceCatalogRoute,
     serviceCatalogItem,
+    prefetchedServicePricing,
   } = route.params ?? {};
   const [quantity, setQuantity] = useState(1);
   const [apiProduct, setApiProduct] = useState<ShopProduct | null>(null);
@@ -159,7 +220,11 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
   const [selectedDateIso, setSelectedDateIso] = useState<string | null>(null);
   const [selectedSlotLabel, setSelectedSlotLabel] = useState<string>('');
   const [slotsLoading, setSlotsLoading] = useState(false);
-  const [servicePricing, setServicePricing] = useState<ServicePricingSettings | null>(null);
+  const [servicePricing, setServicePricing] = useState<ServicePricingSettings | null>(() => {
+    if (prefetchedServicePricing !== undefined) return prefetchedServicePricing;
+    const cached = peekServicePricingSettingsCache();
+    return cached !== undefined ? cached : null;
+  });
   const [areaM2Input, setAreaM2Input] = useState('');
   const [clientPricingMode, setClientPricingMode] = useState<ClientProductPricingMode>('base');
   const [treeCount, setTreeCount] = useState(0);
@@ -263,21 +328,36 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
         if (!shopRow && serviceCatalogItem) {
           shopRow = mapPublicServiceCatalogItemToShopProduct(serviceCatalogItem);
         }
-        const enriched = shopRow ? await enrichShopProductWithClientVendorPricing(shopRow) : null;
-        if (cancelled) return;
-        setApiProduct(enriched);
-        const b = enriched?.booking;
-        if (b?.enabled) {
-          const preferred =
-            b.selected_date ||
-            b.dates?.find((day) => day.available)?.date ||
-            b.dates?.[0]?.date ||
-            null;
-          setSelectedDateIso(preferred);
-          setSelectedSlotLabel('');
-        } else {
-          setSelectedDateIso(null);
-          setSelectedSlotLabel('');
+        if (!shopRow) return;
+
+        const quickProduct = applyShopProductAreaRateFields(shopRow);
+        setApiProduct(quickProduct);
+        setLoading(false);
+
+        const applyBookingFromProduct = (row: ShopProduct | null) => {
+          const b = row?.booking;
+          if (b?.enabled) {
+            const preferred =
+              b.selected_date ||
+              b.dates?.find((day) => day.available)?.date ||
+              b.dates?.[0]?.date ||
+              null;
+            setSelectedDateIso(preferred);
+            setSelectedSlotLabel('');
+          } else {
+            setSelectedDateIso(null);
+            setSelectedSlotLabel('');
+          }
+        };
+        applyBookingFromProduct(quickProduct);
+
+        try {
+          const enriched = await enrichShopProductWithClientVendorPricing(quickProduct);
+          if (cancelled) return;
+          setApiProduct(enriched);
+          applyBookingFromProduct(enriched);
+        } catch {
+          // keep quickProduct on screen
         }
       })
       .finally(() => {
@@ -1226,12 +1306,15 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
                 <View style={styles.areaCalcBox}>
                   {fixedBreakdown.lines.map((line) => (
                     <Text key={line.key} style={styles.areaCalcLine}>
-                      {line.label}: {line.amountLabel}
+                      {localizeShopBreakdownLine(t, line, currency)}
                     </Text>
                   ))}
-                  {fixedBreakdown.note ? (
-                    <Text style={styles.areaHint}>{fixedBreakdown.note}</Text>
-                  ) : null}
+                  <Text style={styles.areaHint}>
+                    {t('product.fixedCheckoutNote', {
+                      defaultValue:
+                        'At checkout with fixed pricing selected, the service line uses this fixed price (catalog is not added again).',
+                    })}
+                  </Text>
                 </View>
               ) : null}
 
@@ -1261,6 +1344,14 @@ const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ route }) => {
                         defaultValue: 'Price per m²: {{currency}} {{price}} / m²',
                         currency,
                         price: unitPricePerM2.toLocaleString(undefined, { maximumFractionDigits: 2 }),
+                      })}
+                    </Text>
+                  ) : null}
+                  {vendorFixedCheckout != null ? (
+                    <Text style={styles.areaHint}>
+                      {t('product.fixedCheckoutNote', {
+                        defaultValue:
+                          'At checkout with fixed pricing selected, the service line uses this fixed price (catalog is not added again).',
                       })}
                     </Text>
                   ) : null}

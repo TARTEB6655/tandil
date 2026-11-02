@@ -294,7 +294,10 @@ const VendorProductServiceAreaPricingSection: React.FC<
                     placeholderTextColor={COLORS.textSecondary}
                     editable={!busy}
                   />
-                  <Text style={styles.priceSuffix}>{currency} / m²</Text>
+                  <Text style={styles.priceSuffix}>
+                    {currency}{' '}
+                    {t('vendorProductAreaPricing.aedPerM2Suffix', { defaultValue: '/ m²' })}
+                  </Text>
                 </View>
                 {previewPerM2Total != null ? (
                   <Text style={styles.previewText}>

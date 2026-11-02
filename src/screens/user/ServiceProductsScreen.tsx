@@ -174,6 +174,7 @@ const ServiceProductsScreen: React.FC = () => {
             product: detail,
             fromServiceCatalog: true,
             serviceCatalogItem: item,
+            prefetchedServicePricing: servicePricing,
           })
         }
       >

@@ -456,6 +456,21 @@ function mergeServicePricingSettings(
   };
 }
 
+const SERVICE_PRICING_CACHE_TTL_MS = 120_000;
+let servicePricingCache: ServicePricingSettings | null | undefined;
+let servicePricingCacheAt = 0;
+let servicePricingInflight: Promise<ServicePricingSettings | null> | null = null;
+
+/** Synchronous read of cached global service pricing (undefined = not cached / expired). */
+export function peekServicePricingSettingsCache(): ServicePricingSettings | null | undefined {
+  if (servicePricingCache === undefined) return undefined;
+  if (Date.now() - servicePricingCacheAt > SERVICE_PRICING_CACHE_TTL_MS) {
+    servicePricingCache = undefined;
+    return undefined;
+  }
+  return servicePricingCache;
+}
+
 async function fetchTreePalmPricingSettings(): Promise<ServicePricingSettings | null> {
   const attempts: { get: typeof publicApiClient.get; path: string }[] = [
     { get: publicApiClient.get.bind(publicApiClient), path: '/settings/tree-palm-pricing' },
@@ -482,45 +497,59 @@ async function fetchTreePalmPricingSettings(): Promise<ServicePricingSettings | 
   return null;
 }
 
-/**
- * Public/customer service pricing (area-based vs fixed).
- * Tries public/shop settings endpoints (global + vendor-backed where exposed).
- */
-export async function getServicePricingSettings(): Promise<ServicePricingSettings | null> {
+async function fetchServicePricingBaseSettings(): Promise<ServicePricingSettings | null> {
   const paths = [
-    '/settings/service-pricing',
     '/shop/settings/service-pricing',
     '/shop/service-pricing',
+    '/settings/service-pricing',
   ];
-
-  let base: ServicePricingSettings | null = null;
 
   for (const path of paths) {
     try {
-      const res = await publicApiClient.get(path, { timeout: 15000 });
+      const res = await publicApiClient.get(path, { timeout: 8000 });
       const parsed =
         parseServicePricingSettings(res?.data) ?? parseServicePricingSettings(res?.data?.data);
-      if (parsed) {
-        base = parsed;
-        break;
-      }
+      if (parsed) return parsed;
     } catch {
       // try next
     }
   }
 
-  if (!base) {
-    try {
-      const res = await apiClient.get('/settings/service-pricing', { timeout: 15000 });
-      base =
-        parseServicePricingSettings(res?.data) ?? parseServicePricingSettings(res?.data?.data);
-    } catch {
-      // ignore
-    }
+  try {
+    const res = await apiClient.get('/settings/service-pricing', { timeout: 8000 });
+    return (
+      parseServicePricingSettings(res?.data) ?? parseServicePricingSettings(res?.data?.data)
+    );
+  } catch {
+    return null;
   }
+}
 
-  const treePalm = await fetchTreePalmPricingSettings();
-  return mergeServicePricingSettings(base, treePalm);
+/**
+ * Public/customer service pricing (legacy global + tree/palm). Cached and fetched in parallel.
+ */
+export async function getServicePricingSettings(): Promise<ServicePricingSettings | null> {
+  const cached = peekServicePricingSettingsCache();
+  if (cached !== undefined) return cached;
+
+  if (servicePricingInflight) return servicePricingInflight;
+
+  servicePricingInflight = (async () => {
+    try {
+      const [base, treePalm] = await Promise.all([
+        fetchServicePricingBaseSettings(),
+        fetchTreePalmPricingSettings(),
+      ]);
+      const merged = mergeServicePricingSettings(base, treePalm);
+      servicePricingCache = merged;
+      servicePricingCacheAt = Date.now();
+      return merged;
+    } finally {
+      servicePricingInflight = null;
+    }
+  })();
+
+  return servicePricingInflight;
 }
 
 /** Parse customer-entered area (m²); allows decimals like 137.5 */
@@ -1220,40 +1249,65 @@ function mergeVendorTreePalmOntoShopProduct(
 export async function enrichShopProductWithClientVendorPricing(
   product: ShopProduct
 ): Promise<ShopProduct> {
-  let enriched = await enrichShopProductWithAreaUnitRate(product);
+  let enriched = applyShopProductAreaRateFields(product);
   const vendorId = enriched.vendor_id;
-  if (vendorId == null || String(vendorId).trim() === '') {
+  const hasVendor = vendorId != null && String(vendorId).trim() !== '';
+
+  const needsAreaMerge =
+    enriched.show_area_pricing_on_client !== false &&
+    !isVendorFixedPricingEnabled(enriched) &&
+    !isVendorPerM2PricingEnabled(enriched);
+
+  const needsTreeMerge =
+    parseBool(enriched.show_tree_options) && !isProductTreePalmEnabled(enriched);
+
+  const clientAreaFlag = enriched.show_area_pricing_on_client;
+  const needsAreaRateFetch =
+    (clientAreaFlag === undefined ||
+      clientAreaFlag === null ||
+      parseBool(clientAreaFlag)) &&
+    !isPositiveUnitPrice(resolveProductUnitPricePerM2(enriched)) &&
+    (hasVendor || isVendorPerM2PricingEnabled(enriched));
+
+  if (!hasVendor && !needsAreaRateFetch) {
+    return enriched;
+  }
+  if (!needsAreaMerge && !needsTreeMerge && !needsAreaRateFetch) {
     return enriched;
   }
 
-  const needsAreaMerge =
-    enriched.show_area_pricing_on_client == null ||
-    (!isVendorFixedPricingEnabled(enriched) && !isVendorPerM2PricingEnabled(enriched));
+  const [serviceSettings, treeSettings, areaRate] = await Promise.all([
+    hasVendor && needsAreaMerge
+      ? fetchShopVendorServicePricingSettings(vendorId)
+      : Promise.resolve(null),
+    hasVendor && needsTreeMerge
+      ? fetchShopVendorTreePalmPricingSettings(vendorId)
+      : Promise.resolve(null),
+    needsAreaRateFetch
+      ? fetchShopProductAreaUnitPrice(enriched.id, enriched.vendor_id ?? null)
+      : Promise.resolve(null),
+  ]);
 
-  const needsTreeMerge =
-    !isProductTreePalmEnabled(enriched) && enriched.show_tree_options !== false;
-
-  if (needsAreaMerge) {
-    const serviceSettings = await fetchShopVendorServicePricingSettings(vendorId);
-    if (serviceSettings) {
-      enriched = mergeVendorServicePricingOntoShopProduct(enriched, serviceSettings);
-    }
+  if (serviceSettings) {
+    enriched = mergeVendorServicePricingOntoShopProduct(enriched, serviceSettings);
   }
-
-  if (needsTreeMerge) {
-    const treeSettings = await fetchShopVendorTreePalmPricingSettings(vendorId);
-    if (treeSettings) {
-      enriched = mergeVendorTreePalmOntoShopProduct(enriched, treeSettings);
-    }
+  if (treeSettings) {
+    enriched = mergeVendorTreePalmOntoShopProduct(enriched, treeSettings);
   }
-
-  if (
-    isVendorPerM2PricingEnabled(enriched) &&
-    !isPositiveUnitPrice(resolveProductUnitPricePerM2(enriched))
-  ) {
-    const rate = await fetchShopProductAreaUnitPrice(enriched.id, vendorId);
-    if (isPositiveUnitPrice(rate)) {
-      enriched = withShopProductAreaUnitRate(enriched, rate as number);
+  if (isPositiveUnitPrice(areaRate)) {
+    enriched = withShopProductAreaUnitRate(enriched, areaRate as number);
+    if (
+      isVendorPerM2PricingEnabled(enriched) ||
+      clientAreaFlag === undefined ||
+      clientAreaFlag === null ||
+      parseBool(clientAreaFlag)
+    ) {
+      enriched = {
+        ...enriched,
+        enable_per_m2: enriched.enable_per_m2 ?? true,
+        show_area_pricing_on_client: enriched.show_area_pricing_on_client ?? true,
+        pricing_type: enriched.pricing_type ?? 'per_m2',
+      };
     }
   }
 

@@ -32,6 +32,27 @@ import {
 
 const SCREEN_BG = COLORS.surfaceLight;
 
+function resolveVendorAccountStatusLabel(
+  vendor: AdminManagedVendor | null | undefined,
+  isVendorSuspended: boolean,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  if (isVendorSuspended) {
+    return t('adminVendorManagement.suspended', { defaultValue: 'Suspended' });
+  }
+  const status = String(vendor?.status ?? '').toLowerCase();
+  if (status.includes('suspend')) {
+    return t('adminVendorManagement.suspended', { defaultValue: 'Suspended' });
+  }
+  if (status.includes('pending') || status.includes('draft')) {
+    return t('adminVendorManagement.pending', { defaultValue: 'Pending' });
+  }
+  if (status.includes('review')) {
+    return t('adminVendorManagement.form.statusUnderReview', { defaultValue: 'Under review' });
+  }
+  return t('adminVendorManagement.approved', { defaultValue: 'Approved' });
+}
+
 function formatPricingAmount(currency: string, value: number | null | undefined): string | null {
   if (value == null || !Number.isFinite(value) || value <= 0) return null;
   return `${currency} ${value.toFixed(2)}`;
@@ -500,10 +521,7 @@ const AdminVendorProductsScreen: React.FC = () => {
     String(vendor?.status || '').toLowerCase().includes('suspend') ||
     String(vendor?.status_label || '').toLowerCase().includes('suspend');
 
-  const accountStatusLabel = isVendorSuspended
-    ? t('adminVendorManagement.suspended', { defaultValue: 'Suspended' })
-    : vendor?.status_label ||
-      t('adminVendorManagement.approved', { defaultValue: 'Approved' });
+  const accountStatusLabel = resolveVendorAccountStatusLabel(vendor, isVendorSuspended, t);
 
   const applyAccountStatus = (next: 'suspended' | 'approved', statusLabel?: string) => {
     setVendor((prev) =>
@@ -513,9 +531,11 @@ const AdminVendorProductsScreen: React.FC = () => {
             status: next,
             status_label:
               statusLabel ||
-              (next === 'suspended'
-                ? t('adminVendorManagement.suspended', { defaultValue: 'Suspended' })
-                : t('adminVendorManagement.approved', { defaultValue: 'Approved' })),
+              resolveVendorAccountStatusLabel(
+                { ...prev, status: next },
+                next === 'suspended',
+                t
+              ),
           }
         : prev
     );
@@ -955,15 +975,15 @@ const AdminVendorProductsScreen: React.FC = () => {
                 ) : (
                   <View style={styles.pricingChipRow}>
                     {renderPricingChip(
-                      t('admin.settings.productSettings.areaBasedPricing.aedPerTree', {
-                        defaultValue: 'AED / tree',
+                      t('admin.settings.productSettings.areaBasedPricing.pricePerTreeLabel', {
+                        defaultValue: 'Price per tree',
                       }),
                       vendorPricingLines.perTree,
                       Boolean(vendorPricingLines.perTree)
                     )}
                     {renderPricingChip(
-                      t('admin.settings.productSettings.areaBasedPricing.aedPerPalm', {
-                        defaultValue: 'AED / palm',
+                      t('admin.settings.productSettings.areaBasedPricing.pricePerPalmLabel', {
+                        defaultValue: 'Price per palm tree',
                       }),
                       vendorPricingLines.perPalm,
                       Boolean(vendorPricingLines.perPalm)

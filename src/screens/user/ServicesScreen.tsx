@@ -23,6 +23,7 @@ import {
 import { buildFullImageUrl } from '../../config/api';
 import { useCartBadgeCount } from '../../hooks/useCartBadgeCount';
 import { isShopProductInStock } from '../../utils/shopProductStock';
+import { getServicePricingSettings } from '../../services/servicePricingService';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1461354464878-ad92f492a5a0?w=800&q=60&auto=format&fit=crop';
 
@@ -39,6 +40,10 @@ const ServicesScreen: React.FC = () => {
   const [products, setProducts] = useState<PublicServiceProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
+
+  useEffect(() => {
+    void getServicePricingSettings();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {

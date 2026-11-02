@@ -35,12 +35,22 @@ const ServiceAreaPricingListScreen: React.FC = () => {
 
   const notSet = t('vendorProductAreaPricing.notSet', { defaultValue: 'Not set' });
 
-  const [screenTitle, setScreenTitle] = useState(
-    t('vendorProductAreaPricing.vendorListTitle', {
-      defaultValue: 'My services — m² pricing',
-    })
-  );
-  const [screenDescription, setScreenDescription] = useState('');
+  const screenTitle =
+    portal === 'admin'
+      ? t('vendorProductAreaPricing.adminListTitle', { defaultValue: 'Services' })
+      : t('vendorProductAreaPricing.vendorListTitle', {
+          defaultValue: 'My services — m² pricing',
+        });
+  const screenDescription =
+    portal === 'admin'
+      ? t('vendorProductAreaPricing.adminListDescription', {
+          defaultValue:
+            'Tap a service to set its price per m² (and optional fixed price) for the customer app.',
+        })
+      : t('vendorProductAreaPricing.vendorListDescription', {
+          defaultValue:
+            'Set price per m² and optional fixed price for each of your service listings.',
+        });
   const [items, setItems] = useState<VendorServiceAreaPricingListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -68,8 +78,6 @@ const ServiceAreaPricingListScreen: React.FC = () => {
             })
           );
         }
-        setScreenTitle(payload.screen_title);
-        setScreenDescription(payload.screen_description);
         setItems(payload.items);
       } catch (err: unknown) {
         setItems([]);
@@ -106,12 +114,19 @@ const ServiceAreaPricingListScreen: React.FC = () => {
     });
   };
 
+  const currency = params.currency ?? 'AED';
+
   const renderItem = ({ item }: { item: VendorServiceAreaPricingListItem }) => {
     const m2Label =
-      item.price_per_m2_label?.trim() ||
-      (item.price_per_m2 != null && item.price_per_m2 > 0
-        ? `${item.price_per_m2} / m²`
-        : notSet);
+      item.price_per_m2 != null && item.price_per_m2 > 0
+        ? t('vendorProductAreaPricing.ratePerM2Short', {
+            defaultValue: '{{currency}} {{price}} / m²',
+            currency,
+            price: Number(item.price_per_m2).toLocaleString(undefined, {
+              maximumFractionDigits: 2,
+            }),
+          })
+        : notSet;
     const configured = Boolean(item.area_pricing_configured);
 
     return (
@@ -132,14 +147,14 @@ const ServiceAreaPricingListScreen: React.FC = () => {
               {item.description.trim()}
             </Text>
           ) : null}
-          {item.catalog_price_label?.trim() ? (
-            <Text style={styles.catalogLine}>{item.catalog_price_label.trim()}</Text>
-          ) : item.catalog_price != null ? (
+          {item.catalog_price != null ? (
             <Text style={styles.catalogLine}>
               {t('vendorProductAreaPricing.catalogPrice', {
                 defaultValue: 'Catalog: {{currency}} {{price}}',
-                currency: params.currency ?? 'AED',
-                price: Number(item.catalog_price).toFixed(2),
+                currency,
+                price: Number(item.catalog_price).toLocaleString(undefined, {
+                  maximumFractionDigits: 2,
+                }),
               })}
             </Text>
           ) : null}
