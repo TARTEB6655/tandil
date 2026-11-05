@@ -39,14 +39,14 @@ const ForgotPasswordNewPasswordScreen: React.FC = () => {
     }
   }, [resetToken, t]);
 
+  const finishAndReturnToLogin = () => {
+    exitForgotPasswordFlow(navigation, role);
+  };
+
   const showSuccess = () => {
+    finishAndReturnToLogin();
     Alert.alert(t('auth.forgotReset.successTitle'), t('auth.forgotReset.successMessage'), [
-      {
-        text: t('auth.login'),
-        onPress: () => {
-          exitForgotPasswordFlow(navigation);
-        },
-      },
+      { text: t('common.ok', { defaultValue: 'OK' }) },
     ]);
   };
 
@@ -78,17 +78,11 @@ const ForgotPasswordNewPasswordScreen: React.FC = () => {
         password,
         password_confirmation: confirmPassword,
       });
+      finishAndReturnToLogin();
       Alert.alert(
         t('auth.forgotReset.successTitle'),
         res.message || t('auth.forgotReset.successMessage'),
-        [
-          {
-            text: t('auth.login'),
-            onPress: () => {
-              exitForgotPasswordFlow(navigation);
-            },
-          },
-        ]
+        [{ text: t('common.ok', { defaultValue: 'OK' }) }]
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : t('auth.forgotReset.errorReset');

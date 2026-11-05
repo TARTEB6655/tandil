@@ -36,7 +36,7 @@ const ForgotPasswordPhoneScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const handleBack = () => {
-    exitForgotPasswordFlow(navigation);
+    exitForgotPasswordFlow(navigation, role);
   };
 
   const goToOtp = (phoneValue: string, maskedPhone?: string, resendAfterSeconds?: number) => {

@@ -235,6 +235,7 @@ export type RootStackParamList = {
   DeliveryApp: undefined;
   VendorApp: undefined;
   VendorLogin: undefined;
+  ForgotPasswordFlow: { role: string; accent?: string };
 };
 
 import type { AppInfoPageKey } from './appInfo';
